@@ -1,0 +1,36 @@
+# Environment files (contains secrets — never commit)
+.env
+backend/.env
+frontend/.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Database
+*.db
+*.sqlite3
+anwar_task_manager.db
+
+# Docker
+db_data/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

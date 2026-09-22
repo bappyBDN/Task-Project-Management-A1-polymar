@@ -1,0 +1,41 @@
+services:
+  backend:
+    build: ./backend
+    container_name: anwar-backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
+      MAIL_ENABLED: ${MAIL_ENABLED:-true}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      EMAIL_SCAN_INTERVAL_MINUTES: ${EMAIL_SCAN_INTERVAL_MINUTES:-60}
+      TASK_DUE_LOOKAHEAD_DAYS: ${TASK_DUE_LOOKAHEAD_DAYS:-3}
+      BACKLOG_STALE_DAYS: ${BACKLOG_STALE_DAYS:-7}
+      RUN_SCHEDULER_IN_PROCESS: "false"   # the separate `scheduler` service handles this instead
+    ports:
+      - "0.0.0.0:8001:8000"
+    restart: unless-stopped
+
+  scheduler:
+    build: ./backend         # same image as backend, just a different command
+    container_name: anwar-scheduler
+    command: ["python", "-m", "app.scheduler_worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
+      MAIL_ENABLED: ${MAIL_ENABLED:-true}
+      EMAIL_SCAN_INTERVAL_MINUTES: ${EMAIL_SCAN_INTERVAL_MINUTES:-60}
+      TASK_DUE_LOOKAHEAD_DAYS: ${TASK_DUE_LOOKAHEAD_DAYS:-3}
+      BACKLOG_STALE_DAYS: ${BACKLOG_STALE_DAYS:-7}
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: anwar-frontend
+    depends_on:
+      - backend
+    ports:
+      - "0.0.0.0:5173:80"
+    restart: unless-stopped
