@@ -16,10 +16,12 @@ Nothing else in the app needs to change — every function below reads
 credentials from app.config.settings, so swapping accounts is just an
 .env edit.
 """
+import html
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from typing import Optional
 
 from app.config import settings
@@ -27,29 +29,48 @@ from app.config import settings
 logger = logging.getLogger("app.email")
 
 
+def _filter_allowed(to_addrs: list[str]) -> list[str]:
+    """TEST MODE guard: when MAIL_ALLOWED_RECIPIENTS is set, drop everyone else."""
+    allowed = settings.mail_allowed_list
+    if not allowed:
+        return to_addrs
+    kept = [a for a in to_addrs if a.lower() in allowed]
+    dropped = [a for a in to_addrs if a.lower() not in allowed]
+    if dropped:
+        logger.info("Test mode: not sending to %s (not in MAIL_ALLOWED_RECIPIENTS).", dropped)
+    return kept
+
+
 def _send(to_addrs: list[str], subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
     """Low-level sender. Returns True only if the SMTP call actually succeeded."""
     to_addrs = [a for a in dict.fromkeys(a.strip() for a in to_addrs if a)]
+    to_addrs = _filter_allowed(to_addrs)
     if not to_addrs:
-        logger.info("No recipients for '%s' — skipping.", subject)
+        logger.info("No (allowed) recipients for '%s' — skipping.", subject)
         return False
     if not settings.mail_enabled:
         logger.info("MAIL_ENABLED=false — would have sent '%s' to %s", subject, to_addrs)
         return False
-    if not settings.gmail_user or not settings.gmail_app_password:
+    password = settings.gmail_app_password.replace(" ", "")  # Google shows it as "xxxx xxxx xxxx xxxx"
+    if not settings.gmail_user or not password:
         logger.warning("Gmail credentials missing (GMAIL_USER / GMAIL_APP_PASSWORD) — skipping '%s'.", subject)
         return False
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = settings.gmail_user
+    msg["From"] = formataddr(("Anwar Task Manager", settings.gmail_user))
     msg["To"] = ", ".join(to_addrs)
-    msg.attach(MIMEText(text_body or "Please view this email in an HTML-capable client.", "plain"))
-    msg.attach(MIMEText(html_body, "html"))
+    msg.attach(MIMEText(text_body or "Please view this email in an HTML-capable client.", "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as server:
-            server.login(settings.gmail_user, settings.gmail_app_password)
+        if settings.smtp_port == 465:
+            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds)
+        else:  # 587 etc. -> STARTTLS
+            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds)
+            server.starttls()
+        with server:
+            server.login(settings.gmail_user, password)
             server.sendmail(settings.gmail_user, to_addrs, msg.as_string())
         logger.info("Email sent: '%s' -> %s", subject, to_addrs)
         return True
@@ -63,7 +84,7 @@ def _card(title: str, color: str, rows: dict, footer_note: str = "") -> str:
     row_html = "".join(
         f'<tr>'
         f'<td style="padding:6px 12px;color:#666;font-size:13px;white-space:nowrap;">{k}</td>'
-        f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{v}</td>'
+        f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{html.escape(str(v))}</td>'
         f'</tr>'
         for k, v in rows.items() if v not in (None, "")
     )
@@ -142,19 +163,123 @@ def send_backlog_stale_email(item, project_name: Optional[str], days_open: int, 
     return _send(recipients, subject, html)
 
 
-# ---------------------------------------------------------------- Password reset
-def send_password_reset_email(to_email: str, reset_link: str) -> bool:
-    subject = "Reset your password — Anwar Task Manager"
-    html = _card(
-        "🔑 Password Reset Requested", "#3b82f6",
-        {"Account": to_email},
-        (
-            f'<a href="{reset_link}" style="display:inline-block;margin-top:10px;'
-            f'padding:10px 18px;background:#3b82f6;color:#fff;border-radius:6px;'
-            f'text-decoration:none;font-weight:600;">Reset Password</a>'
-            f'<div style="margin-top:14px;font-size:12px;color:#999;">'
-            f'If the button doesn\'t work, copy this link: {reset_link}<br>'
-            f'This link expires in 1 hour. If you didn\'t request this, ignore this email.</div>'
-        ),
+# ---------------------------------------------------------------- Connectivity test
+def send_test_email(recipients: list[str]) -> bool:
+    html_body = _card(
+        "✉️ Test email", "#0b1f3a",
+        {"Status": "Gmail SMTP is configured correctly."},
+        "You can ignore this message — it was triggered from /notifications/email-test.",
     )
-    return _send([to_email], subject, html)
+    return _send(recipients, "Task Manager — test email", html_body)
+
+#---------------------------------------forget password 
+# ---------------------------------------------------------------- Password reset
+def send_password_reset_email(user_name: str, to_email: str, reset_link: str) -> bool:
+    """Send the 'reset your password' link. Uses the same _send pipeline as all other mail,
+    so MAIL_ENABLED / MAIL_ALLOWED_RECIPIENTS / Gmail App Password all apply automatically."""
+    subject = "Reset your Anwar Task Manager password"
+
+    button_html = (
+        f'<p style="text-align:center;margin:24px 0;">'
+        f'<a href="{html.escape(reset_link)}" '
+        f'style="background:#0b1f3a;color:#fff;padding:12px 22px;border-radius:6px;'
+        f'text-decoration:none;font-weight:600;display:inline-block;">'
+        f'Reset Password</a></p>'
+    )
+    link_fallback = (
+        f'<p style="color:#666;font-size:12px;margin:16px 0 4px;">If the button does not work, copy this link:</p>'
+        f'<p style="word-break:break-all;font-size:12px;">'
+        f'<a href="{html.escape(reset_link)}" style="color:#0056b3;">{html.escape(reset_link)}</a></p>'
+    )
+
+    html_body = f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
+      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
+        <h2 style="color:#fff;margin:0;font-size:18px;">Password Reset Request</h2>
+      </div>
+      <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+        <p>Hello {html.escape(user_name)},</p>
+        <p>We received a request to reset your Anwar Task Manager password.
+           Click the button below to choose a new one. This link is valid for
+           <b>1 hour</b>.</p>
+        {button_html}
+        {link_fallback}
+        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+        <p style="color:#888;font-size:12px;">
+          If you did not request a password reset, you can safely ignore this email
+          — your current password will remain unchanged.
+        </p>
+      </div>
+    </div>
+    """
+
+    text_body = (
+        f"Hello {user_name},\n\n"
+        f"Use the link below to reset your Anwar Task Manager password (valid 1 hour):\n"
+        f"{reset_link}\n\n"
+        f"If you did not request this, ignore this email.\n"
+    )
+
+    return _send([to_email], subject, html_body, text_body=text_body)
+
+# ---------------------------------------------------------------- Welcome / set password
+def send_welcome_set_password_email(
+    user_name: str,
+    to_email: str,
+    set_link: str,
+    expires_hours: int = 24,
+) -> bool:
+    """Sent when an admin creates a new user account. The user sets their own
+    password via the same /reset-password page used by Forgot Password."""
+    subject = "Your Anwar Task Manager account is ready — set your password"
+
+    button_html = (
+        f'<p style="text-align:center;margin:24px 0;">'
+        f'<a href="{html.escape(set_link)}" '
+        f'style="background:#0b1f3a;color:#fff;padding:12px 22px;border-radius:6px;'
+        f'text-decoration:none;font-weight:600;display:inline-block;">'
+        f'Set Your Password</a></p>'
+    )
+    link_fallback = (
+        f'<p style="color:#666;font-size:12px;margin:16px 0 4px;">If the button does not work, copy this link:</p>'
+        f'<p style="word-break:break-all;font-size:12px;">'
+        f'<a href="{html.escape(set_link)}" style="color:#0056b3;">{html.escape(set_link)}</a></p>'
+    )
+
+    html_body = f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
+      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
+        <h2 style="color:#fff;margin:0;font-size:18px;">Welcome to Anwar Task Manager</h2>
+      </div>
+      <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+        <p>Hello {html.escape(user_name)},</p>
+        <p>
+          The administrator has created your account on the
+          <b>Anwar Group Task &amp; Project Management System</b>.
+          Please set your password using the button below so you can sign in.
+        </p>
+        <p style="background:#fdf3d7;border-left:4px solid #e0a800;padding:10px 14px;
+                  border-radius:4px;font-size:13px;margin:14px 0;">
+          ⏱ <b>Please note:</b> This link is valid for <b>{expires_hours} hours</b>.
+          If it expires, ask your administrator to re-send, or use
+          <i>Forgot Password</i> on the login page.
+        </p>
+        {button_html}
+        {link_fallback}
+        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+        <p style="color:#888;font-size:12px;">
+          If you were not expecting this email, you can safely ignore it.
+        </p>
+      </div>
+    </div>
+    """
+
+    text_body = (
+        f"Hello {user_name},\n\n"
+        f"Your Anwar Task Manager account has been created.\n"
+        f"Set your password using the link below (valid for {expires_hours} hours):\n"
+        f"{set_link}\n\n"
+        f"If you were not expecting this, ignore this email.\n"
+    )
+
+    return _send([to_email], subject, html_body, text_body=text_body)
