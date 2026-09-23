@@ -9,17 +9,20 @@ services:
       MAIL_ENABLED: ${MAIL_ENABLED:-true}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS}
-      FRONTEND_URL: ${FRONTEND_URL} 
+      FRONTEND_URL: ${FRONTEND_URL}
       EMAIL_SCAN_INTERVAL_MINUTES: ${EMAIL_SCAN_INTERVAL_MINUTES:-60}
       TASK_DUE_LOOKAHEAD_DAYS: ${TASK_DUE_LOOKAHEAD_DAYS:-3}
       BACKLOG_STALE_DAYS: ${BACKLOG_STALE_DAYS:-7}
-      RUN_SCHEDULER_IN_PROCESS: "false"   # the separate `scheduler` service handles this instead
+      RUN_SCHEDULER_IN_PROCESS: "false"
     ports:
       - "0.0.0.0:8001:8000"
     restart: unless-stopped
+    networks:
+      - default
+      - dokploy-network
 
   scheduler:
-    build: ./backend         # same image as backend, just a different command
+    build: ./backend
     container_name: anwar-scheduler
     command: ["python", "-m", "app.scheduler_worker"]
     environment:
@@ -27,11 +30,14 @@ services:
       GMAIL_USER: ${GMAIL_USER}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       MAIL_ENABLED: ${MAIL_ENABLED:-true}
-      FRONTEND_URL: ${FRONTEND_URL} 
+      FRONTEND_URL: ${FRONTEND_URL}
       EMAIL_SCAN_INTERVAL_MINUTES: ${EMAIL_SCAN_INTERVAL_MINUTES:-60}
       TASK_DUE_LOOKAHEAD_DAYS: ${TASK_DUE_LOOKAHEAD_DAYS:-3}
       BACKLOG_STALE_DAYS: ${BACKLOG_STALE_DAYS:-7}
     restart: unless-stopped
+    networks:
+      - default
+      - dokploy-network
 
   frontend:
     build: ./frontend
@@ -41,3 +47,10 @@ services:
     ports:
       - "0.0.0.0:5173:80"
     restart: unless-stopped
+    networks:
+      - default
+
+networks:
+  default: {}
+  dokploy-network:
+    external: true
