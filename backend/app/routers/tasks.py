@@ -5,6 +5,7 @@ from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.services.hierarchy_service import create_in_page_notifications, create_hierarchical_approval
 from app import models, schemas, services
 from app.auth import get_admin_user
 from app.database import get_db
@@ -233,3 +234,57 @@ def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session 
 @router.get("/{task_id}/progress", response_model=list[schemas.ProgressUpdateOut])
 def list_progress(task_id: int, db: Session = Depends(get_db)):
     return db.query(models.ProgressUpdate).filter(models.ProgressUpdate.task_id == task_id).order_by(models.ProgressUpdate.created_at.desc()).all()
+
+
+
+@router.post("/{task_id}/submit-for-approval")
+def submit_task_for_approval(
+    task_id: int,
+    requester_id: int,
+    reason: str | None = None,
+    db: Session = Depends(get_db)
+):
+    """Existing code change না করে নতুন রাউট দিয়ে Approval Request পাঠানো"""
+    task = db.get(models.Task, task_id)
+    if not task or task.is_deleted:
+        raise HTTPException(404, "Task not found")
+
+    task.status = "in_review" # স্ট্যাটাস আপডেট
+    
+    # অ্যাপ্রুভাল তৈরি
+    approval = create_hierarchical_approval(
+        db=db, task=task, approval_type="completion", requested_by_id=requester_id, reason=reason
+    )
+
+    # Accountable, Reviewer ও Line Manager কে নোটিফিকেশন
+    create_in_page_notifications(
+        db=db, task=task, title=f"Task Pending Review: {task.code}",
+        body=f"Task '{task.title}' has been submitted for approval.", kind="approval"
+    )
+    
+    db.commit()
+    return {"message": "Approval request submitted", "approval_id": approval.id}
+
+@router.post("/{task_id}/request-due-date-change")
+def request_due_date_change(
+    task_id: int,
+    requester_id: int,
+    revised_date: str,
+    reason: str,
+    db: Session = Depends(get_db)
+):
+    task = db.get(models.Task, task_id)
+    if not task or task.is_deleted:
+        raise HTTPException(404, "Task not found")
+
+    approval = create_hierarchical_approval(
+        db=db, task=task, approval_type="revised_date", requested_by_id=requester_id, 
+        reason=f"Date: {revised_date}. Reason: {reason}"
+    )
+
+    create_in_page_notifications(
+        db=db, task=task, title=f"Due Date Change Requested",
+        body=f"New date: {revised_date} for task {task.code}", kind="action"
+    )
+    
+    return {"message": "Date change requested", "approval_id": approval.id}
