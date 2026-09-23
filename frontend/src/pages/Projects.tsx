@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { store } from '../store'
-import { Company, Milestone, Project, Task, User } from '../types'
+import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, METHODOLOGIES, PROJECT_STATUSES, fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 
@@ -11,8 +10,6 @@ export default function Projects() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
-  const [selected, setSelected] = useState<Project | null>(null)
-  const [milestones, setMilestones] = useState<Milestone[]>([])
   const [filter, setFilter] = useState({ company_id: '', status: '', health: '', type: '', manager_id: '', methodology: '' })
   const navigate = useNavigate()
 
@@ -23,13 +20,9 @@ export default function Projects() {
     api.get<Company[]>('/organizations/companies').then(setCompanies)
   }, [])
 
-  const open = (p: Project) => {
-    setSelected(p)
-    api.get<Milestone[]>(`/projects/${p.id}/milestones`).then(setMilestones)
-  }
+  const open = (p: Project) => navigate(`/projects/${p.id}`)
 
   const manager = (id?: number) => users.find((u) => u.id === id)?.name
-  const projTasks = (id: number) => tasks.filter((t) => t.project_id === id)
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -109,7 +102,14 @@ export default function Projects() {
             {filtered.map((p) => (
               <tr key={p.id} onClick={() => open(p)} style={{ cursor: 'pointer' }}>
                 <td className="muted small">{p.code}</td>
-                <td><a onClick={(e) => e.stopPropagation()}>{p.name}</a></td>
+                <td>
+                  <Link
+                    to={`/projects/${p.id}`}
+                    style={{ color: 'var(--green)', fontWeight: 600, textDecoration: 'underline' }}
+                  >
+                    {p.name}
+                  </Link>
+                </td>
                 <td className="small">{companyName(p.company_id)}</td>
                 <td className="small">{manager(p.manager_id)}</td>
                 <td className="small">{label(p.project_type)}</td>
@@ -127,52 +127,6 @@ export default function Projects() {
         </table>
         {filtered.length === 0 && <div className="empty">No projects match your filters.</div>}
       </div>
-
-      {selected && (
-        <div className="card mt">
-          <div className="spread">
-            <div>
-              <h2 style={{ margin: 0, fontSize: 16, color: 'var(--navy)' }}>{selected.name}</h2>
-              <div className="small muted">{selected.objective}</div>
-            </div>
-            <div className="row">
-              <span className={`badge ${selected.health === 'green' ? 'green' : selected.health === 'amber' ? 'amber' : 'red'}`}>{label(selected.health)}</span>
-            </div>
-          </div>
-
-          <div className="section-title">Milestones</div>
-          <table>
-            <thead><tr><th>Milestone</th><th>Due</th><th>Status</th><th>Completion</th></tr></thead>
-            <tbody>
-              {milestones.map((m) => (
-                <tr key={m.id}>
-                  <td>{m.name}</td>
-                  <td className="small">{fmtDate(m.due_date)}</td>
-                  <td><span className="badge gray">{label(m.status)}</span></td>
-                  <td className="small">{m.completion_pct}%</td>
-                </tr>
-              ))}
-              {milestones.length === 0 && <tr><td colSpan={4} className="muted small">No milestones</td></tr>}
-            </tbody>
-          </table>
-
-          <div className="section-title">Tasks ({projTasks(selected.id).length})</div>
-          <table>
-            <thead><tr><th>Code</th><th>Task</th><th>Status</th><th>Health</th><th>Due</th></tr></thead>
-            <tbody>
-              {projTasks(selected.id).map((t) => (
-                <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
-                  <td className="muted small">{t.code}</td>
-                  <td>{t.title}</td>
-                  <td><span className="badge gray">{label(t.status)}</span></td>
-                  <td><span className={`health-dot ${HEALTH_COLORS[t.health]}`} /></td>
-                  <td className="small">{fmtDate(t.approved_due_date || t.baseline_due_date)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   )
 }

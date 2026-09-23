@@ -142,7 +142,17 @@ export default function Tasks() {
                   <td className="muted small">{t.code}</td>
                   <td><Link to={`/tasks/${t.id}`}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
                   <td className="small">{companyName(t.company_id) ?? '—'}</td>
-                  <td className="small">{proj?.name ?? '—'}</td>
+                  <td className="small">
+                    {proj ? (
+                      <Link
+                        to={`/projects/${proj.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: 'var(--green)', fontWeight: 600, textDecoration: 'underline' }}
+                      >
+                        {proj.name}
+                      </Link>
+                    ) : '—'}
+                  </td>
                   <td className="small">{owner?.name ?? '—'}</td>
                   <td><span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span></td>
                   <td><span className={`badge ${STATUS_COLORS[t.status]}`}>{label(t.status)}</span></td>

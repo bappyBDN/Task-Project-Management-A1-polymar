@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Tasks from './pages/Tasks'
 import TaskDetail from './pages/TaskDetail'
 import Projects from './pages/Projects'
+import ProjectDetail from './pages/ProjectDetail'
 import Approvals from './pages/Approvals'
 import Audit from './pages/Audit'
 import Backlog from './pages/Backlog'
@@ -122,6 +123,7 @@ export default function App() {
           <Route path="/tasks/:id" element={<TaskDetail />} />
           <Route path="/kanban" element={<Kanban />} />
           <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/backlog" element={<Backlog />} />
           <Route path="/governance" element={<Governance />} />
           <Route path="/raci" element={<Raci />} />
