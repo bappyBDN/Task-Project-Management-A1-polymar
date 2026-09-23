@@ -17,8 +17,6 @@ services:
     ports:
       - "0.0.0.0:8001:8000"
     restart: unless-stopped
-    networks:
-      - dokploy-network
 
   scheduler:
     build: ./backend
@@ -34,8 +32,6 @@ services:
       TASK_DUE_LOOKAHEAD_DAYS: ${TASK_DUE_LOOKAHEAD_DAYS:-3}
       BACKLOG_STALE_DAYS: ${BACKLOG_STALE_DAYS:-7}
     restart: unless-stopped
-    networks:
-      - dokploy-network
 
   frontend:
     build: ./frontend
@@ -45,9 +41,3 @@ services:
     ports:
       - "0.0.0.0:5173:80"
     restart: unless-stopped
-    networks:
-      - dokploy-network         # 👈 এটা যোগ করলাম
-
-networks:
-  dokploy-network:
-    external: true
