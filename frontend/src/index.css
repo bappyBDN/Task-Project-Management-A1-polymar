@@ -138,3 +138,23 @@ label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); 
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 
 .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+
+/* Update your existing hover rule to exclude disabled buttons */
+.btn:hover:not(:disabled) { 
+  border-color: #c8d2e0; 
+  background: #f7f9fc; 
+  transform: translateY(-1px); /* Optional: adds a nice little lift effect */
+}
+
+/* Update your existing primary hover rule */
+.btn.primary:hover:not(:disabled) { 
+  background: var(--navy-2); 
+}
+
+/* Update your existing disabled rule */
+.btn:disabled { 
+  opacity: 0.5; 
+  cursor: not-allowed; 
+  filter: grayscale(0.5); 
+}
