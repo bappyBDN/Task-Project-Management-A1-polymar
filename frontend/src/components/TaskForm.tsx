@@ -136,9 +136,38 @@ export default function TaskForm({ projects, users, companies = [], functions = 
     status: 'status',
   }
 
+  // Every field in this form is mandatory. This lists them with a friendly
+  // label and where to find the value on `form`, so submit() can check them
+  // all in one pass and tell the user exactly what's missing — instead of
+  // stopping at the first empty field one at a time.
+  const REQUIRED_FIELDS: { key: string; label: string }[] = [
+    { key: 'title', label: 'Task Title' },
+    { key: 'project_id', label: 'Project' },
+    { key: 'category', label: 'Category' },
+    { key: 'company_id', label: 'SBU (Company)' },
+    { key: 'function_id', label: 'Function' },
+    { key: 'department_id', label: 'Department' },
+    { key: 'task_type', label: 'Task Type' },
+    { key: 'priority', label: 'Priority' },
+    { key: 'status', label: 'Status' },
+    { key: 'description', label: 'Description' },
+    { key: 'expected_deliverable', label: 'Expected Deliverable' },
+    { key: 'responsible_id', label: 'Responsible (R)' },
+    { key: 'accountable_id', label: 'Accountable (A)' },
+    { key: 'reviewer_id', label: 'Reviewer' },
+    { key: 'planned_start_date', label: 'Planned Start' },
+    { key: 'baseline_due_date', label: 'Baseline Due Date' },
+  ]
+
   const submit = async () => {
-    if (!form.title?.trim()) { setError('Task title is mandatory'); return }
-    if (!form.baseline_due_date) { setError('Baseline due date is mandatory'); return }
+    const missing = REQUIRED_FIELDS.filter(({ key }) => {
+      const v = form[key]
+      return v === null || v === undefined || String(v).trim() === ''
+    })
+    if (missing.length) {
+      setError(`Please fill in: ${missing.map((m) => m.label).join(', ')}`)
+      return
+    }
     if (form.planned_start_date && form.planned_start_date > form.baseline_due_date) {
       setError('Planned start cannot be after the baseline due date'); return
     }
@@ -259,7 +288,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
         <div className="form-row">
           <div>
-            <label>Project</label>
+            <label>Project *</label>
             <SearchableSelect
               value={str(form.project_id)}
               items={projectItems}
@@ -271,7 +300,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             />
           </div>
           <div>
-            <label>Category</label>
+            <label>Category *</label>
             <SearchableSelect
               value={str(form.category)}
               items={categories.map((c) => ({ value: c, label: label(c) }))}
@@ -285,7 +314,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
         <div className="form-row three">
           <div>
-            <label>SBU (Company)</label>
+            <label>SBU (Company) *</label>
             <SearchableSelect
               value={str(form.company_id)}
               items={companyItems}
@@ -297,7 +326,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             />
           </div>
           <div>
-            <label>Function</label>
+            <label>Function *</label>
             <SearchableSelect
               value={str(form.function_id)}
               items={functionItems}
@@ -309,7 +338,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             />
           </div>
           <div>
-            <label>Department</label>
+            <label>Department *</label>
             <SearchableSelect
               value={str(form.department_id)}
               items={departmentItems}
@@ -324,7 +353,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
         <div className="form-row three">
           <div>
-            <label>Task Type</label>
+            <label>Task Type *</label>
             <SearchableSelect
               value={str(form.task_type)}
               items={taskTypes.map((t) => ({ value: t, label: label(t) }))}
@@ -335,7 +364,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             />
           </div>
           <div>
-            <label>Priority</label>
+            <label>Priority *</label>
             <SearchableSelect
               value={str(form.priority)}
               items={priorities.map((p) => ({ value: p, label: label(p) }))}
@@ -346,7 +375,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             />
           </div>
           <div>
-            <label>Status</label>
+            <label>Status *</label>
             <SearchableSelect
               value={str(form.status)}
               items={statuses.map((s) => ({ value: s, label: label(s) }))}
@@ -358,15 +387,15 @@ export default function TaskForm({ projects, users, companies = [], functions = 
           </div>
         </div>
 
-        <label>Description</label>
+        <label>Description *</label>
         <textarea rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
 
-        <label>Expected Deliverable</label>
+        <label>Expected Deliverable *</label>
         <input value={form.expected_deliverable} onChange={(e) => set('expected_deliverable', e.target.value)} />
 
         <div className="form-row three">
           <div>
-            <label>Responsible (R)</label>
+            <label>Responsible (R) *</label>
             <SearchableSelect
               value={str(form.responsible_id)}
               items={userItems}
@@ -378,7 +407,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             />
           </div>
           <div>
-            <label>Accountable (A)</label>
+            <label>Accountable (A) *</label>
             <SearchableSelect
               value={str(form.accountable_id)}
               items={userItems}
@@ -393,7 +422,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             )}
           </div>
           <div>
-            <label>Reviewer</label>
+            <label>Reviewer *</label>
             <SearchableSelect
               value={str(form.reviewer_id)}
               items={userItems}
@@ -408,7 +437,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
         <div className="form-row three">
           <div>
-            <label>Planned Start</label>
+            <label>Planned Start *</label>
             <input type="date" value={form.planned_start_date} onChange={(e) => set('planned_start_date', e.target.value)} />
           </div>
           <div>
