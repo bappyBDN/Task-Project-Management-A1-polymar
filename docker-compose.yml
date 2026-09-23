@@ -18,7 +18,6 @@ services:
       - "0.0.0.0:8001:8000"
     restart: unless-stopped
     networks:
-      - default
       - dokploy-network
 
   scheduler:
@@ -36,7 +35,6 @@ services:
       BACKLOG_STALE_DAYS: ${BACKLOG_STALE_DAYS:-7}
     restart: unless-stopped
     networks:
-      - default
       - dokploy-network
 
   frontend:
@@ -48,9 +46,8 @@ services:
       - "0.0.0.0:5173:80"
     restart: unless-stopped
     networks:
-      - default
+      - dokploy-network         # 👈 এটা যোগ করলাম
 
 networks:
-  default: {}
   dokploy-network:
     external: true
