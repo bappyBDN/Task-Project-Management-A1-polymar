@@ -24,6 +24,10 @@ export default function TaskDetail() {
   const [showRevise, setShowRevise] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
 
+  // New states for success message and button cooldown
+  const [successMsg, setSuccessMsg] = useState('')
+  const [cooldown, setCooldown] = useState(false)
+
   const load = () => {
     if (!id) return
     api.get<Task>(`/tasks/${id}`).then(setTask)
@@ -46,7 +50,6 @@ export default function TaskDetail() {
   const owner = users.find((u) => u.id === task.responsible_id)
   const acc = users.find((u) => u.id === task.accountable_id)
 
-  // pending delay with a proposed revised date (feeds the revised-date approval)
   const pendingRevisedDelay = delays
     .filter((d) => d.revised_due_date && d.approval_status === 'pending')
     .sort((a, b) => b.id - a.id)[0]
@@ -55,18 +58,34 @@ export default function TaskDetail() {
   const isPrivileged = user ? store.isPrivileged(user.role) : false
 
   const requestApproval = async (type: string, revisedDate?: string) => {
+    if (cooldown) return // Prevent double clicks during cooldown
+
+    setCooldown(true)
+    setSuccessMsg('')
     const approver = store.approverFor(task)
-    await api.post('/approvals', {
-      approval_type: type,
-      entity_type: 'task',
-      entity_id: task.id,
-      requested_by_id: user?.id ?? task.responsible_id,
-      approver_id: approver?.id ?? null,
-      reason: type === 'revised_date' && revisedDate
-        ? `Requesting revised due date ${fmtDate(revisedDate)} for ${task.code}`
-        : `Requesting ${label(type)} for ${task.code}`,
-    })
-    load()
+    try {
+      await api.post('/approvals', {
+        approval_type: type,
+        entity_type: 'task',
+        entity_id: task.id,
+        requested_by_id: user?.id ?? task.responsible_id,
+        approver_id: approver?.id ?? null,
+        reason: type === 'revised_date' && revisedDate
+          ? `Requesting revised due date ${fmtDate(revisedDate)} for ${task.code}`
+          : `Requesting ${label(type)} for ${task.code}`,
+      })
+      
+      setSuccessMsg('Task is submitted for approval.')
+      load()
+
+      // Reset the button after 20 seconds
+      setTimeout(() => {
+        setCooldown(false)
+        setSuccessMsg('')
+      }, 20000)
+    } catch (e: any) {
+      setCooldown(false)
+    }
   }
 
   return (
@@ -79,10 +98,23 @@ export default function TaskDetail() {
         </div>
         <div className="row">
           <button className="btn sm" onClick={() => setShowProgress(true)} disabled={!isMine && !isPrivileged}>+ Update Progress</button>
-          <button className="btn sm gold" onClick={() => requestApproval('completion')} disabled={!isMine && !isPrivileged}>Submit for Completion</button>
+          <button 
+            className="btn sm gold" 
+            onClick={() => requestApproval('completion')} 
+            disabled={(!isMine && !isPrivileged) || cooldown}
+          >
+            {cooldown ? 'Submitted...' : 'Submit for Completion'}
+          </button>
           {isPrivileged && <button className="btn sm" onClick={() => setShowEdit(true)}>✎ Edit Task</button>}
         </div>
       </div>
+
+      {/* Success Message Banner */}
+      {successMsg && (
+        <div className="card mb" style={{ background: '#e3f5ea', color: '#22a06b', padding: '12px 16px', marginBottom: '16px' }}>
+          <strong>Success:</strong> {successMsg}
+        </div>
+      )}
 
       <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr', alignItems: 'start' }}>
         <div>
@@ -199,14 +231,18 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
   const { user } = useAuth()
   const [f, setF] = useState<any>({ proposed_date: '', reason: '' })
   const [err, setErr] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [successMsg, setSuccessMsg] = useState('')
   const set = (k: string, v: any) => setF((x: any) => ({ ...x, [k]: v }))
 
   const submit = async () => {
     if (!f.proposed_date) { setErr('Proposed date is required'); return }
     if (!f.reason.trim()) { setErr('Reason is required'); return }
+    
+    setIsSubmitting(true)
+    setErr('')
     const approver = store.approverFor(task)
     try {
-      // record the delay/RCA with proposed date
       await api.post('/delays', {
         task_id: task.id,
         delay_category: 'decision_pending',
@@ -218,7 +254,6 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
         revised_due_date: f.proposed_date,
         approval_status: 'pending',
       })
-      // request approval to the privileged approver
       await api.post('/approvals', {
         approval_type: 'revised_date',
         entity_type: 'task',
@@ -227,8 +262,13 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
         approver_id: approver?.id ?? null,
         reason: `Requesting revised due date ${fmtDate(f.proposed_date)} — ${f.reason.trim()}`,
       })
-      onSaved()
-    } catch (e: any) { setErr(e.message) }
+      
+      setSuccessMsg('Date revision request submitted.')
+      setTimeout(onSaved, 1500)
+    } catch (e: any) { 
+      setErr(e.message)
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -236,16 +276,17 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
       <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
         <h2>Request Date Revision — {task.code}</h2>
         {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
+        {successMsg && <div className="badge green" style={{ marginBottom: 12 }}>{successMsg}</div>}
         <label>Proposed New Due Date *</label>
-        <input type="date" value={f.proposed_date} onChange={(e) => set('proposed_date', e.target.value)} />
+        <input type="date" value={f.proposed_date} onChange={(e) => set('proposed_date', e.target.value)} disabled={isSubmitting} />
         <label>Reason *</label>
-        <textarea rows={3} value={f.reason} onChange={(e) => set('reason', e.target.value)} placeholder="Explain why the date needs to change…" />
+        <textarea rows={3} value={f.reason} onChange={(e) => set('reason', e.target.value)} placeholder="Explain why the date needs to change…" disabled={isSubmitting} />
         <div className="small muted" style={{ marginTop: 8 }}>
           This request will be sent to <strong>{store.approverFor(task)?.name ?? 'the privileged approver'}</strong> for approval.
         </div>
         <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit}>Submit Request</button>
+          <button className="btn" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+          <button className="btn primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit Request'}</button>
         </div>
       </div>
     </div>
@@ -255,52 +296,66 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
 function RcaForm({ task, users, onClose, onSaved }: { task: Task; users: User[]; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState<any>({ task_id: task.id, is_internal: true, dependency_related: false, management_intervention: false, approval_status: 'pending' })
   const [err, setErr] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [successMsg, setSuccessMsg] = useState('')
   const set = (k: string, v: any) => setF((x: any) => ({ ...x, [k]: v }))
+  
   const submit = async () => {
     if (!f.delay_category || !f.delay_reason) { setErr('Delay category and reason are required'); return }
-    await api.post('/delays', { ...f, task_id: task.id, revised_due_date: f.revised_due_date || null, schedule_impact_days: f.schedule_impact_days ? Number(f.schedule_impact_days) : null, recovery_owner_id: f.recovery_owner_id ? Number(f.recovery_owner_id) : null })
-    onSaved()
+    
+    setIsSubmitting(true)
+    setErr('')
+    try {
+      await api.post('/delays', { ...f, task_id: task.id, revised_due_date: f.revised_due_date || null, schedule_impact_days: f.schedule_impact_days ? Number(f.schedule_impact_days) : null, recovery_owner_id: f.recovery_owner_id ? Number(f.recovery_owner_id) : null })
+      setSuccessMsg('Delay logged successfully.')
+      setTimeout(onSaved, 1500)
+    } catch (e: any) {
+      setErr(e.message || 'Failed to submit')
+      setIsSubmitting(false)
+    }
   }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Log Delay / RCA — {task.code}</h2>
         {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
+        {successMsg && <div className="badge green" style={{ marginBottom: 12 }}>{successMsg}</div>}
         <div className="form-row">
           <div>
             <label>Delay Category *</label>
-            <select value={f.delay_category} onChange={(e) => set('delay_category', e.target.value)}>
+            <select value={f.delay_category} onChange={(e) => set('delay_category', e.target.value)} disabled={isSubmitting}>
               <option value="">—</option>
               {DELAY_CATEGORIES.map((c) => <option key={c} value={c}>{label(c)}</option>)}
             </select>
           </div>
           <div>
             <label>Schedule Impact (days)</label>
-            <input type="number" value={f.schedule_impact_days ?? ''} onChange={(e) => set('schedule_impact_days', e.target.value)} />
+            <input type="number" value={f.schedule_impact_days ?? ''} onChange={(e) => set('schedule_impact_days', e.target.value)} disabled={isSubmitting} />
           </div>
         </div>
         <label>Delay Reason *</label>
-        <textarea rows={2} value={f.delay_reason} onChange={(e) => set('delay_reason', e.target.value)} />
+        <textarea rows={2} value={f.delay_reason} onChange={(e) => set('delay_reason', e.target.value)} disabled={isSubmitting} />
         <label>Root Cause</label>
-        <textarea rows={2} value={f.root_cause} onChange={(e) => set('root_cause', e.target.value)} />
+        <textarea rows={2} value={f.root_cause} onChange={(e) => set('root_cause', e.target.value)} disabled={isSubmitting} />
         <label>Recovery Action</label>
-        <textarea rows={2} value={f.recovery_action} onChange={(e) => set('recovery_action', e.target.value)} />
+        <textarea rows={2} value={f.recovery_action} onChange={(e) => set('recovery_action', e.target.value)} disabled={isSubmitting} />
         <div className="form-row">
           <div>
             <label>Proposed Revised Date</label>
-            <input type="date" value={f.revised_due_date} onChange={(e) => set('revised_due_date', e.target.value)} />
+            <input type="date" value={f.revised_due_date} onChange={(e) => set('revised_due_date', e.target.value)} disabled={isSubmitting} />
           </div>
           <div>
             <label>Recovery Owner</label>
-            <select value={f.recovery_owner_id} onChange={(e) => set('recovery_owner_id', e.target.value)}>
+            <select value={f.recovery_owner_id} onChange={(e) => set('recovery_owner_id', e.target.value)} disabled={isSubmitting}>
               <option value="">—</option>
               {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
         </div>
         <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit}>Submit Delay</button>
+          <button className="btn" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+          <button className="btn primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit Delay'}</button>
         </div>
       </div>
     </div>
@@ -309,50 +364,61 @@ function RcaForm({ task, users, onClose, onSaved }: { task: Task; users: User[];
 
 function ProgressForm({ task, onClose, onSaved }: { task: Task; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState<any>({ progress_pct: task.progress_pct, status: task.status, blocker: task.blocker })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [successMsg, setSuccessMsg] = useState('')
   const set = (k: string, v: any) => setF((x: any) => ({ ...x, [k]: v }))
+  
   const submit = async () => {
-    await api.post(`/tasks/${task.id}/progress`, {
-      task_id: task.id,
-      progress_pct: Number(f.progress_pct),
-      status: f.status,
-      remarks: f.remarks,
-      blocker: f.blocker,
-      blocker_details: f.blocker_details,
-      next_action: f.next_action,
-      forecast_due_date: f.forecast_due_date || null,
-      support_required: f.support_required,
-    })
-    onSaved()
+    setIsSubmitting(true)
+    try {
+      await api.post(`/tasks/${task.id}/progress`, {
+        task_id: task.id,
+        progress_pct: Number(f.progress_pct),
+        status: f.status,
+        remarks: f.remarks,
+        blocker: f.blocker,
+        blocker_details: f.blocker_details,
+        next_action: f.next_action,
+        forecast_due_date: f.forecast_due_date || null,
+        support_required: f.support_required,
+      })
+      setSuccessMsg('Progress updated successfully.')
+      setTimeout(onSaved, 1500)
+    } catch (e: any) {
+      setIsSubmitting(false)
+    }
   }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Update Progress — {task.code}</h2>
+        {successMsg && <div className="badge green" style={{ marginBottom: 12 }}>{successMsg}</div>}
         <div className="form-row">
           <div>
             <label>Progress %</label>
-            <input type="number" min={0} max={100} value={f.progress_pct} onChange={(e) => set('progress_pct', e.target.value)} />
+            <input type="number" min={0} max={100} value={f.progress_pct} onChange={(e) => set('progress_pct', e.target.value)} disabled={isSubmitting} />
           </div>
           <div>
             <label>Status</label>
-            <select value={f.status} onChange={(e) => set('status', e.target.value)}>
+            <select value={f.status} onChange={(e) => set('status', e.target.value)} disabled={isSubmitting}>
               {['backlog', 'ready', 'in_progress', 'in_review', 'completed', 'blocked', 'on_hold'].map((s) => <option key={s} value={s}>{label(s)}</option>)}
             </select>
           </div>
         </div>
         <label>Remarks</label>
-        <textarea rows={2} value={f.remarks} onChange={(e) => set('remarks', e.target.value)} />
+        <textarea rows={2} value={f.remarks} onChange={(e) => set('remarks', e.target.value)} disabled={isSubmitting} />
         <label>Next Action</label>
-        <input value={f.next_action} onChange={(e) => set('next_action', e.target.value)} />
+        <input value={f.next_action} onChange={(e) => set('next_action', e.target.value)} disabled={isSubmitting} />
         <div className="row" style={{ marginTop: 12 }}>
-          <label style={{ margin: 0 }}><input type="checkbox" checked={f.blocker} onChange={(e) => set('blocker', e.target.checked)} style={{ width: 'auto' }} /> Blocker</label>
+          <label style={{ margin: 0 }}><input type="checkbox" checked={f.blocker} onChange={(e) => set('blocker', e.target.checked)} style={{ width: 'auto' }} disabled={isSubmitting} /> Blocker</label>
         </div>
-        {f.blocker && <><label>Blocker Details</label><input value={f.blocker_details} onChange={(e) => set('blocker_details', e.target.value)} /></>}
+        {f.blocker && <><label>Blocker Details</label><input value={f.blocker_details} onChange={(e) => set('blocker_details', e.target.value)} disabled={isSubmitting} /></>}
         <label>Forecast Completion</label>
-        <input type="date" value={f.forecast_due_date} onChange={(e) => set('forecast_due_date', e.target.value)} />
+        <input type="date" value={f.forecast_due_date} onChange={(e) => set('forecast_due_date', e.target.value)} disabled={isSubmitting} />
         <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit}>Save Update</button>
+          <button className="btn" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+          <button className="btn primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Save Update'}</button>
         </div>
       </div>
     </div>
