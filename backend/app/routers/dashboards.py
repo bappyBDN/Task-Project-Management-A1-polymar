@@ -159,3 +159,60 @@ def org_intelligence(db: Session = Depends(get_db)):
         return result
 
     return {"bySbu": fmt(by_sbu), "byFunction": fmt(by_function), "byDepartment": fmt(by_department)}
+
+# ---------------------------------------------------------------- Trends (NEW)
+@router.get("/individual/{user_id}/trends")
+def individual_trends(user_id: int, days: int = 7, db: Session = Depends(get_db)):
+    """Daily history for the personal dashboard: KPI sparklines + 'vs last week'
+    deltas, and the Task Progress chart (completed vs in-progress per day).
+
+    There is no status-history table, so each day is a best-effort snapshot built
+    from current rows: a task exists on day D if created_at <= D, and counts as
+    done on D if it is in a done status and actual_due_date (used as the
+    completion date) <= D. Read-only, no schema change.
+    """
+    today = date.today()
+    tasks = db.query(models.Task).filter(
+        models.Task.is_deleted.is_(False),
+        (models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id),
+    ).all()
+
+    upd_by_day: dict[str, set] = {}
+    if tasks:
+        rows = db.query(models.ProgressUpdate.task_id, func.date(models.ProgressUpdate.created_at)).filter(
+            models.ProgressUpdate.task_id.in_([t.id for t in tasks])
+        ).all()
+        for tid, d in rows:
+            upd_by_day.setdefault(str(d), set()).add(tid)
+
+    def due(t):
+        return t.approved_due_date or t.baseline_due_date
+
+    def done_on(t, d):
+        return t.status in DONE_STATUSES and (t.actual_due_date is None or t.actual_due_date <= d)
+
+    def snapshot(d):
+        alive = [t for t in tasks if t.created_at.date() <= d]
+        open_ = [t for t in alive if not done_on(t, d) and (t.status in OPEN_STATUSES or t.status in DONE_STATUSES)]
+        return {
+            "total": len(alive),
+            "open": len(open_),
+            "due_today": sum(1 for t in alive if due(t) == d),
+            "overdue": sum(1 for t in open_ if due(t) and due(t) < d),
+            "critical": sum(1 for t in open_ if t.priority == "critical"),
+            "blocked": sum(1 for t in open_ if t.blocker),
+        }
+
+    day_list = [today - timedelta(days=i) for i in range(days, -1, -1)]   # oldest -> today
+    snaps = [snapshot(d) for d in day_list]
+    series = {k: [s[k] for s in snaps] for k in snaps[0]}
+
+    chart = [
+        {
+            "date": d.isoformat(),
+            "completed": sum(1 for t in tasks if t.status in DONE_STATUSES and t.actual_due_date == d),
+            "in_progress": len(upd_by_day.get(d.isoformat(), set())),
+        }
+        for d in day_list[-7:]
+    ]
+    return {"dates": [d.isoformat() for d in day_list], "series": series, "chart": chart}
