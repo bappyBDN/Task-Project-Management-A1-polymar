@@ -79,3 +79,57 @@ def health_distribution(db: Session = Depends(get_db)):
 def delay_causes(db: Session = Depends(get_db)):
     rows = db.query(models.DelayRca.delay_category, func.count(models.DelayRca.id)).group_by(models.DelayRca.delay_category).all()
     return [{"category": c or "Other", "count": n} for c, n in rows]
+
+
+# ---------------------------------------------------------------- Org intelligence
+@router.get("/org-intelligence")
+def org_intelligence(db: Session = Depends(get_db)):
+    """Rolls up task/project counts by SBU (company), Function and Department.
+
+    Powers the "Team & Portfolio Breakdown" widget on the dashboard. This is a
+    read-only aggregation over existing tables — no schema change, no writes.
+    Mirrors the equivalent logic that already exists in the frontend's local
+    demo store (store.ts orgIntelligence()), now available from the real API.
+    """
+    today_ = date.today()
+
+    companies = {c.id: c.name for c in db.query(models.Company).all()}
+    functions = {f.id: f.name for f in db.query(models.Function).all()}
+    departments = {d.id: d.name for d in db.query(models.Department).all()}
+
+    tasks = db.query(models.Task).filter(models.Task.is_deleted.is_(False)).all()
+    projects = db.query(models.Project).all()
+
+    by_sbu: dict = {}
+    by_function: dict = {}
+    by_department: dict = {}
+
+    def row(bucket: dict, key: str) -> dict:
+        return bucket.setdefault(key, {"total": 0, "open": 0, "completed": 0, "overdue": 0, "projects": 0})
+
+    for t in tasks:
+        due = t.approved_due_date or t.baseline_due_date
+        is_overdue = t.status in OPEN_STATUSES and due is not None and due < today_
+
+        for bucket, key in (
+            (by_sbu, companies.get(t.company_id, "Unassigned")),
+            (by_function, functions.get(t.function_id, "Unassigned")),
+            (by_department, departments.get(t.department_id, "Unassigned")),
+        ):
+            r = row(bucket, key)
+            r["total"] += 1
+            if t.status in OPEN_STATUSES:
+                r["open"] += 1
+            if t.status in DONE_STATUSES:
+                r["completed"] += 1
+            if is_overdue:
+                r["overdue"] += 1
+
+    for p in projects:
+        row(by_sbu, companies.get(p.company_id, "Unassigned"))["projects"] += 1
+        row(by_function, functions.get(p.function_id, "Unassigned"))["projects"] += 1
+
+    def fmt(bucket: dict) -> list:
+        return [{"name": name, **v} for name, v in bucket.items()]
+
+    return {"bySbu": fmt(by_sbu), "byFunction": fmt(by_function), "byDepartment": fmt(by_department)}
