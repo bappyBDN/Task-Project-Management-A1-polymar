@@ -6,40 +6,59 @@ import { ProjectKpi, Task, TaskKpi } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 
 // ---------------------------------------------------------------- scoped visual polish
-// Additive only — new class names, nothing here overrides existing global styles.
+// Additive only, scoped under .dash-root so nothing here leaks onto other pages.
+// Values below are pulled from the real index.css tokens (--navy, --gold, --line,
+// the .card/.kpi/.btn/select rules) rather than guessed.
 const DASHBOARD_STYLES = `
-  .dash-kpi-card { transition: transform .15s ease, box-shadow .15s ease; }
-  .dash-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15,23,42,.08); }
-  .dash-panel { transition: box-shadow .15s ease; }
-  .dash-panel:hover { box-shadow: 0 10px 28px rgba(15,23,42,.06); }
-  .dash-row-hover:hover { background: #f7f9fc; }
-  .dash-tab-btn { transition: background .15s ease, color .15s ease, box-shadow .15s ease; }
+  .dash-root .btn {
+    transition: background .15s ease, border-color .15s ease, transform .15s ease, box-shadow .15s ease, color .15s ease;
+  }
+  .dash-kpi-card { transition: box-shadow .15s ease, border-color .15s ease; }
+  .dash-kpi-card:hover { box-shadow: 0 3px 12px rgba(16,30,54,.10); border-color: #c8d2e0; }
+  .dash-panel { transition: box-shadow .15s ease, border-color .15s ease; }
+  .dash-panel:hover { box-shadow: 0 4px 16px rgba(16,30,54,.10); border-color: #c8d2e0; }
   .dash-cal-select {
+    width: auto;
     font-size: 12px;
     padding: 3px 6px;
     border-radius: 6px;
-    border: 1px solid #d7dce3;
+    border: 1px solid var(--line);
     background: #fff;
-    color: var(--navy, #1f2430);
+    color: var(--navy);
     cursor: pointer;
   }
-  .dash-cal-select:hover { border-color: var(--gold, #c9a227); }
+  .dash-cal-select:hover { border-color: var(--gold); }
   .dash-cal-day:hover { background: #eef1f5 !important; }
   .dash-cal-nav .btn.sm { min-width: 26px; }
+  .dash-health-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    line-height: 1.4;
+  }
 `
 
 // ---------------------------------------------------------------- small building blocks
 
 function KpiCard({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
   return (
-    <div className={`card kpi dash-kpi-card${tone ? ' kpi-' + tone : ''}`} style={tone ? { borderLeft: `4px solid var(--${tone})` } : undefined}>
-      <div className="label">{label}</div>
-      <div className={`value${tone ? ' ' + tone : ''}`}>{value}</div>
+    <div
+      className={`card kpi dash-kpi-card${tone ? ' kpi-' + tone : ''}`}
+      style={{ padding: '12px 14px', ...(tone ? { borderLeft: `4px solid var(--${tone})` } : {}) }}
+    >
+      <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+      <div className={`value${tone ? ' ' + tone : ''}`} style={{ fontSize: 22, lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
   )
 }
 
-const HEALTH_HEX: Record<string, string> = { green: '#22a06b', amber: '#e0a800', red: '#d9534f', black: '#1f2430' }
+// Exact brand hex (matches --green/--amber/--red/--black in index.css) — kept as
+// literal hex, not var(), because the health chips below append an alpha suffix
+// to make translucent fills, which only works on hex strings.
+const HEALTH_HEX: Record<string, string> = { green: '#1e9e5a', amber: '#d9a514', red: '#d64545', black: '#1a1a1a' }
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 /** Pure-SVG donut chart — no chart library needed. */
@@ -57,7 +76,7 @@ function DonutChart({ data }: { data: Record<string, number> }) {
 
   return (
     <div className="row" style={{ gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ filter: 'drop-shadow(0 2px 6px rgba(15,23,42,.12))' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ filter: 'drop-shadow(0 2px 6px rgba(16,30,54,.14))' }}>
         <g transform={`rotate(-90 ${cx} ${cy})`}>
           <circle cx={cx} cy={cy} r={r} fill="none" stroke="#eef1f5" strokeWidth={18} />
           {entries.map(([key, val]) => {
@@ -82,7 +101,7 @@ function DonutChart({ data }: { data: Record<string, number> }) {
           })}
         </g>
         <text x={cx} y={cy - 4} textAnchor="middle" fontSize={22} fontWeight={700} fill="var(--navy)">{total}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize={10} fill="#8891a1">projects</text>
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize={10} fill="var(--muted)">projects</text>
       </svg>
       <div style={{ flex: 1, minWidth: 140 }}>
         {entries.map(([key, val]) => (
@@ -91,7 +110,7 @@ function DonutChart({ data }: { data: Record<string, number> }) {
               <span style={{ width: 10, height: 10, borderRadius: 3, background: HEALTH_HEX[key] ?? '#999', display: 'inline-block' }} />
               <span className="small">{label(key)}</span>
             </span>
-            <strong className="small">{val} · {Math.round((val / total) * 100)}%</strong>
+            <strong className="small" style={{ fontVariantNumeric: 'tabular-nums' }}>{val} · {Math.round((val / total) * 100)}%</strong>
           </div>
         ))}
       </div>
@@ -99,22 +118,41 @@ function DonutChart({ data }: { data: Record<string, number> }) {
   )
 }
 
-/** Simple horizontal bar chart, no library — scales bar width to the max value in the set. */
-function BarList({ rows, valueKey = 'total' }: { rows: { name: string; total: number; overdue: number }[]; valueKey?: 'total' }) {
-  const max = Math.max(1, ...rows.map((r) => r[valueKey]))
+/** Dense data table for the org breakdown — shows every count the API already
+ * returns (total / open / completed / overdue / projects), not just one bar. */
+function OrgTable({ rows }: { rows: { name: string; total: number; open: number; completed: number; overdue: number; projects: number }[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.total))
   return (
     <div>
-      {rows.map((r) => (
-        <div key={r.name} style={{ marginBottom: 10 }}>
-          <div className="row spread small" style={{ marginBottom: 3 }}>
-            <span>{r.name}</span>
-            <span className="muted">{r.total} tasks{r.overdue ? ` · ${r.overdue} overdue` : ''}</span>
-          </div>
-          <div style={{ background: '#eef1f5', borderRadius: 6, height: 8, overflow: 'hidden' }}>
-            <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: 'var(--gold)', borderRadius: 6 }} />
-          </div>
-        </div>
-      ))}
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Total</th>
+            <th>Open</th>
+            <th>Completed</th>
+            <th>Overdue</th>
+            <th>Projects</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.name}>
+              <td>
+                {r.name}
+                <div style={{ background: '#e8ecf3', borderRadius: 4, height: 4, marginTop: 4, overflow: 'hidden', maxWidth: 160 }}>
+                  <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: 'var(--gold)', borderRadius: 4 }} />
+                </div>
+              </td>
+              <td className="small" style={{ fontVariantNumeric: 'tabular-nums' }}>{r.total}</td>
+              <td className="small" style={{ fontVariantNumeric: 'tabular-nums' }}>{r.open}</td>
+              <td className="small" style={{ fontVariantNumeric: 'tabular-nums' }}>{r.completed}</td>
+              <td className="small" style={{ fontVariantNumeric: 'tabular-nums', ...(r.overdue ? { color: 'var(--red)', fontWeight: 600 } : {}) }}>{r.overdue}</td>
+              <td className="small" style={{ fontVariantNumeric: 'tabular-nums' }}>{r.projects}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {rows.length === 0 && <div className="empty small">No data</div>}
     </div>
   )
@@ -188,7 +226,7 @@ function MiniCalendar({ tasks, onPickDay }: { tasks: Task[]; onPickDay: (iso: st
         <strong className="small">{cursor.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</strong>
         <button className="btn sm" onClick={goToday}>Today</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, fontSize: 10, color: '#8891a1', textAlign: 'center', marginBottom: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, fontSize: 10, color: 'var(--muted)', textAlign: 'center', marginBottom: 4 }}>
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
@@ -265,20 +303,38 @@ export default function Dashboard() {
 
   const orgRows = orgIntel ? orgIntel[orgTab] : []
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+  const maxDelay = Math.max(1, ...delayCauses.map((d) => d.count))
+  const denseGrid = { gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 12 } as const
 
   return (
-    <div>
+    <div className="dash-root">
       <style>{DASHBOARD_STYLES}</style>
       <div className="topbar">
         <div>
           <h1>My Dashboard</h1>
           <div className="crumb">Welcome back, {user?.name} — {label(user?.role ?? '')} · {today}</div>
+          {projKpi && (
+            <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {(['green', 'amber', 'red', 'black'] as const).map((h) => (
+                projKpi[h] > 0 && (
+                  <span
+                    key={h}
+                    className="dash-health-chip"
+                    style={{ background: `${HEALTH_HEX[h]}1a`, color: HEALTH_HEX[h], border: `1px solid ${HEALTH_HEX[h]}40` }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: HEALTH_HEX[h], display: 'inline-block', marginRight: 5 }} />
+                    {projKpi[h]} {label(h)}
+                  </span>
+                )
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* ---------------------------------------------------- KPI strip */}
       {taskKpi && (
-        <div className="grid cards">
+        <div className="grid cards" style={denseGrid}>
           <KpiCard label="Total Tasks" value={taskKpi.total} />
           <KpiCard label="Open" value={taskKpi.open} tone="gold" />
           <KpiCard label="Due Today" value={taskKpi.due_today} tone="amber" />
@@ -306,14 +362,14 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {shownTasks.map((t) => (
-                  <tr key={t.id} className="dash-row-hover" onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
+                  <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
                     <td className="muted small">{t.code}</td>
                     <td>{t.title}{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
                     <td><span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span></td>
                     <td><span className={`badge ${STATUS_COLORS[t.status]}`}>{label(t.status)}</span></td>
                     <td style={{ minWidth: 100 }}>
                       <div className="progress"><span style={{ width: `${t.progress_pct}%` }} /></div>
-                      <span className="small muted">{t.progress_pct}%</span>
+                      <span className="small muted" style={{ fontVariantNumeric: 'tabular-nums' }}>{t.progress_pct}%</span>
                     </td>
                     <td className="small">{fmtDate(t.approved_due_date || t.baseline_due_date)}</td>
                   </tr>
@@ -323,8 +379,8 @@ export default function Dashboard() {
             {shownTasks.length === 0 && <div className="empty">{pickedDay ? 'No tasks due on this date.' : 'No tasks assigned to you.'}</div>}
           </div>
 
-          <div className="section-title">Group Portfolio</div>
-          <div className="grid cards">
+          <div className="section-title" style={{ margin: '18px 0 10px' }}>Group Portfolio</div>
+          <div className="grid cards" style={denseGrid}>
             <KpiCard label="Total Projects" value={projKpi?.total ?? '—'} />
             <KpiCard label="Active Projects" value={projKpi?.active ?? '—'} tone="gold" />
             <KpiCard label="Green" value={projKpi?.green ?? '—'} tone="green" />
@@ -334,14 +390,14 @@ export default function Dashboard() {
             <KpiCard label="Forecast to Miss" value={projKpi?.forecast_miss ?? '—'} tone="red" />
           </div>
 
-          <div className="section-title">Team &amp; Portfolio Breakdown</div>
+          <div className="section-title" style={{ margin: '18px 0 10px' }}>Team &amp; Portfolio Breakdown</div>
           <div className="card dash-panel">
             <div className="row" style={{ marginBottom: 12 }}>
-              <button className={`btn sm dash-tab-btn ${orgTab === 'bySbu' ? 'primary' : ''}`} onClick={() => setOrgTab('bySbu')}>By SBU</button>
-              <button className={`btn sm dash-tab-btn ${orgTab === 'byFunction' ? 'primary' : ''}`} onClick={() => setOrgTab('byFunction')}>By Function</button>
-              <button className={`btn sm dash-tab-btn ${orgTab === 'byDepartment' ? 'primary' : ''}`} onClick={() => setOrgTab('byDepartment')}>By Department</button>
+              <button className={`btn sm ${orgTab === 'bySbu' ? 'primary' : ''}`} onClick={() => setOrgTab('bySbu')}>By SBU</button>
+              <button className={`btn sm ${orgTab === 'byFunction' ? 'primary' : ''}`} onClick={() => setOrgTab('byFunction')}>By Function</button>
+              <button className={`btn sm ${orgTab === 'byDepartment' ? 'primary' : ''}`} onClick={() => setOrgTab('byDepartment')}>By Department</button>
             </div>
-            {orgIntel === null ? <div className="empty small">Loading…</div> : <BarList rows={orgRows} />}
+            {orgIntel === null ? <div className="empty small">Loading…</div> : <OrgTable rows={orgRows} />}
           </div>
         </div>
 
@@ -361,9 +417,14 @@ export default function Dashboard() {
           <div className="card mt dash-panel">
             <div className="section-title" style={{ marginTop: 0 }}>Top Delay Causes</div>
             {delayCauses.map((d) => (
-              <div key={d.category} className="row spread" style={{ padding: '6px 0' }}>
-                <span className="small">{label(d.category)}</span>
-                <strong className="small">{d.count}</strong>
+              <div key={d.category} style={{ padding: '6px 0' }}>
+                <div className="row spread">
+                  <span className="small">{label(d.category)}</span>
+                  <strong className="small" style={{ fontVariantNumeric: 'tabular-nums' }}>{d.count}</strong>
+                </div>
+                <div style={{ background: '#e8ecf3', borderRadius: 4, height: 4, marginTop: 4, overflow: 'hidden' }}>
+                  <div style={{ width: `${(d.count / maxDelay) * 100}%`, height: '100%', background: 'var(--red)', borderRadius: 4 }} />
+                </div>
               </div>
             ))}
             {delayCauses.length === 0 && <div className="empty small">No delays recorded</div>}
