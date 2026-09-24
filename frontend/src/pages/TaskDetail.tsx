@@ -49,6 +49,7 @@ export default function TaskDetail() {
   const proj = projects.find((p) => p.id === task.project_id)
   const owner = users.find((u) => u.id === task.responsible_id)
   const acc = users.find((u) => u.id === task.accountable_id)
+  const reviewer = users.find((u) => u.id === task.reviewer_id)
 
   const pendingRevisedDelay = delays
     .filter((d) => d.revised_due_date && d.approval_status === 'pending')
@@ -196,7 +197,7 @@ export default function TaskDetail() {
                 Request Date Revision
               </button>
               <div className="small muted" style={{ marginTop: 8 }}>
-                Sent to: {store.approverFor(task)?.name ?? 'Privileged approver'}
+                Sent to: {reviewer ? `${reviewer.name} (Reviewer)` : 'No reviewer assigned'}
               </div>
               {pendingRevisedDelay && (
                 <div className="small muted" style={{ marginTop: 8 }}>
@@ -210,7 +211,7 @@ export default function TaskDetail() {
 
       {showRca && <RcaForm task={task} users={users} onClose={() => setShowRca(false)} onSaved={() => { setShowRca(false); load() }} />}
       {showProgress && <ProgressForm task={task} onClose={() => setShowProgress(false)} onSaved={() => { setShowProgress(false); load() }} />}
-      {showRevise && <ReviseForm task={task} onClose={() => setShowRevise(false)} onSaved={() => { setShowRevise(false); load() }} />}
+      {showRevise && <ReviseForm task={task} users={users} onClose={() => setShowRevise(false)} onSaved={() => { setShowRevise(false); load() }} />}
       {showEdit && (
         <TaskForm
           projects={projects}
@@ -227,8 +228,10 @@ export default function TaskDetail() {
   )
 }
 
-function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => void; onSaved: () => void }) {
+function ReviseForm({ task, users, onClose, onSaved }: { task: Task; users: User[]; onClose: () => void; onSaved: () => void }) {
   const { user } = useAuth()
+  // Date revisions always go to the task's Reviewer only.
+  const reviewer = users.find((u) => u.id === task.reviewer_id)
   const [f, setF] = useState<any>({ proposed_date: '', reason: '' })
   const [err, setErr] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -238,10 +241,10 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
   const submit = async () => {
     if (!f.proposed_date) { setErr('Proposed date is required'); return }
     if (!f.reason.trim()) { setErr('Reason is required'); return }
-    
+    if (!task.reviewer_id) { setErr('This task has no reviewer. Ask an admin to assign one first.'); return }
+
     setIsSubmitting(true)
     setErr('')
-    const approver = store.approverFor(task)
     try {
       await api.post('/delays', {
         task_id: task.id,
@@ -259,7 +262,7 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
         entity_type: 'task',
         entity_id: task.id,
         requested_by_id: user?.id ?? task.responsible_id,
-        approver_id: approver?.id ?? null,
+        approver_id: task.reviewer_id,
         reason: `Requesting revised due date ${fmtDate(f.proposed_date)} — ${f.reason.trim()}`,
       })
       
@@ -281,12 +284,18 @@ function ReviseForm({ task, onClose, onSaved }: { task: Task; onClose: () => voi
         <input type="date" value={f.proposed_date} onChange={(e) => set('proposed_date', e.target.value)} disabled={isSubmitting} />
         <label>Reason *</label>
         <textarea rows={3} value={f.reason} onChange={(e) => set('reason', e.target.value)} placeholder="Explain why the date needs to change…" disabled={isSubmitting} />
-        <div className="small muted" style={{ marginTop: 8 }}>
-          This request will be sent to <strong>{store.approverFor(task)?.name ?? 'the privileged approver'}</strong> for approval.
-        </div>
+        {reviewer ? (
+          <div className="small muted" style={{ marginTop: 8 }}>
+            This request will be sent to <strong>{reviewer.name}</strong> (Reviewer) for approval.
+          </div>
+        ) : (
+          <div className="small" style={{ marginTop: 8, color: 'var(--red)' }}>
+            This task has no reviewer assigned. Ask an admin to set a reviewer before requesting a date revision.
+          </div>
+        )}
         <div className="modal-actions">
           <button className="btn" onClick={onClose} disabled={isSubmitting}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit Request'}</button>
+          <button className="btn primary" onClick={submit} disabled={isSubmitting || !reviewer}>{isSubmitting ? 'Submitting...' : 'Submit Request'}</button>
         </div>
       </div>
     </div>

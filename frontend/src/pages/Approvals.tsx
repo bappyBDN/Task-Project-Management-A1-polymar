@@ -43,13 +43,16 @@ export default function Approvals() {
   const nameOf = (id?: number) => users.find((u) => u.id === id)?.name
 
   // Same rule the server enforces: admin, assigned approver, or the task's
-  // reviewer / accountable - but never the person who requested it.
+  // reviewer / accountable (date revisions: reviewer only) - but never the
+  // person who requested it.
   const canDecide = (a: Approval) => {
     if (!user || a.status !== 'pending') return false
     if (isAdmin) return true
     if (a.requested_by_id === user.id) return false
-    if (a.approver_id === user.id) return true
     const t = taskOf(a)
+    // Date revisions: only the task's Reviewer decides.
+    if (a.approval_type === 'revised_date' && a.entity_type === 'task') return !!t && t.reviewer_id === user.id
+    if (a.approver_id === user.id) return true
     return !!t && (t.reviewer_id === user.id || t.accountable_id === user.id)
   }
 

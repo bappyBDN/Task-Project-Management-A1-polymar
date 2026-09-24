@@ -11,6 +11,12 @@ Who may approve / reject:
   - the assigned approver, or the task's Reviewer / Accountable
   - never the person who requested it (unless that person is an Admin)
 
+Date revision requests (approval_type "revised_date" on a task) are special:
+  - they always go to the task's Reviewer (the task must have one)
+  - only the Reviewer is notified of the request
+  - only the Reviewer (or an Admin) may approve / reject
+  - the outcome is sent to the requester and the task's Responsible person
+
 No database schema change: this only uses existing columns.
 """
 from datetime import datetime, date
@@ -61,11 +67,18 @@ def _related_ids(approval: models.Approval, entity) -> set:
     return ids
 
 
+def _is_date_revision(approval: models.Approval) -> bool:
+    return approval.approval_type == "revised_date" and approval.entity_type == "task"
+
+
 def _decider_ids(approval: models.Approval, entity) -> set:
     """Non-admin users allowed to approve / reject."""
-    ids = {approval.approver_id}
-    if entity is not None and approval.entity_type == "task":
-        ids |= {entity.reviewer_id, entity.accountable_id}
+    if _is_date_revision(approval):
+        ids = {entity.reviewer_id} if entity is not None else set()
+    else:
+        ids = {approval.approver_id}
+        if entity is not None and approval.entity_type == "task":
+            ids |= {entity.reviewer_id, entity.accountable_id}
     ids.discard(None)
     ids.discard(approval.requested_by_id)  # nobody approves their own request
     return ids
@@ -83,19 +96,25 @@ def _entity_label(approval: models.Approval, entity) -> str:
     return f"{approval.entity_type} #{approval.entity_id}"
 
 
-def _notify_related(db: Session, approval: models.Approval, entity,
-                    title: str, body: str, exclude_user_id=None):
-    """In-app notification to related people + admins only (skips inactive users
-    and the person who performed the action)."""
-    recipients = _related_ids(approval, entity) | _admin_ids(db)
+def _notify_users(db: Session, user_ids: set, title: str, body: str, exclude_user_id=None) -> int:
+    """In-app notification to exactly these users (skips inactive users and the
+    person who performed the action). Returns how many were notified."""
+    recipients = {u for u in user_ids if u is not None}
     recipients.discard(exclude_user_id)
     if not recipients:
-        return
+        return 0
     active = db.query(models.User.id).filter(
         models.User.id.in_(recipients), models.User.is_active.is_(True)
     ).all()
     for (uid,) in active:
         services.notify(db, uid, title, body=body, kind="approval")
+    return len(active)
+
+
+def _notify_related(db: Session, approval: models.Approval, entity,
+                    title: str, body: str, exclude_user_id=None):
+    """In-app notification to related people + admins only."""
+    _notify_users(db, _related_ids(approval, entity) | _admin_ids(db), title, body, exclude_user_id)
 
 
 # ---------------------------------------------------------------- routes
@@ -147,8 +166,15 @@ def create_approval(
     approval = models.Approval(**data, status="pending")
     entity = _entity(db, approval)
 
-    # No approver chosen on the page: pick Reviewer -> Accountable -> line manager.
-    if approval.approver_id is None and approval.entity_type == "task" and entity is not None:
+    if _is_date_revision(approval):
+        # Date revisions always go to the task's Reviewer.
+        if entity is None:
+            raise HTTPException(404, "Task not found")
+        if not entity.reviewer_id:
+            raise HTTPException(400, "This task has no reviewer. Ask an admin to assign a reviewer before requesting a date revision.")
+        approval.approver_id = entity.reviewer_id
+    elif approval.approver_id is None and approval.entity_type == "task" and entity is not None:
+        # No approver chosen on the page: pick Reviewer -> Accountable -> line manager.
         approver = services.resolve_approver_id(db, entity, approval.requested_by_id)
         if approver and approver != approval.requested_by_id:
             approval.approver_id = approver
@@ -157,12 +183,15 @@ def create_approval(
     db.flush()
 
     requester = db.get(models.User, approval.requested_by_id) if approval.requested_by_id else None
-    _notify_related(
-        db, approval, entity,
-        title=f"Approval requested: {_type_label(approval)} - {_entity_label(approval, entity)}",
-        body=f"Requested by {requester.name if requester else 'unknown'}. {approval.reason or ''}".strip(),
-        exclude_user_id=current_user.id,
-    )
+    title = f"Approval requested: {_type_label(approval)} - {_entity_label(approval, entity)}"
+    body = f"Requested by {requester.name if requester else 'unknown'}. {approval.reason or ''}".strip()
+    if _is_date_revision(approval):
+        # Only the Reviewer. If the Reviewer made the request themselves,
+        # admins get it instead so it is never left unseen.
+        if _notify_users(db, {approval.approver_id}, title, body, exclude_user_id=current_user.id) == 0:
+            _notify_users(db, _admin_ids(db), title, body, exclude_user_id=current_user.id)
+    else:
+        _notify_related(db, approval, entity, title, body, exclude_user_id=current_user.id)
     db.commit()
     db.refresh(approval)
     return approval
@@ -210,12 +239,16 @@ def decide_approval(
 
     services.audit(db, current_user.name, approval.entity_type, approval.entity_id,
                    f"approval_{payload.status}", reason=payload.reason)
-    _notify_related(
-        db, approval, entity,
-        title=f"{_type_label(approval)} {payload.status}: {_entity_label(approval, entity)}",
-        body=f"{payload.status.title()} by {current_user.name}. {payload.reason or ''}".strip(),
-        exclude_user_id=current_user.id,
-    )
+    title = f"{_type_label(approval)} {payload.status}: {_entity_label(approval, entity)}"
+    body = f"{payload.status.title()} by {current_user.name}. {payload.reason or ''}".strip()
+    if _is_date_revision(approval):
+        # Outcome goes to whoever asked and the task's Responsible person.
+        outcome_ids = {approval.requested_by_id}
+        if entity is not None:
+            outcome_ids.add(entity.responsible_id)
+        _notify_users(db, outcome_ids, title, body, exclude_user_id=current_user.id)
+    else:
+        _notify_related(db, approval, entity, title, body, exclude_user_id=current_user.id)
     db.commit()
     db.refresh(approval)
     return approval
