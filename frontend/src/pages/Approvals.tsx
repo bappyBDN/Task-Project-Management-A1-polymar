@@ -10,27 +10,51 @@ export default function Approvals() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [mineOnly, setMineOnly] = useState(true)
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [error, setError] = useState('')
 
+  const isAdmin = user?.role === 'admin'
+
+  // The server already returns only approvals this user is related to (admins get all).
   const load = () => {
-    api.get<Approval[]>('/approvals').then(setApprovals)
+    api.get<Approval[]>('/approvals').then(setApprovals).catch(() => setApprovals([]))
   }
 
   useEffect(() => {
     load()
-    api.get<Task[]>('/tasks').then(setTasks)
-    api.get<User[]>('/organizations/users').then(setUsers)
+    api.get<Task[]>('/tasks').then(setTasks).catch(() => {})
+    api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
   }, [])
 
   const decide = async (a: Approval, status: 'approved' | 'rejected') => {
-    await api.post(`/approvals/${a.id}/decision`, { status, reason: status === 'approved' ? 'Approved' : 'Rejected' })
-    load()
+    setError('')
+    setBusyId(a.id)
+    try {
+      await api.post(`/approvals/${a.id}/decision`, { status, reason: status === 'approved' ? 'Approved' : 'Rejected' })
+    } catch (e: any) {
+      setError(e?.message || 'Could not save the decision.')
+    } finally {
+      setBusyId(null)
+      load()
+    }
   }
 
-  const taskOf = (id: number) => tasks.find((t) => t.id === id)
+  const taskOf = (a: Approval) => (a.entity_type === 'task' ? tasks.find((t) => t.id === a.entity_id) : undefined)
   const nameOf = (id?: number) => users.find((u) => u.id === id)?.name
 
+  // Same rule the server enforces: admin, assigned approver, or the task's
+  // reviewer / accountable - but never the person who requested it.
+  const canDecide = (a: Approval) => {
+    if (!user || a.status !== 'pending') return false
+    if (isAdmin) return true
+    if (a.requested_by_id === user.id) return false
+    if (a.approver_id === user.id) return true
+    const t = taskOf(a)
+    return !!t && (t.reviewer_id === user.id || t.accountable_id === user.id)
+  }
+
   const visible = mineOnly
-    ? approvals.filter((a) => a.approver_id === user?.id || a.requested_by_id === user?.id)
+    ? approvals.filter((a) => a.approver_id === user?.id || a.requested_by_id === user?.id || canDecide(a))
     : approvals
 
   return (
@@ -47,6 +71,8 @@ export default function Approvals() {
         <button className={`btn sm ${!mineOnly ? 'primary' : ''}`} onClick={() => setMineOnly(false)}>All Approvals ({approvals.length})</button>
       </div>
 
+      {error && <div className="card mb" style={{ background: '#fbe5e5', color: 'var(--red)' }}>{error}</div>}
+
       <div className="card" style={{ padding: 0 }}>
         <table>
           <thead>
@@ -56,7 +82,7 @@ export default function Approvals() {
           </thead>
           <tbody>
             {visible.map((a) => {
-              const t = taskOf(a.entity_id)
+              const t = taskOf(a)
               return (
                 <tr key={a.id}>
                   <td><span className="badge gold">{label(a.approval_type)}</span></td>
@@ -68,11 +94,13 @@ export default function Approvals() {
                   </td>
                   <td className="small">{fmtDate(a.created_at?.slice(0, 10))}</td>
                   <td>
-                    {a.status === 'pending' ? (
+                    {a.status === 'pending' && canDecide(a) ? (
                       <div className="row">
-                        <button className="btn sm" onClick={() => decide(a, 'approved')}>Approve</button>
-                        <button className="btn sm danger" onClick={() => decide(a, 'rejected')}>Reject</button>
+                        <button className="btn sm" disabled={busyId === a.id} onClick={() => decide(a, 'approved')}>Approve</button>
+                        <button className="btn sm danger" disabled={busyId === a.id} onClick={() => decide(a, 'rejected')}>Reject</button>
                       </div>
+                    ) : a.status === 'pending' ? (
+                      <span className="small muted">Awaiting {nameOf(a.approver_id) ?? 'approver'}</span>
                     ) : (
                       <span className="small muted">—</span>
                     )}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useAuth } from '../auth'
 import { Notification, User } from '../types'
 
 const KIND_COLORS: Record<string, string> = {
@@ -8,20 +9,25 @@ const KIND_COLORS: Record<string, string> = {
 }
 
 export default function Notifications() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [notifs, setNotifs] = useState<Notification[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [userId, setUserId] = useState<number | ''>('')
   const [scanMsg, setScanMsg] = useState('')
 
+  // Admins can browse everyone's notifications; everyone else sees only their own.
   const load = () => {
-    const q = userId ? `?user_id=${userId}` : ''
-    api.get<Notification[]>(`/audit/notifications${q}`).then(setNotifs)
+    const uid = isAdmin ? userId : user?.id
+    if (!isAdmin && !uid) { setNotifs([]); return }
+    const q = uid ? `?user_id=${uid}` : ''
+    api.get<Notification[]>(`/audit/notifications${q}`).then(setNotifs).catch(() => setNotifs([]))
   }
 
   useEffect(() => {
     load()
-    api.get<User[]>('/organizations/users').then(setUsers)
-  }, [userId])
+    api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
+  }, [userId, user?.id, isAdmin])
 
   const markRead = async (n: Notification) => {
     await api.post(`/audit/notifications/${n.id}/read`)
@@ -46,15 +52,17 @@ export default function Notifications() {
 
       {scanMsg && <div className="card mb" style={{ background: '#e3f5ea' }}>{scanMsg}</div>}
 
-      <div className="filters">
-        <div className="field" style={{ minWidth: 280 }}>
-          <label>Filter by user</label>
-          <select value={userId} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">All users</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
+      {isAdmin && (
+        <div className="filters">
+          <div className="field" style={{ minWidth: 280 }}>
+            <label>Filter by user</label>
+            <select value={userId} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">All users</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="card" style={{ padding: 0 }}>
         <table>
