@@ -76,6 +76,7 @@ body {
 .kpi .value.green { color: var(--green); }
 .kpi .value.amber { color: var(--warn); }
 .kpi .value.red   { color: var(--red); }
+.kpi .value.gold  { color: #8a6d1f; }
 
 
 .badge {
