@@ -104,8 +104,25 @@ def org_intelligence(db: Session = Depends(get_db)):
     by_function: dict = {}
     by_department: dict = {}
 
-    def row(bucket: dict, key: str) -> dict:
-        return bucket.setdefault(key, {"total": 0, "open": 0, "completed": 0, "overdue": 0, "projects": 0})
+    def _better_display(a: str, b: str) -> str:
+        """Prefer whichever spelling looks properly capitalized, so e.g.
+        'growthanalytics' and 'Growthanalytics' — two differently-cased
+        names in the source data — merge into one row shown as
+        'Growthanalytics' instead of appearing as two separate rows."""
+        if b[:1].isupper() and not a[:1].isupper():
+            return b
+        return a
+
+    def row(bucket: dict, raw_name: str) -> dict:
+        display = (raw_name or "Unassigned").strip()
+        norm_key = display.lower()  # group case-insensitively
+        entry = bucket.get(norm_key)
+        if entry is None:
+            entry = {"_display": display, "total": 0, "open": 0, "completed": 0, "overdue": 0, "projects": 0}
+            bucket[norm_key] = entry
+        else:
+            entry["_display"] = _better_display(entry["_display"], display)
+        return entry
 
     for t in tasks:
         due = t.approved_due_date or t.baseline_due_date
@@ -130,6 +147,10 @@ def org_intelligence(db: Session = Depends(get_db)):
         row(by_function, functions.get(p.function_id, "Unassigned"))["projects"] += 1
 
     def fmt(bucket: dict) -> list:
-        return [{"name": name, **v} for name, v in bucket.items()]
+        return [
+            {"name": v["_display"], "total": v["total"], "open": v["open"],
+             "completed": v["completed"], "overdue": v["overdue"], "projects": v["projects"]}
+            for v in bucket.values()
+        ]
 
     return {"bySbu": fmt(by_sbu), "byFunction": fmt(by_function), "byDepartment": fmt(by_department)}
