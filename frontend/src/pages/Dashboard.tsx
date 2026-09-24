@@ -5,11 +5,34 @@ import { useAuth } from '../auth'
 import { ProjectKpi, Task, TaskKpi } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 
+// ---------------------------------------------------------------- scoped visual polish
+// Additive only — new class names, nothing here overrides existing global styles.
+const DASHBOARD_STYLES = `
+  .dash-kpi-card { transition: transform .15s ease, box-shadow .15s ease; }
+  .dash-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15,23,42,.08); }
+  .dash-panel { transition: box-shadow .15s ease; }
+  .dash-panel:hover { box-shadow: 0 10px 28px rgba(15,23,42,.06); }
+  .dash-row-hover:hover { background: #f7f9fc; }
+  .dash-tab-btn { transition: background .15s ease, color .15s ease, box-shadow .15s ease; }
+  .dash-cal-select {
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    border: 1px solid #d7dce3;
+    background: #fff;
+    color: var(--navy, #1f2430);
+    cursor: pointer;
+  }
+  .dash-cal-select:hover { border-color: var(--gold, #c9a227); }
+  .dash-cal-day:hover { background: #eef1f5 !important; }
+  .dash-cal-nav .btn.sm { min-width: 26px; }
+`
+
 // ---------------------------------------------------------------- small building blocks
 
 function KpiCard({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
   return (
-    <div className={`card kpi${tone ? ' kpi-' + tone : ''}`} style={tone ? { borderLeft: `4px solid var(--${tone})` } : undefined}>
+    <div className={`card kpi dash-kpi-card${tone ? ' kpi-' + tone : ''}`} style={tone ? { borderLeft: `4px solid var(--${tone})` } : undefined}>
       <div className="label">{label}</div>
       <div className={`value${tone ? ' ' + tone : ''}`}>{value}</div>
     </div>
@@ -17,6 +40,7 @@ function KpiCard({ label, value, tone }: { label: string; value: string | number
 }
 
 const HEALTH_HEX: Record<string, string> = { green: '#22a06b', amber: '#e0a800', red: '#d9534f', black: '#1f2430' }
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 /** Pure-SVG donut chart — no chart library needed. */
 function DonutChart({ data }: { data: Record<string, number> }) {
@@ -33,7 +57,7 @@ function DonutChart({ data }: { data: Record<string, number> }) {
 
   return (
     <div className="row" style={{ gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ filter: 'drop-shadow(0 2px 6px rgba(15,23,42,.12))' }}>
         <g transform={`rotate(-90 ${cx} ${cy})`}>
           <circle cx={cx} cy={cy} r={r} fill="none" stroke="#eef1f5" strokeWidth={18} />
           {entries.map(([key, val]) => {
@@ -125,12 +149,44 @@ function MiniCalendar({ tasks, onPickDay }: { tasks: Task[]; onPickDay: (iso: st
     onPickDay(next)
   }
 
+  const goToday = () => { const d = new Date(); d.setDate(1); setCursor(d) }
+  // 11-year window centered on whichever year is currently in view, so it
+  // recenters as the user navigates instead of being stuck at a fixed range.
+  const yearOptions = Array.from({ length: 11 }, (_, i) => year - 5 + i)
+
   return (
     <div>
-      <div className="row spread" style={{ marginBottom: 8 }}>
-        <button className="btn sm" onClick={() => setCursor(new Date(year, month - 1, 1))}>‹</button>
+      <div className="row spread dash-cal-nav" style={{ marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
+        <div className="row" style={{ gap: 4 }}>
+          <button className="btn sm" title="Previous year" onClick={() => setCursor(new Date(year - 1, month, 1))}>«</button>
+          <button className="btn sm" title="Previous month" onClick={() => setCursor(new Date(year, month - 1, 1))}>‹</button>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <select
+            className="dash-cal-select"
+            value={month}
+            onChange={(e) => setCursor(new Date(year, Number(e.target.value), 1))}
+            aria-label="Month"
+          >
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </select>
+          <select
+            className="dash-cal-select"
+            value={year}
+            onChange={(e) => setCursor(new Date(Number(e.target.value), month, 1))}
+            aria-label="Year"
+          >
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="row" style={{ gap: 4 }}>
+          <button className="btn sm" title="Next month" onClick={() => setCursor(new Date(year, month + 1, 1))}>›</button>
+          <button className="btn sm" title="Next year" onClick={() => setCursor(new Date(year + 1, month, 1))}>»</button>
+        </div>
+      </div>
+      <div className="row spread" style={{ marginBottom: 6 }}>
         <strong className="small">{cursor.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</strong>
-        <button className="btn sm" onClick={() => setCursor(new Date(year, month + 1, 1))}>›</button>
+        <button className="btn sm" onClick={goToday}>Today</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, fontSize: 10, color: '#8891a1', textAlign: 'center', marginBottom: 4 }}>
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
@@ -146,7 +202,7 @@ function MiniCalendar({ tasks, onPickDay }: { tasks: Task[]; onPickDay: (iso: st
             <button
               key={i}
               onClick={() => pick(day)}
-              className="btn sm"
+              className="btn sm dash-cal-day"
               style={{
                 padding: '4px 0',
                 fontSize: 11,
@@ -188,16 +244,18 @@ export default function Dashboard() {
   const [pickedDay, setPickedDay] = useState<string | null>(null)
 
   useEffect(() => {
-    api.get<ProjectKpi>('/dashboards/executive').then(setProjKpi)
-    api.get<Record<string, number>>('/dashboards/health-distribution').then(setHealthDist)
-    api.get<{ category: string; count: number }[]>('/dashboards/delay-causes').then(setDelayCauses)
-    api.get<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] }>('/dashboards/org-intelligence').then(setOrgIntel)
+    api.get<ProjectKpi>('/dashboards/executive').then(setProjKpi).catch(() => {})
+    api.get<Record<string, number>>('/dashboards/health-distribution').then(setHealthDist).catch(() => {})
+    api.get<{ category: string; count: number }[]>('/dashboards/delay-causes').then(setDelayCauses).catch(() => {})
+    api.get<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] }>('/dashboards/org-intelligence')
+      .then(setOrgIntel)
+      .catch(() => setOrgIntel({ bySbu: [], byFunction: [], byDepartment: [] }))
   }, [])
 
   useEffect(() => {
     if (!user) return
-    api.get<TaskKpi>(`/dashboards/individual/${user.id}`).then(setTaskKpi)
-    api.get<Task[]>(`/tasks?responsible_id=${user.id}`).then(setMyTasks)
+    api.get<TaskKpi>(`/dashboards/individual/${user.id}`).then(setTaskKpi).catch(() => {})
+    api.get<Task[]>(`/tasks?responsible_id=${user.id}`).then(setMyTasks).catch(() => {})
   }, [user])
 
   const shownTasks = useMemo(() => {
@@ -210,6 +268,7 @@ export default function Dashboard() {
 
   return (
     <div>
+      <style>{DASHBOARD_STYLES}</style>
       <div className="topbar">
         <div>
           <h1>My Dashboard</h1>
@@ -236,7 +295,7 @@ export default function Dashboard() {
       <div className="grid" style={{ gridTemplateColumns: '1.5fr 1fr', gap: 16, marginTop: 16, alignItems: 'start' }}>
         {/* LEFT: My tasks */}
         <div>
-          <div className="card" style={{ padding: 0 }}>
+          <div className="card dash-panel" style={{ padding: 0 }}>
             <div className="section-title" style={{ margin: '14px 14px 8px' }}>
               My Tasks {pickedDay ? `— due ${fmtDate(pickedDay)}` : ''}
               {pickedDay && <button className="btn sm" style={{ marginLeft: 10 }} onClick={() => setPickedDay(null)}>Clear date filter</button>}
@@ -247,7 +306,7 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {shownTasks.map((t) => (
-                  <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
+                  <tr key={t.id} className="dash-row-hover" onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
                     <td className="muted small">{t.code}</td>
                     <td>{t.title}{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
                     <td><span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span></td>
@@ -276,30 +335,30 @@ export default function Dashboard() {
           </div>
 
           <div className="section-title">Team &amp; Portfolio Breakdown</div>
-          <div className="card">
+          <div className="card dash-panel">
             <div className="row" style={{ marginBottom: 12 }}>
-              <button className={`btn sm ${orgTab === 'bySbu' ? 'primary' : ''}`} onClick={() => setOrgTab('bySbu')}>By SBU</button>
-              <button className={`btn sm ${orgTab === 'byFunction' ? 'primary' : ''}`} onClick={() => setOrgTab('byFunction')}>By Function</button>
-              <button className={`btn sm ${orgTab === 'byDepartment' ? 'primary' : ''}`} onClick={() => setOrgTab('byDepartment')}>By Department</button>
+              <button className={`btn sm dash-tab-btn ${orgTab === 'bySbu' ? 'primary' : ''}`} onClick={() => setOrgTab('bySbu')}>By SBU</button>
+              <button className={`btn sm dash-tab-btn ${orgTab === 'byFunction' ? 'primary' : ''}`} onClick={() => setOrgTab('byFunction')}>By Function</button>
+              <button className={`btn sm dash-tab-btn ${orgTab === 'byDepartment' ? 'primary' : ''}`} onClick={() => setOrgTab('byDepartment')}>By Department</button>
             </div>
-            <BarList rows={orgRows} />
+            {orgIntel === null ? <div className="empty small">Loading…</div> : <BarList rows={orgRows} />}
           </div>
         </div>
 
         {/* RIGHT: visuals + personal calendar */}
         <div>
-          <div className="card">
+          <div className="card dash-panel">
             <div className="section-title" style={{ marginTop: 0 }}>My Calendar</div>
             <MiniCalendar tasks={myTasks} onPickDay={setPickedDay} />
             <div className="small muted" style={{ marginTop: 8 }}>Gold outline = a task of yours is due that day. Click a day to filter the list on the left.</div>
           </div>
 
-          <div className="card mt">
+          <div className="card mt dash-panel">
             <div className="section-title" style={{ marginTop: 0 }}>Project Health Distribution</div>
             <DonutChart data={healthDist} />
           </div>
 
-          <div className="card mt">
+          <div className="card mt dash-panel">
             <div className="section-title" style={{ marginTop: 0 }}>Top Delay Causes</div>
             {delayCauses.map((d) => (
               <div key={d.category} className="row spread" style={{ padding: '6px 0' }}>
