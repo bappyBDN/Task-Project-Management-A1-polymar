@@ -25,10 +25,11 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .ad-kpi .v{font-size:30px;font-weight:700;color:var(--navy);margin-top:10px;line-height:1}
 .ad-kpi .d{font-size:12px;margin-top:8px;display:block}.ad-kpi .d s{text-decoration:none;color:var(--mut);display:block;margin-top:2px;font-size:11.5px}
 .ad-kpi svg.sp{position:absolute;right:12px;bottom:14px}
-.ad-cols{display:grid;grid-template-columns:1fr 366px;gap:16px;align-items:start}
+.ad-cols{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:16px;align-items:start}
 .ad-stack{display:flex;flex-direction:column;gap:16px;min-width:0}
-.ad-2{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
-.ad-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 16px;box-shadow:0 1px 2px rgba(16,30,54,.03)}
+.ad-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px}
+.ad-scroll{overflow-x:auto}
+.ad-card{min-width:0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 16px;box-shadow:0 1px 2px rgba(16,30,54,.03)}
 .ad-card h3{margin:0 0 12px;font-size:15.5px;color:var(--navy);display:flex;align-items:center;gap:8px}
 .ad-card h3 svg{color:var(--blue)}
 .ad-sel{border:1px solid var(--line);background:#fff;border-radius:6px;padding:5px 10px;font-size:12px;display:inline-flex;align-items:center;gap:8px;color:#334}
@@ -41,13 +42,15 @@ table.ad-t{width:100%;border-collapse:collapse}
 .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:3px 9px;font-size:11.5px}
 .pb{height:5px;border-radius:9px;background:#e8edf4;width:100px;display:inline-block;vertical-align:middle;overflow:hidden;margin-right:12px}.pb span{display:block;height:100%;border-radius:9px}
 .ad-btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;color:#334}
-.ad-port{display:grid;grid-template-columns:1.1fr 1.1fr 1fr 1fr .9fr;gap:8px}
-.ad-p{border:1px solid var(--line);border-radius:8px;padding:11px 12px;height:88px;position:relative;background:linear-gradient(180deg,#fff,#f5f9ff)}
+.ad-port{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px}
+.ad-p{border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-height:88px;position:relative;background:linear-gradient(180deg,#fff,#f5f9ff)}
 .ad-p small{font-size:11px;color:#3a475c;letter-spacing:.02em}.ad-p b{display:block;font-size:24px;margin-top:6px}
 .ad-p svg{position:absolute;right:10px;bottom:10px}
-.ad-tabs{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:8px}
-.ad-tabs button{border:0;background:#fff;font-size:10.5px;padding:6px 12px;cursor:pointer;color:#334}.ad-tabs .on{background:#eef3ff;color:var(--navy);font-weight:700;box-shadow:inset 0 -2px 0 var(--blue)}
-.ad-mini th,.ad-mini td{font-size:10.5px;padding:7px 4px}
+.ad-tabs{display:inline-flex;max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
+.ad-tabs button{border:0;background:#fff;font-size:14px;padding:10px 20px;cursor:pointer;color:#334;white-space:nowrap}.ad-tabs .on{background:#eef3ff;color:var(--navy);font-weight:700;box-shadow:inset 0 -2px 0 var(--blue)}
+.ad-mini th{font-size:12px;padding:14px 12px;letter-spacing:.05em}
+.ad-mini td{font-size:15px;padding:16px 12px}
+.ad-mini td:first-child{font-weight:600;color:var(--navy)}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;row-gap:2px}
 .cal .w{font-size:11px;color:var(--mut);padding:8px 0}
 .cal button{border:0;background:none;height:39px;font-size:13px;position:relative;cursor:pointer;color:var(--ink);border-radius:50%;width:39px;margin:auto}
@@ -297,7 +300,7 @@ export default function Dashboard() {
                 <h3 style={{ margin: 0 }}><Ic n="cal" />My Tasks{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}</h3>
                 {picked && <button className="ad-btn" onClick={() => setPicked(null)}>Clear date filter</button>}
               </div>
-              <table className="ad-t">
+              <div className="ad-scroll"><table className="ad-t">
                 <thead><tr>{['CODE', 'TASK', 'PRIORITY', 'STATUS', 'PROGRESS', 'DUE'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>
                   {rows.map((t) => {
@@ -314,11 +317,11 @@ export default function Dashboard() {
                     )
                   })}
                 </tbody>
-              </table>
+              </table></div>
               {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked ? 'No tasks due on this date.' : 'No tasks assigned to you.'}</div>}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,360px),1fr))', gap: 16 }}>
               <div className="ad-card">
                 <h3><Ic n="users" s={17} />Group Portfolio</h3>
                 <div className="ad-port">
@@ -331,10 +334,10 @@ export default function Dashboard() {
                 <h3><Ic n="users" s={17} />Team &amp; Portfolio Breakdown</h3>
                 <div className="ad-tabs">{([['bySbu', 'By SBU'], ['byFunction', 'By Function'], ['byDepartment', 'By Department']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
                 {orgIntel === null ? <div style={{ color: 'var(--mut)', padding: 10 }}>Loading…</div> : (
-                  <table className="ad-t ad-mini">
+                  <div className="ad-scroll"><table className="ad-t ad-mini">
                     <thead><tr>{['NAME', 'TOTAL', 'OPEN', 'COMPLETED', 'OVERDUE', 'PROJECTS'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
                     <tbody>{orgIntel[tab].map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.total}</td><td>{r.open}</td><td>{r.completed}</td><td style={{ color: r.overdue ? '#ef4444' : undefined }}>{r.overdue}</td><td>{r.projects}</td></tr>)}</tbody>
-                  </table>
+                  </table></div>
                 )}
               </div>
             </div>
