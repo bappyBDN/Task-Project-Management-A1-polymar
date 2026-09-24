@@ -115,40 +115,42 @@ export default function Kanban() {
 
       <div className="small muted" style={{ margin: '0 0 10px 2px' }}>{visibleTasks.length} tasks</div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(6, minmax(200px, 1fr))', alignItems: 'start' }}>
-        {COLUMNS.map((col) => {
-          const colTasks = visibleTasks.filter((t) => t.status === col.key)
-          return (
-            <div key={col.key} style={{ background: '#eef1f5', borderRadius: 10, padding: 10 }}>
-              <div className="spread" style={{ marginBottom: 8 }}>
-                <strong className="small">{col.label}</strong>
-                <span className="badge gray">{colTasks.length}</span>
-              </div>
-              {colTasks.map((t) => (
-                <div key={t.id} className="card" style={{ marginBottom: 8, padding: 10, cursor: 'pointer' }}
-                  onClick={() => navigate(`/tasks/${t.id}`)}>
-                  <div className="small" style={{ fontWeight: 600 }}>{t.title}</div>
-                  <div className="muted" style={{ fontSize: 11 }}>{t.code} · {name(t.responsible_id) ?? '—'}</div>
-                  <div className="muted" style={{ fontSize: 11 }}>{companyName(t.company_id) ?? '—'}{t.function_id ? ` · ${functionName(t.function_id)}` : ''}{t.department_id ? ` · ${departmentName(t.department_id)}` : ''}</div>
-                  <div className="row" style={{ marginTop: 6 }}>
-                    <span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span>
-                    <span className={`health-dot ${HEALTH_COLORS[t.health]}`} />
-                  </div>
-                  <div className="row" style={{ marginTop: 6 }}>
-                    {COLUMNS.filter((c) => c.key !== col.key).map((c) => (
-                      <button key={c.key} className="btn sm" style={{ fontSize: 10, padding: '2px 6px' }}
-                        onClick={(e) => { e.stopPropagation(); move(t, c.key) }}
-                        title={`Move to ${c.label}`}>
-                        → {c.label}
-                      </button>
-                    ))}
-                  </div>
+      <div style={{ overflowX: 'auto', paddingBottom: 10 }}>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(6, minmax(230px, 1fr))', gap: 14, alignItems: 'start', minWidth: 1450 }}>
+          {COLUMNS.map((col) => {
+            const colTasks = visibleTasks.filter((t) => t.status === col.key)
+            return (
+              <div key={col.key} style={{ background: '#eef1f5', borderRadius: 10, padding: 10, minWidth: 0 }}>
+                <div className="spread" style={{ marginBottom: 8 }}>
+                  <strong className="small">{col.label}</strong>
+                  <span className="badge gray">{colTasks.length}</span>
                 </div>
-              ))}
-              {colTasks.length === 0 && <div className="empty small" style={{ padding: 16 }}>—</div>}
-            </div>
-          )
-        })}
+                {colTasks.map((t) => (
+                  <div key={t.id} className="card" style={{ marginBottom: 8, padding: 10, cursor: 'pointer', minWidth: 0, wordBreak: 'break-word' }}
+                    onClick={() => navigate(`/tasks/${t.id}`)}>
+                    <div className="small" style={{ fontWeight: 600 }}>{t.title}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{t.code} · {name(t.responsible_id) ?? '—'}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{companyName(t.company_id) ?? '—'}{t.function_id ? ` · ${functionName(t.function_id)}` : ''}{t.department_id ? ` · ${departmentName(t.department_id)}` : ''}</div>
+                    <div className="row" style={{ marginTop: 6, gap: 6 }}>
+                      <span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span>
+                      <span className={`health-dot ${HEALTH_COLORS[t.health]}`} />
+                    </div>
+                    <div className="row" style={{ marginTop: 6, gap: 4, flexWrap: 'wrap' }}>
+                      {COLUMNS.filter((c) => c.key !== col.key).map((c) => (
+                        <button key={c.key} className="btn sm" style={{ fontSize: 10, padding: '2px 6px' }}
+                          onClick={(e) => { e.stopPropagation(); move(t, c.key) }}
+                          title={`Move to ${c.label}`}>
+                          → {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {colTasks.length === 0 && <div className="empty small" style={{ padding: 16 }}>—</div>}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
