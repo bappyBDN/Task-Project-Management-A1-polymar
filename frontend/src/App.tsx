@@ -9,6 +9,7 @@ import TaskDetail from './pages/TaskDetail'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import Approvals from './pages/Approvals'
+import ApprovalDetail from './pages/ApprovalDetail'
 import Audit from './pages/Audit'
 import Backlog from './pages/Backlog'
 import Governance from './pages/Governance'
@@ -128,6 +129,7 @@ export default function App() {
           <Route path="/governance" element={<Governance />} />
           <Route path="/raci" element={<Raci />} />
           <Route path="/approvals" element={<Approvals />} />
+          <Route path="/approvals/:id" element={<ApprovalDetail />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/audit" element={<Audit />} />
           {isAdmin && <Route path="/admin" element={<AdminPanel />} />}

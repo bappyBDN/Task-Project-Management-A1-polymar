@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Approval, Task, User } from '../types'
@@ -89,7 +90,11 @@ export default function Approvals() {
               return (
                 <tr key={a.id}>
                   <td><span className="badge gold">{label(a.approval_type)}</span></td>
-                  <td className="small">{t ? `${t.code} — ${t.title}` : `${a.entity_type} #${a.entity_id}`}</td>
+                  <td className="small">
+                    <Link to={`/approvals/${a.id}`} title="Open full details" style={{ color: 'var(--navy)', fontWeight: 600, textDecoration: 'underline' }}>
+                      {t ? `${t.code} — ${t.title}` : `${a.entity_type} #${a.entity_id}`}
+                    </Link>
+                  </td>
                   <td className="small">{nameOf(a.requested_by_id) ?? '—'}</td>
                   <td className="small">{nameOf(a.approver_id) ?? '—'}</td>
                   <td>

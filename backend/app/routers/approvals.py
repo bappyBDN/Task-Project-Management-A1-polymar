@@ -154,6 +154,27 @@ def list_approvals(
     return visible
 
 
+@router.get("/{approval_id}")
+def get_approval(
+    approval_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """One approval for the detail page. Only related people and admins may open
+    it. `can_decide` tells the page whether to show Approve / Reject."""
+    approval = db.get(models.Approval, approval_id)
+    if not approval:
+        raise HTTPException(404, "Approval not found")
+    entity = _entity(db, approval)
+    if not _is_admin(current_user) and current_user.id not in _related_ids(approval, entity):
+        raise HTTPException(403, "You are not involved in this approval")
+    data = schemas.ApprovalOut.model_validate(approval).model_dump()
+    data["can_decide"] = approval.status == "pending" and (
+        _is_admin(current_user) or current_user.id in _decider_ids(approval, entity)
+    )
+    return data
+
+
 @router.post("", response_model=schemas.ApprovalOut, status_code=201)
 def create_approval(
     payload: schemas.ApprovalBase,
@@ -217,10 +238,15 @@ def decide_approval(
         raise HTTPException(403, "Only the assigned approver, the task's reviewer/accountable or an admin can decide this approval")
 
     approval.status = payload.status
-    approval.reason = payload.reason
+    # Keep the requester's original reason and add the decision note under it
+    # (previously the decision overwrote the original reason).
+    note = f"Decision ({payload.status}) by {current_user.name}"
+    if payload.reason:
+        note += f": {payload.reason}"
+    approval.reason = f"{approval.reason}\n{note}" if approval.reason else note
     approval.decided_at = datetime.utcnow()
 
-    # Apply side effects (unchanged)
+    # Apply side effects
     if approval.entity_type == "task":
         task = db.get(models.Task, approval.entity_id)
         if task:
@@ -228,11 +254,18 @@ def decide_approval(
                 task.status = "completed"
                 task.actual_due_date = date.today()
                 task.progress_pct = 100.0
-            if approval.approval_type == "revised_date" and payload.status == "approved":
-                rca = db.query(models.DelayRca).filter(models.DelayRca.task_id == task.id).order_by(models.DelayRca.id.desc()).first()
-                if rca and rca.revised_due_date:
-                    task.approved_due_date = rca.revised_due_date
-                    rca.approval_status = "approved"
+            if approval.approval_type == "revised_date":
+                # The pending delay record that carries the proposed date (a plain
+                # delay logged later no longer hides it).
+                rca = db.query(models.DelayRca).filter(
+                    models.DelayRca.task_id == task.id,
+                    models.DelayRca.revised_due_date.isnot(None),
+                    models.DelayRca.approval_status == "pending",
+                ).order_by(models.DelayRca.id.desc()).first()
+                if rca:
+                    if payload.status == "approved":
+                        task.approved_due_date = rca.revised_due_date
+                    rca.approval_status = payload.status  # rejected ones no longer stay "pending"
             services.recalc_task_health(db, task)
             if task.project_id:
                 services.recalc_project_health(db, task.project_id)
