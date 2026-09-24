@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { useAuth } from '../auth'
 import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, METHODOLOGIES, PROJECT_STATUSES, fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
@@ -128,6 +129,9 @@ function ProjectForm({ companies, users, types, onClose, onSaved }: {
 }
 
 export default function Projects() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'   // only admins get a Delete button (the API enforces this too)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -146,6 +150,24 @@ export default function Projects() {
   }, [])
 
   const open = (p: Project) => navigate(`/projects/${p.id}`)
+
+  // Admin-only. Uses the existing DELETE /projects/{id} route: the backend soft-deletes the project's
+  // tasks, detaches milestones/risks/issues/backlog, then removes the project — so no foreign key breaks.
+  const removeProject = async (p: Project) => {
+    if (!isAdmin || deletingId !== null) return
+    const n = tasks.filter((t) => t.project_id === p.id).length
+    const warn = n > 0 ? `\n\nIts ${n} task${n === 1 ? '' : 's'} will also be removed from all lists.` : ''
+    if (!confirm(`Delete project ${p.code} — "${p.name}"?${warn}\n\nThis cannot be undone.`)) return
+    setDeletingId(p.id)
+    try {
+      await api.del(`/projects/${p.id}`)
+      await Promise.all([reloadProjects(), api.get<Task[]>('/tasks').then(setTasks)])
+    } catch (e: any) {
+      alert(`Could not delete the project: ${errText(e)}`)
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const manager = (id?: number) => users.find((u) => u.id === id)?.name
 
@@ -221,7 +243,7 @@ export default function Projects() {
           <thead>
             <tr>
               <th>Code</th><th>Project</th><th>Company</th><th>PM</th><th>Type</th><th>Status</th><th>Health</th>
-              <th>Completion</th><th>Baseline</th><th>Forecast</th>
+              <th>Completion</th><th>Baseline</th><th>Forecast</th>{isAdmin && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -247,6 +269,17 @@ export default function Projects() {
                 </td>
                 <td className="small">{fmtDate(p.baseline_due_date)}</td>
                 <td className="small">{fmtDate(p.forecast_due_date)}</td>
+                {isAdmin && (
+                  <td>
+                    <button
+                      className="btn sm danger"
+                      disabled={deletingId !== null}
+                      onClick={(e) => { e.stopPropagation(); removeProject(p) }}
+                    >
+                      {deletingId === p.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
