@@ -98,6 +98,7 @@ export default function AdminPanel() {
   const [allRoles, setAllRoles] = useState<string[]>([])
   const [newRole, setNewRole] = useState('')
   const [showOrgModal, setShowOrgModal] = useState<'company' | 'function' | 'department' | null>(null)
+  const [showQuickUser, setShowQuickUser] = useState(false)
 
   const load = () => {
     api.get<User[]>('/organizations/users').then(setUsers)
@@ -216,9 +217,22 @@ export default function AdminPanel() {
     load()
   }
 
+  // ---------------------------------------------------------------- Quick "create manager" from inside the Reports To search
+  const quickCreatedUser = (u: User) => {
+    setUsers((prev) => [...prev, u])          // so the new manager shows up immediately, without a full reload
+    set('reports_to_id', u.id)
+    setShowQuickUser(false)
+    setMsg(`Created ${u.name} and set as manager`)
+  }
+
   const byManager = groupByManager(users)
   const roots = byManager.get(null) ?? []
   const unassignedCount = users.filter((u) => u.reports_to_id != null && !users.some((m) => m.id === u.reports_to_id)).length
+
+  // Reports To options exclude the user currently being edited (can't report to self)
+  const managerItems = users
+    .filter((u) => u.id !== editing?.id)
+    .map((u) => ({ value: String(u.id), label: `${u.name} — ${label(u.role)}` }))
 
   return (
     <div>
@@ -257,7 +271,7 @@ export default function AdminPanel() {
             <tbody>
               {emailLogs.map((log) => {
                 const linkedTask = log.task_id ? tasks.find(t => t.id === log.task_id) : null;
-                
+
                 return (
                   <tr key={log.id}>
                     <td>
@@ -475,10 +489,14 @@ export default function AdminPanel() {
               </div>
               <div>
                 <label>Reports To (manager)</label>
-                <select value={form.reports_to_id ?? ''} onChange={(e) => set('reports_to_id', e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">— No manager —</option>
-                  {users.filter((u) => u.id !== editing?.id).map((u) => <option key={u.id} value={u.id}>{u.name} — {label(u.role)}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.reports_to_id != null ? String(form.reports_to_id) : ''}
+                  items={managerItems}
+                  onChange={(v) => set('reports_to_id', v ? Number(v) : null)}
+                  placeholder="Search employee by name…"
+                  onAddNew={() => setShowQuickUser(true)}
+                  addLabel="new user"
+                />
               </div>
             </div>
             <label>Role</label>
@@ -495,6 +513,10 @@ export default function AdminPanel() {
 
       {showOrgModal && (
         <OrgModal kind={showOrgModal} onClose={() => setShowOrgModal(null)} onCreated={(o) => createdOrg(showOrgModal, o)} />
+      )}
+
+      {showQuickUser && (
+        <QuickUserModal onClose={() => setShowQuickUser(false)} onCreated={quickCreatedUser} allRoles={allRoles} />
       )}
     </div>
   )
@@ -533,6 +555,69 @@ function OrgModal({ kind, onClose, onCreated }: { kind: 'company' | 'function' |
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Create'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- Quick-create-user modal
+// Opened from inside "Reports To (manager)" search when the desired manager
+// isn't in the list yet — lets the admin create them without losing the
+// New/Edit User form they were already filling in.
+function QuickUserModal({
+  onClose, onCreated, allRoles,
+}: {
+  onClose: () => void
+  onCreated: (u: User) => void
+  allRoles: string[]
+}) {
+  const [employeeId, setEmployeeId] = useState('')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState('employee')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async () => {
+    if (!employeeId.trim() || !name.trim() || !email.trim()) {
+      setErr('Employee ID, name and email are required')
+      return
+    }
+    setBusy(true)
+    setErr('')
+    try {
+      const u = await api.post<User>('/organizations/users', {
+        employee_id: employeeId.trim(),
+        name: name.trim(),
+        email: email.trim(),
+        role,
+      })
+      onCreated(u)
+    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+        <h2>New User (as manager)</h2>
+        <div className="small muted" style={{ marginBottom: 12 }}>
+          Create a minimal user record — you can add company/department/designation later by editing them from the Users tab.
+        </div>
+        {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
+        <label>Employee ID *</label>
+        <input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} autoFocus />
+        <label>Name *</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} />
+        <label>Email *</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} />
+        <label>Role</label>
+        <select value={role} onChange={(e) => setRole(e.target.value)}>
+          {allRoles.map((r) => <option key={r} value={r}>{label(r)}</option>)}
+        </select>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Create User'}</button>
         </div>
       </div>
     </div>
