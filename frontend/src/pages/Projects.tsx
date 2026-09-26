@@ -226,19 +226,19 @@ export default function Projects() {
     [filtered, personOrCompany, filter, tasksByProject],
   )
 
-  // Dropdowns only offer values that actually occur, so every choice shows something.
-  const usedCompanyIds = new Set<number>(projects.flatMap((p) => [...projectCompanyIds(p)]))
-  const usedPeopleIds = new Set<number>(projects.flatMap((p) => [...projectPeopleIds(p)]))
-  const present = (vals: (string | undefined)[], order: readonly string[]) => {
-    const s = new Set(vals.filter(Boolean) as string[])
-    return [...order.filter((v) => s.has(v)), ...[...s].filter((v) => !order.includes(v))]
+  // Full option lists: every company, status, health colour, methodology and
+  // employee. Any value found in the data but missing from the standard list is
+  // added at the end, so every real value can still be selected.
+  const fullList = (standard: readonly string[], vals: (string | undefined)[]) => {
+    const extra = [...new Set(vals.filter(Boolean) as string[])].filter((v) => !standard.includes(v))
+    return [...standard, ...extra]
   }
-  const companyItems = [{ value: '', label: 'All companies' }, ...companies.filter((c) => usedCompanyIds.has(c.id)).map((c) => ({ value: String(c.id), label: c.name }))]
-  const statusItems = [{ value: '', label: 'All' }, ...present(projects.map((p) => p.status), PROJECT_STATUSES).map((s) => ({ value: s, label: label(s) }))]
-  const healthItems = [{ value: '', label: 'All' }, ...present(projects.map((p) => p.health), Object.keys(HEALTH_COLORS)).map((h) => ({ value: h, label: label(h) }))]
+  const companyItems = [{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))]
+  const statusItems = [{ value: '', label: 'All' }, ...fullList(PROJECT_STATUSES, projects.map((p) => p.status)).map((s) => ({ value: s, label: label(s) }))]
+  const healthItems = [{ value: '', label: 'All' }, ...fullList(Object.keys(HEALTH_COLORS), projects.map((p) => p.health)).map((h) => ({ value: h, label: label(h) }))]
   const typeItems = [{ value: '', label: 'All' }, ...Array.from(new Set(projects.map((p) => p.project_type))).map((t) => ({ value: t, label: label(t) }))]
-  const methodologyItems = [{ value: '', label: 'All' }, ...present(projects.map((p) => p.methodology), METHODOLOGIES).map((m) => ({ value: m, label: label(m) }))]
-  const managerItems = [{ value: '', label: 'All' }, ...users.filter((u) => usedPeopleIds.has(u.id)).map((u) => ({ value: String(u.id), label: u.name }))]
+  const methodologyItems = [{ value: '', label: 'All' }, ...fullList(METHODOLOGIES, projects.map((p) => p.methodology)).map((m) => ({ value: m, label: label(m) }))]
+  const managerItems = [{ value: '', label: 'All' }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]
 
   // Company column: the project's own company, otherwise the companies of its tasks.
   const companyName = (p: Project) => {
