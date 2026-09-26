@@ -170,29 +170,81 @@ export default function Projects() {
   }
 
   const manager = (id?: number) => users.find((u) => u.id === id)?.name
+  const userName = (id?: number) => users.find((u) => u.id === id)?.name ?? '—'
+
+  // Most projects were created without a Company / Manager; that information
+  // lives on their tasks. So a project belongs to a company if the project OR
+  // any of its tasks is in that company, and involves an employee if they are
+  // its PM / Sponsor / Owner OR Responsible / Accountable / Reviewer on a task.
+  const tasksByProject = useMemo(() => {
+    const m = new Map<number, Task[]>()
+    tasks.forEach((t) => { if (t.project_id) { const l = m.get(t.project_id) ?? []; l.push(t); m.set(t.project_id, l) } })
+    return m
+  }, [tasks])
+  const projectCompanyIds = (p: Project) => {
+    const s = new Set<number>()
+    if (p.company_id) s.add(p.company_id)
+    ;(tasksByProject.get(p.id) ?? []).forEach((t) => { if (t.company_id) s.add(t.company_id) })
+    return s
+  }
+  const projectPeopleIds = (p: Project) => {
+    const s = new Set<number>()
+    ;[p.manager_id, p.sponsor_id, p.owner_id].forEach((id) => { if (id) s.add(id) })
+    ;(tasksByProject.get(p.id) ?? []).forEach((t) => [t.responsible_id, t.accountable_id, t.reviewer_id].forEach((id) => { if (id) s.add(id) }))
+    return s
+  }
+
+  /** The project's tasks that match the Company / Employee filters. */
+  const matchingTasks = (p: Project) => {
+    const cid = filter.company_id ? Number(filter.company_id) : null
+    const uid = filter.manager_id ? Number(filter.manager_id) : null
+    const leadsProject = uid !== null && [p.manager_id, p.sponsor_id, p.owner_id].includes(uid)
+    return (tasksByProject.get(p.id) ?? []).filter((t) => {
+      if (cid !== null && (t.company_id ?? p.company_id) !== cid) return false
+      // a PM / Sponsor / Owner sees all the project's tasks; others only the ones they are on
+      if (uid !== null && !leadsProject && ![t.responsible_id, t.accountable_id, t.reviewer_id].includes(uid)) return false
+      return true
+    })
+  }
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
-      if (filter.company_id && String(p.company_id) !== String(filter.company_id)) return false
+      if (filter.company_id && !projectCompanyIds(p).has(Number(filter.company_id))) return false
       if (filter.status && p.status !== filter.status) return false
       if (filter.health && p.health !== filter.health) return false
       if (filter.type && p.project_type !== filter.type) return false
       if (filter.methodology && p.methodology !== filter.methodology) return false
-      if (filter.manager_id && String(p.manager_id) !== String(filter.manager_id)) return false
+      if (filter.manager_id && !projectPeopleIds(p).has(Number(filter.manager_id))) return false
       return true
     })
-  }, [projects, filter])
+  }, [projects, filter, tasksByProject])
 
   const isFiltered = filter.company_id || filter.status || filter.health || filter.type || filter.methodology || filter.manager_id
+  const personOrCompany = Boolean(filter.company_id || filter.manager_id)
+  const shownTasks = useMemo(
+    () => (personOrCompany ? filtered.flatMap((p) => matchingTasks(p).map((t) => ({ t, p }))) : []),
+    [filtered, personOrCompany, filter, tasksByProject],
+  )
 
-  const companyItems = [{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))]
-  const statusItems = [{ value: '', label: 'All' }, ...PROJECT_STATUSES.map((s) => ({ value: s, label: label(s) }))]
-  const healthItems = [{ value: '', label: 'All' }, ...Object.keys(HEALTH_COLORS).map((h) => ({ value: h, label: label(h) }))]
+  // Dropdowns only offer values that actually occur, so every choice shows something.
+  const usedCompanyIds = new Set<number>(projects.flatMap((p) => [...projectCompanyIds(p)]))
+  const usedPeopleIds = new Set<number>(projects.flatMap((p) => [...projectPeopleIds(p)]))
+  const present = (vals: (string | undefined)[], order: readonly string[]) => {
+    const s = new Set(vals.filter(Boolean) as string[])
+    return [...order.filter((v) => s.has(v)), ...[...s].filter((v) => !order.includes(v))]
+  }
+  const companyItems = [{ value: '', label: 'All companies' }, ...companies.filter((c) => usedCompanyIds.has(c.id)).map((c) => ({ value: String(c.id), label: c.name }))]
+  const statusItems = [{ value: '', label: 'All' }, ...present(projects.map((p) => p.status), PROJECT_STATUSES).map((s) => ({ value: s, label: label(s) }))]
+  const healthItems = [{ value: '', label: 'All' }, ...present(projects.map((p) => p.health), Object.keys(HEALTH_COLORS)).map((h) => ({ value: h, label: label(h) }))]
   const typeItems = [{ value: '', label: 'All' }, ...Array.from(new Set(projects.map((p) => p.project_type))).map((t) => ({ value: t, label: label(t) }))]
-  const methodologyItems = [{ value: '', label: 'All' }, ...METHODOLOGIES.map((m) => ({ value: m, label: label(m) }))]
-  const managerItems = [{ value: '', label: 'All' }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]
+  const methodologyItems = [{ value: '', label: 'All' }, ...present(projects.map((p) => p.methodology), METHODOLOGIES).map((m) => ({ value: m, label: label(m) }))]
+  const managerItems = [{ value: '', label: 'All' }, ...users.filter((u) => usedPeopleIds.has(u.id)).map((u) => ({ value: String(u.id), label: u.name }))]
 
-  const companyName = (id?: number) => companies.find((c) => c.id === id)?.name ?? '—'
+  // Company column: the project's own company, otherwise the companies of its tasks.
+  const companyName = (p: Project) => {
+    const names = [...projectCompanyIds(p)].map((id) => companies.find((c) => c.id === id)?.name).filter(Boolean)
+    return names.length ? names.join(', ') : '—'
+  }
 
   return (
     <div>
@@ -226,7 +278,7 @@ export default function Projects() {
           <SearchableSelect value={filter.methodology} items={methodologyItems} onChange={(v) => setFilter({ ...filter, methodology: v })} placeholder="Type to search…" />
         </div>
         <div className="field" style={{ minWidth: 180 }}>
-          <label>Manager</label>
+          <label>Employee</label>
           <SearchableSelect value={filter.manager_id} items={managerItems} onChange={(v) => setFilter({ ...filter, manager_id: v })} placeholder="Type to search…" />
         </div>
         {isFiltered && (
@@ -236,13 +288,15 @@ export default function Projects() {
         )}
       </div>
 
-      <div className="small muted" style={{ margin: '0 0 10px 2px' }}>{filtered.length} of {projects.length} projects</div>
+      <div className="small muted" style={{ margin: '0 0 10px 2px' }}>
+        {filtered.length} of {projects.length} projects{personOrCompany ? ` · ${shownTasks.length} matching task${shownTasks.length === 1 ? '' : 's'}` : ''}
+      </div>
 
       <div className="card" style={{ padding: 0 }}>
         <table>
           <thead>
             <tr>
-              <th>Code</th><th>Project</th><th>Company</th><th>PM</th><th>Type</th><th>Status</th><th>Health</th>
+              <th>Code</th><th>Project</th><th>Company</th><th>PM</th><th>Tasks</th><th>Type</th><th>Status</th><th>Health</th>
               <th>Completion</th><th>Baseline</th><th>Forecast</th>{isAdmin && <th></th>}
             </tr>
           </thead>
@@ -258,8 +312,13 @@ export default function Projects() {
                     {p.name}
                   </Link>
                 </td>
-                <td className="small">{companyName(p.company_id)}</td>
-                <td className="small">{manager(p.manager_id)}</td>
+                <td className="small">{companyName(p)}</td>
+                <td className="small">{manager(p.manager_id) ?? '—'}</td>
+                <td className="small">
+                  {personOrCompany
+                    ? `${matchingTasks(p).length} of ${(tasksByProject.get(p.id) ?? []).length}`
+                    : (tasksByProject.get(p.id) ?? []).length}
+                </td>
                 <td className="small">{label(p.project_type)}</td>
                 <td><span className="badge gray">{label(p.status)}</span></td>
                 <td><span className={`health-dot ${HEALTH_COLORS[p.health]}`} /> {label(p.health)}</td>
@@ -286,6 +345,44 @@ export default function Projects() {
         </table>
         {filtered.length === 0 && <div className="empty">No projects match your filters.</div>}
       </div>
+
+      {/* The tasks behind the Company / Employee filter */}
+      {personOrCompany && shownTasks.length > 0 && (
+        <>
+          <div className="section-title">
+            Matching Tasks ({shownTasks.length})
+            <span className="small muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+              {[filter.company_id && companies.find((c) => String(c.id) === filter.company_id)?.name,
+                filter.manager_id && users.find((u) => String(u.id) === filter.manager_id)?.name].filter(Boolean).join(' · ')}
+            </span>
+          </div>
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr><th>Code</th><th>Task</th><th>Project</th><th>Responsible</th><th>Accountable</th><th>Reviewer</th><th>Status</th><th>Progress</th><th>Due</th></tr>
+              </thead>
+              <tbody>
+                {shownTasks.map(({ t, p }) => (
+                  <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
+                    <td className="muted small">{t.code}</td>
+                    <td><Link to={`/tasks/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.title}</Link></td>
+                    <td className="small">{p.name}</td>
+                    <td className="small">{userName(t.responsible_id)}</td>
+                    <td className="small">{userName(t.accountable_id)}</td>
+                    <td className="small">{userName(t.reviewer_id)}</td>
+                    <td><span className="badge gray">{label(t.status)}</span></td>
+                    <td style={{ minWidth: 90 }}>
+                      <div className="progress"><span style={{ width: `${t.progress_pct}%` }} /></div>
+                      <span className="small muted">{t.progress_pct}%</span>
+                    </td>
+                    <td className="small">{fmtDate(t.approved_due_date || t.baseline_due_date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {showForm && (
         <ProjectForm
