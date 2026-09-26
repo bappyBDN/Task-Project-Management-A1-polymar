@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -12,7 +12,8 @@ const CSS = `
 color:var(--ink);font-family:inherit;font-size:13px}
 .ad-root *{box-sizing:border-box}
 .ad-body{max-width:1280px}
-.ad-hello{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+.ad-hello{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;margin-bottom:18px}
+.ad-err{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff5f5;border:1px solid #fbd2d2;color:#b42318;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px}
 .ad-hello h1{margin:0;font-size:25px;color:var(--navy);display:flex;gap:10px;align-items:center}
 .ad-hello p{margin:2px 0 0 44px;color:var(--mut);font-size:14px}
 .ad-date{display:flex;align-items:center;gap:10px;color:#334;margin-top:14px;font-size:13.5px}
@@ -66,12 +67,12 @@ table.ad-t{width:100%;border-collapse:collapse}
 // ---------------------------------------------------------------- types / helpers
 interface OrgRow { name: string; total: number; open: number; completed: number; overdue: number; projects: number }
 interface Trends { dates: string[]; series: Record<string, number[]>; chart: { date: string; completed: number; in_progress: number }[] }
-const TODAY = new Date()
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MON =['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const fmt = (s?: string | null) => { if (!s) return '—'; const [y, m, d] = s.slice(0, 10).split('-').map(Number); return `${String(d).padStart(2, '0')} ${MON[m - 1]} ${y}` }
 const iso = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-const TODAY_ISO = iso(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate())
+const isoOf = (d: Date) => iso(d.getFullYear(), d.getMonth(), d.getDate())
+const REFRESH_MS = 60000 // "Live": reload data every minute while the tab is visible
 const DONE = ['completed', 'closed'], DOING = ['in_progress', 'in_review']
 const dueOf = (t: Task) => t.approved_due_date || t.baseline_due_date || ''
 const PR: Record<string, [string, string]> = { critical: ['#fdeaea', '#c62828'], high: ['#fdeaea', '#e23b3b'], medium: ['#fff4de', '#e59a0c'], low: ['#e6f8ee', '#12a150'] }
@@ -110,7 +111,10 @@ const smooth = (p: [number, number][]) => p.reduce((d, [x, y], i) => {
   return `${d} C${cx},${py} ${cx},${y} ${x},${y}`
 }, '')
 
-function Spark({ pts, c, id }: { pts: number[]; c: string; id: string }) {
+function Spark({ pts: raw, c, id }: { pts: number[]; c: string; id: string }) {
+  // Needs at least 2 numeric points; 0 or 1 would divide by zero and draw NaN.
+  const clean = (Array.isArray(raw) ? raw : []).map((v) => (Number.isFinite(v) ? v : 0))
+  const pts = clean.length >= 2 ? clean : [clean[0] ?? 0, clean[0] ?? 0]
   const W = 100, H = 40, mx = Math.max(...pts), mn = Math.min(...pts)
   const xy = pts.map((v, i) => [(i / (pts.length - 1)) * W, H - 4 - ((v - mn) / (mx - mn || 1)) * (H - 10)] as [number, number])
   const d = smooth(xy)
@@ -122,7 +126,9 @@ function Spark({ pts, c, id }: { pts: number[]; c: string; id: string }) {
   )
 }
 
-function Ring({ size, sw, segs, children }: { size: number; sw: number; segs: { f: number; c: string }[]; children: React.ReactNode }) {
+function Ring({ size, sw, segs: allSegs, children }: { size: number; sw: number; segs: { f: number; c: string }[]; children: ReactNode }) {
+  // Skip empty segments: with rounded line caps a 0-length segment still draws a coloured dot.
+  const segs = allSegs.filter((s) => Number.isFinite(s.f) && s.f > 0)
   const r = (size - sw) / 2, C = 2 * Math.PI * r; let off = 0
   return (
     <div style={{ position: 'relative', width: size, height: size, flex: 'none' }}>
@@ -162,8 +168,8 @@ function Progress({ data }: { data: Trends['chart'] }) {
 }
 
 // ---------------------------------------------------------------- calendar
-function Calendar({ onPick, picked, dots }: { onPick: (d: string | null) => void; picked: string | null; dots: Record<string, string> }) {
-  const [ym, setYm] = useState({ y: TODAY.getFullYear(), m: TODAY.getMonth() })
+function Calendar({ onPick, picked, dots, today }: { onPick: (d: string | null) => void; picked: string | null; dots: Record<string, string>; today: Date }) {
+  const [ym, setYm] = useState({ y: today.getFullYear(), m: today.getMonth() })
   const cells = useMemo(() => {
     const first = new Date(ym.y, ym.m, 1).getDay(), out = []
     for (let i = 0; i < 42; i++) out.push(new Date(ym.y, ym.m, 1 - first + i))
@@ -179,13 +185,13 @@ function Calendar({ onPick, picked, dots }: { onPick: (d: string | null) => void
           {MONTHS.map((m, i) => <option key={m} value={i}>{m} {ym.y}</option>)}
         </select>
         <button className="ad-btn" onClick={() => go(1)} style={{ padding: '6px 9px' }}><Ic n="r" s={13} /></button>
-        <button className="ad-btn" onClick={() => setYm({ y: TODAY.getFullYear(), m: TODAY.getMonth() })}>Today</button>
+        <button className="ad-btn" onClick={() => setYm({ y: today.getFullYear(), m: today.getMonth() })}>Today</button>
       </div>
       <div className="cal">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} className="w">{d}</div>)}
         {cells.map((d) => {
           const k = iso(d.getFullYear(), d.getMonth(), d.getDate()), out = d.getMonth() !== ym.m
-          const isT = d.toDateString() === TODAY.toDateString()
+          const isT = d.toDateString() === today.toDateString()
           return <button key={k} className={`${out ? 'o' : ''} ${isT ? 't' : ''} ${picked === k ? 'p' : ''}`} onClick={() => onPick(picked === k ? null : k)}>{d.getDate()}{dots[k] && !isT && <u style={{ background: dots[k] }} />}</button>
         })}
       </div>
@@ -209,29 +215,73 @@ export default function Dashboard() {
   const [tab, setTab] = useState<'bySbu' | 'byFunction' | 'byDepartment'>('bySbu')
   const [picked, setPicked] = useState<string | null>(null)
 
-  // org-wide widgets
+  // "Live": bump `tick` every minute (and when the user comes back to the tab)
+  // so every widget reloads; `now` keeps "today" correct past midnight.
+  const [tick, setTick] = useState(0)
+  const [now, setNow] = useState(() => new Date())
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
+  const [orgFailed, setOrgFailed] = useState(false)
+  const [userFailed, setUserFailed] = useState(false)
+  const refresh = () => { setNow(new Date()); setTick((t) => t + 1) }
+
   useEffect(() => {
-    api.get<ProjectKpi>('/dashboards/executive').then(setProjKpi).catch(() => {})
-    api.get<Record<string, number>>('/dashboards/health-distribution').then(setHealthDist).catch(() => {})
-    api.get<{ category: string; count: number }[]>('/dashboards/delay-causes').then(setDelayCauses).catch(() => {})
-    api.get<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] }>('/dashboards/org-intelligence')
-      .then(setOrgIntel).catch(() => setOrgIntel({ bySbu: [], byFunction: [], byDepartment: [] }))
+    const onTimerOrReturn = () => { if (document.visibilityState === 'visible') refresh() }
+    const timer = window.setInterval(onTimerOrReturn, REFRESH_MS)
+    document.addEventListener('visibilitychange', onTimerOrReturn)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onTimerOrReturn) }
   }, [])
 
-  // per-user widgets
+  // org-wide widgets. On a failed refresh the last good data stays on screen.
   useEffect(() => {
-    if (!user) return
-    api.get<TaskKpi>(`/dashboards/individual/${user.id}`).then(setTaskKpi).catch(() => {})
-    api.get<Trends>(`/dashboards/individual/${user.id}/trends?days=7`).then(setTrends).catch(() => {})
-    api.get<Task[]>(`/tasks?responsible_id=${user.id}`).then(setMyTasks).catch(() => {})
-  }, [user])
+    let cancelled = false // ignore replies from an older refresh that arrive late
+    const ok = <T,>(set: (v: T) => void) => (v: T) => { if (!cancelled) set(v) }
+    const fail = () => { if (!cancelled) setOrgFailed(true) }
+    setOrgFailed(false)
+    api.get<ProjectKpi>('/dashboards/executive').then(ok(setProjKpi)).catch(fail)
+    api.get<Record<string, number>>('/dashboards/health-distribution').then(ok(setHealthDist)).catch(fail)
+    api.get<{ category: string; count: number }[]>('/dashboards/delay-causes').then(ok(setDelayCauses)).catch(fail)
+    api.get<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] }>('/dashboards/org-intelligence')
+      .then(ok(setOrgIntel))
+      .catch(() => { if (!cancelled) setOrgIntel((prev) => prev ?? { bySbu: [], byFunction: [], byDepartment: [] }); fail() })
+    return () => { cancelled = true }
+  }, [tick])
 
+  // per-user widgets
+  const userId = user?.id
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    const ok = <T,>(set: (v: T) => void) => (v: T) => { if (!cancelled) set(v) }
+    const fail = () => { if (!cancelled) setUserFailed(true) }
+    setUserFailed(false)
+    api.get<TaskKpi>(`/dashboards/individual/${userId}`)
+      .then((k) => { if (!cancelled) { setTaskKpi(k); setUpdatedAt(new Date()) } })
+      .catch(fail)
+    // Trends are optional: an older backend without this route just shows flat sparklines.
+    api.get<Trends>(`/dashboards/individual/${userId}/trends?days=7`).then(ok(setTrends)).catch(() => {})
+    // The KPI cards count tasks where you are Responsible OR Accountable, so the
+    // list loads both - otherwise "Total Tasks: 1" could sit next to an empty list.
+    Promise.all([
+      api.get<Task[]>(`/tasks?responsible_id=${userId}`),
+      api.get<Task[]>(`/tasks?accountable_id=${userId}`),
+    ])
+      .then(([resp, acc]) => {
+        const byId = new Map<number, Task>()
+        ;[...(resp ?? []), ...(acc ?? [])].forEach((t) => byId.set(t.id, t))
+        const list = [...byId.values()].sort((a, b) => (dueOf(a) || '9999').localeCompare(dueOf(b) || '9999'))
+        if (!cancelled) setMyTasks(list)
+      })
+      .catch(fail)
+    return () => { cancelled = true }
+  }, [userId, tick])
+
+  const todayIso = isoOf(now)
   const rows = useMemo(() => (picked ? myTasks.filter((t) => dueOf(t) === picked) : myTasks), [myTasks, picked])
   const dots = useMemo(() => {
     const m: Record<string, string> = {}
-    myTasks.forEach((t) => { const d = dueOf(t); if (d) m[d] = !DONE.includes(t.status) && d < TODAY_ISO ? '#ef4444' : m[d] ?? '#f59e0b' })
+    myTasks.forEach((t) => { const d = dueOf(t); if (d) m[d] = !DONE.includes(t.status) && d < todayIso ? '#ef4444' : m[d] ?? '#f59e0b' })
     return m
-  }, [myTasks])
+  }, [myTasks, todayIso])
 
   // Task Completion Overview — derived from the user's own tasks
   const cnt = useMemo(() => {
@@ -243,7 +293,7 @@ export default function Dashboard() {
   const donePct = Math.round((cnt.done / nT) * 1000) / 10
 
   const delta = (k: string, bad?: boolean) => {
-    const s = trends?.series[k]
+    const s = trends?.series?.[k]
     if (!s) return { t: '→ 0%', c: '#6b7a90' }
     const a = s[0], b = s[s.length - 1], p = a ? Math.round(((b - a) / a) * 100) : b ? 100 : 0
     return { t: `${p > 0 ? '↑' : p < 0 ? '↓' : '→'} ${Math.abs(p)}%`, c: p === 0 ? '#6b7a90' : (p > 0) !== !!bad ? '#12a150' : '#ef4444' }
@@ -260,13 +310,20 @@ export default function Dashboard() {
       <div className="ad-body">
         <div className="ad-hello">
           <div><h1><Ic n="hand" s={34} c="#f5b31b" w={1.6} />Welcome back, {first}!</h1><p>Here's what's happening with your tasks and projects today.</p></div>
-          <div className="ad-date"><Ic n="cal" s={18} c="#1d6bff" />{TODAY.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}<span className="ad-live"><i />Live</span></div>
+          <div className="ad-date"><Ic n="cal" s={18} c="#1d6bff" />{now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}<span className="ad-live" title={`Refreshes every minute${updatedAt ? ` · last updated ${updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}`}><i />Live</span></div>
         </div>
+
+        {(orgFailed || userFailed) && (
+          <div className="ad-err" role="alert">
+            <span>Some dashboard data couldn't be loaded. What you see may be out of date.</span>
+            <button className="ad-btn" onClick={refresh}>Retry</button>
+          </div>
+        )}
 
         <div className="ad-kpis">
           {KPIS.map((k, i) => {
             const d = delta(k.k, 'bad' in k ? k.bad : false)
-            const pts = trends?.series[k.k] ?? [0, 0]
+            const pts = trends?.series?.[k.k] ?? [0, 0]
             return (
               <div key={k.l} className="ad-kpi" style={{ background: `linear-gradient(160deg,${k.bg},#fff)`, borderColor: k.bd }}>
                 <div className="h"><span className="ib" style={{ background: k.c }}><Ic n={k.ic} s={17} c="#fff" /></span>{k.l}</div>
@@ -312,7 +369,7 @@ export default function Dashboard() {
                         <td><span className="pill" style={{ background: p[0], color: p[1] }}><Ic n="star" s={10} />{label(t.priority)}</span></td>
                         <td><span className="pill" style={{ background: s[0], color: s[1] }}>{done ? '✓' : '›'} {label(t.status)}</span></td>
                         <td><span className="pb"><span style={{ width: `${t.progress_pct}%`, background: done || t.progress_pct >= 50 ? '#12a150' : '#1d6bff' }} /></span>{Math.round(t.progress_pct)}%</td>
-                        <td style={{ color: done ? '#9aa6b8' : d && d < TODAY_ISO ? '#e23b3b' : undefined, fontWeight: !done && d && d < TODAY_ISO ? 600 : 400 }}>{fmt(d)}</td>
+                        <td style={{ color: done ? '#9aa6b8' : d && d < todayIso ? '#e23b3b' : undefined, fontWeight: !done && d && d < todayIso ? 600 : 400 }}>{fmt(d)}</td>
                       </tr>
                     )
                   })}
@@ -336,7 +393,7 @@ export default function Dashboard() {
                 {orgIntel === null ? <div style={{ color: 'var(--mut)', padding: 10 }}>Loading…</div> : (
                   <div className="ad-scroll"><table className="ad-t ad-mini">
                     <thead><tr>{['NAME', 'TOTAL', 'OPEN', 'COMPLETED', 'OVERDUE', 'PROJECTS'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
-                    <tbody>{orgIntel[tab].map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.total}</td><td>{r.open}</td><td>{r.completed}</td><td style={{ color: r.overdue ? '#ef4444' : undefined }}>{r.overdue}</td><td>{r.projects}</td></tr>)}</tbody>
+                    <tbody>{(orgIntel[tab] ?? []).map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.total}</td><td>{r.open}</td><td>{r.completed}</td><td style={{ color: r.overdue ? '#ef4444' : undefined }}>{r.overdue}</td><td>{r.projects}</td></tr>)}</tbody>
                   </table></div>
                 )}
               </div>
@@ -344,7 +401,7 @@ export default function Dashboard() {
           </div>
 
           <div className="ad-stack">
-            <Calendar picked={picked} onPick={setPicked} dots={dots} />
+            <Calendar picked={picked} onPick={setPicked} dots={dots} today={now} />
             <div className="ad-card">
               <h3><Ic n="pulse" s={17} />Project Health Distribution</h3>
               {hTotal === 0 ? <div style={{ color: 'var(--mut)' }}>No projects</div> : (

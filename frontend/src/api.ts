@@ -8,6 +8,24 @@ import type { User } from './types'
 const MODE: 'local' | 'remote' = (import.meta as any).env?.VITE_STORAGE_MODE || 'remote'
 const BASE = '/api'
 
+// Browser storage that never throws. Some browsers block site storage
+// (cookies/site data turned off, strict privacy or private modes, storage full);
+// there, touching localStorage throws and used to blank the whole app.
+// This falls back to memory: the app still works, you just log in again after a reload.
+const memoryStore = new Map<string, string>()
+export const storage = {
+  get(key: string): string | null {
+    try { return window.localStorage.getItem(key) } catch { return memoryStore.get(key) ?? null }
+  },
+  set(key: string, value: string) {
+    try { window.localStorage.setItem(key, value) } catch { memoryStore.set(key, value) }
+  },
+  remove(key: string) {
+    try { window.localStorage.removeItem(key) } catch { /* blocked */ }
+    memoryStore.delete(key)
+  },
+}
+
 let currentUserId: number | null = null
 
 export function setCurrentUserId(id: number | null) {
@@ -21,7 +39,7 @@ async function remote<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   
   // --- নতুন JWT Auth লজিক ---
-  const token = localStorage.getItem('token')
+  const token = storage.get('token')
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
@@ -34,18 +52,28 @@ async function remote<T>(path: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     // --- 401 Unauthorized হলে অটো লগআউট ---
     if (res.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+      storage.remove('token')
+      storage.remove('user')
       window.location.href = '/' // লগিন পেজে রিডাইরেক্ট
     }
 
     const bodyText = await res.text()
+    // Use the server's own message ({"detail": ...}) when there is one.
+    // (Before, the throw sat inside this try, so its own catch swallowed it and
+    // users always saw raw text such as "502 : <html>...".)
+    let detail: string | undefined
     try {
-      const bodyJson = JSON.parse(bodyText)
-      throw new Error(bodyJson.detail || `${res.status} ${res.statusText}`)
+      const d = JSON.parse(bodyText)?.detail
+      if (typeof d === 'string') detail = d
+      else if (Array.isArray(d)) detail = d.map((x: any) => x?.msg ?? String(x)).join('; ') // FastAPI validation errors
     } catch {
-      throw new Error(`${res.status} ${res.statusText}: ${bodyText}`)
+      // not JSON, e.g. an HTML error page - handled below
     }
+    const isHtml = /^\s*</.test(bodyText)
+    throw new Error(
+      detail ||
+      (isHtml || !bodyText ? `${res.status} ${res.statusText || 'Request failed'}` : `${res.status}: ${bodyText.slice(0, 200)}`)
+    )
   }
   
   if (res.status === 204) return undefined as T

@@ -73,7 +73,9 @@ function load(): DB {
 }
 
 function persist(d: DB = db) {
-  localStorage.setItem(KEY, JSON.stringify(d))
+  // Runs while the app is starting up. If the browser blocks site storage (or it
+  // is full) this used to throw and leave a blank page; now it keeps data in memory.
+  try { localStorage.setItem(KEY, JSON.stringify(d)) } catch { /* storage blocked or full */ }
 }
 
 function nextId(d: DB): number {
@@ -753,7 +755,7 @@ export const store = {
   },
 
   reset: () => {
-    localStorage.removeItem(KEY)
+    try { localStorage.removeItem(KEY) } catch { /* storage blocked */ }
     db = seed()
     persist()
   },

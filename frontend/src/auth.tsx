@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { api, setCurrentUserId } from './api'
+import { api, setCurrentUserId, storage } from './api'
 import { User } from './types'
 
 interface AuthState {
@@ -22,8 +22,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    const storedLocalId = localStorage.getItem('anwar_user_id')
+    const token = storage.get('token')
+    const storedLocalId = storage.get('anwar_user_id')
 
     if (token) {
       // রিমোট মোড: টোকেন থাকলে ইউজারের তথ্য ফেচ করবে
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then(setUser)
         .catch(() => { 
           setCurrentUserId(null)
-          localStorage.removeItem('anwar_user_id') 
+          storage.remove('anwar_user_id') 
         })
         .finally(() => setLoading(false))
     } else {
@@ -59,13 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // লোকাল টেস্টিং মোড (শুধু আইডি দিয়ে লগিন)
       setCurrentUserId(payload)
       const u = await api.get<User>('/organizations/users/me')
-      localStorage.setItem('anwar_user_id', String(payload))
+      storage.set('anwar_user_id', String(payload))
       setUser(u)
     } else {
       // রিমোট API মোড (ইমেইল এবং পাসওয়ার্ড দিয়ে লগিন)
       const response = await api.post<{ access_token: string, user: User }>('/auth/login', payload)
-      localStorage.setItem('token', response.access_token)
-      localStorage.setItem('user', JSON.stringify(response.user)) // ঐচ্ছিক
+      storage.set('token', response.access_token)
+      storage.set('user', JSON.stringify(response.user)) // ঐচ্ছিক
       setCurrentUserId(response.user.id)
       setUser(response.user)
     }
@@ -73,9 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setCurrentUserId(null)
-    localStorage.removeItem('anwar_user_id')
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    storage.remove('anwar_user_id')
+    storage.remove('token')
+    storage.remove('user')
     setUser(null)
     window.location.href = '/' // লগআউটের পর হোমপেজে পাঠিয়ে দিবে
   }
