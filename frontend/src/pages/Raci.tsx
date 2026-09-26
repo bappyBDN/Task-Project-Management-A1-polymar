@@ -15,6 +15,8 @@ export default function Raci() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [projectId, setProjectId] = useState<string>('')
   const [matrix, setMatrix] = useState<RaciMatrix | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [filter, setFilter] = useState({ company_id: '', function_id: '', department_id: '' })
 
   useEffect(() => {
@@ -30,8 +32,16 @@ export default function Raci() {
     if (filter.function_id) params.set('function_id', filter.function_id)
     if (filter.department_id) params.set('department_id', filter.department_id)
     const q = params.toString()
+    // Empty project = "All projects" (tasks of every project); otherwise one project.
     const path = projectId ? `/raci/matrix/${projectId}` : '/raci/matrix'
-    api.get<RaciMatrix>(`${path}${q ? '?' + q : ''}`).then(setMatrix)
+    let cancelled = false // ignore a slow reply after the filters have changed again
+    setLoading(true)
+    setError('')
+    api.get<RaciMatrix>(`${path}${q ? '?' + q : ''}`)
+      .then((m) => { if (!cancelled) setMatrix(m) })
+      .catch((e: any) => { if (!cancelled) { setMatrix(null); setError(e?.message || 'Could not load the RACI matrix.') } })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [projectId, filter])
 
   const projectItems = [{ value: '', label: 'All projects' }, ...projects.map((p) => ({ value: String(p.id), label: `${p.code} — ${p.name}` }))]
@@ -75,6 +85,9 @@ export default function Raci() {
         )}
       </div>
 
+      {error && <div className="card mb" style={{ background: '#fbe5e5', color: 'var(--red)' }}>{error}</div>}
+      {loading && !matrix && <div className="empty">Loading…</div>}
+
       {matrix && (
         <>
           <div className="card mb">
@@ -95,7 +108,9 @@ export default function Raci() {
             </div>
           )}
 
-          <div className="small muted" style={{ margin: '0 0 10px 2px' }}>{matrix.tasks.length} tasks · {matrix.users.length} people</div>
+          <div className="small muted" style={{ margin: '0 0 10px 2px' }}>
+            {projectId ? projectName(Number(projectId)) ?? 'Project' : 'All projects'} · {matrix.tasks.length} tasks · {matrix.users.length} people{loading ? ' · updating…' : ''}
+          </div>
 
           <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
             <table style={{ minWidth: 600 }}>

@@ -35,52 +35,78 @@ def delete_raci(entry_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@router.get("/matrix/{project_id}")
-def raci_matrix(project_id: int, db: Session = Depends(get_db)):
-    """Build a project RACI matrix: rows = tasks, columns = users, cells = R/A/C/I."""
-    tasks = db.query(models.Task).filter(
-        models.Task.project_id == project_id, models.Task.is_deleted.is_(False)
-    ).order_by(models.Task.id).all()
-    entries = db.query(models.RaciEntry).filter(
-        models.RaciEntry.project_id == project_id
-    ).all()
+def _build_matrix(db: Session, project_id: int | None, company_id: int | None,
+                  function_id: int | None, department_id: int | None) -> dict:
+    """RACI matrix: rows = tasks, columns = people, cells = R/A/C/I.
 
-    # Collect all users involved
-    user_ids: set[int] = set()
-    for t in tasks:
-        if t.responsible_id: user_ids.add(t.responsible_id)
-        if t.accountable_id: user_ids.add(t.accountable_id)
-        if t.reviewer_id: user_ids.add(t.reviewer_id)
-    for e in entries:
-        user_ids.add(e.user_id)
+    project_id given -> only that project's tasks.
+    project_id empty -> the tasks of ALL projects (tasks that belong to a project).
+    SBU / function / department narrow the tasks further.
+    """
+    q = db.query(models.Task).filter(models.Task.is_deleted.is_(False))
+    if project_id:
+        q = q.filter(models.Task.project_id == project_id)
+    else:
+        q = q.filter(models.Task.project_id.isnot(None))
+    if company_id:
+        q = q.filter(models.Task.company_id == company_id)
+    if function_id:
+        q = q.filter(models.Task.function_id == function_id)
+    if department_id:
+        q = q.filter(models.Task.department_id == department_id)
+    tasks = q.order_by(models.Task.project_id, models.Task.id).all()
+    task_ids = {t.id for t in tasks}
 
-    users = db.query(models.User).filter(models.User.id.in_(user_ids)).all() if user_ids else []
-    user_map = {u.id: u for u in users}
+    # Extra RACI entries (e.g. Informed) for exactly these tasks. Matching on
+    # task_id also catches entries saved without a project_id.
+    entries = db.query(models.RaciEntry).filter(models.RaciEntry.task_id.in_(task_ids)).all() if task_ids else []
 
-    # Build cells keyed by (task_id, user_id)
-    cells: dict[tuple[int, int], list[str]] = {}
+    # Cells keyed by (task_id, user_id)
+    cells: dict[tuple[int, int], set[str]] = {}
     for t in tasks:
         if t.responsible_id:
-            cells.setdefault((t.id, t.responsible_id), []).append("R")
+            cells.setdefault((t.id, t.responsible_id), set()).add("R")
         if t.accountable_id:
-            cells.setdefault((t.id, t.accountable_id), []).append("A")
+            cells.setdefault((t.id, t.accountable_id), set()).add("A")
         if t.reviewer_id:
-            cells.setdefault((t.id, t.reviewer_id), []).append("C")
+            cells.setdefault((t.id, t.reviewer_id), set()).add("C")
     for e in entries:
-        cells.setdefault((e.task_id, e.user_id), []).append(e.raci_type)
+        if e.raci_type:
+            cells.setdefault((e.task_id, e.user_id), set()).add(e.raci_type)
 
-    matrix_rows = []
+    # Only people who actually have a role in the rows shown (no empty columns).
+    user_ids = {uid for (_, uid) in cells}
+    users = db.query(models.User).filter(models.User.id.in_(user_ids)).order_by(models.User.name).all() if user_ids else []
+
+    order = "RACI"
+    rows = []
     for t in tasks:
         row_cells = []
         for u in users:
-            vals = sorted(set(cells.get((t.id, u.id), [])))
+            vals = sorted(cells.get((t.id, u.id), set()), key=lambda v: order.find(v) if v in order else 9)
             row_cells.append({"user_id": u.id, "value": "".join(vals)})
-        matrix_rows.append({"task_id": t.id, "code": t.code, "title": t.title, "cells": row_cells})
+        rows.append({"task_id": t.id, "code": t.code, "title": t.title, "project_id": t.project_id, "cells": row_cells})
 
     return {
         "project_id": project_id,
         "users": [{"id": u.id, "name": u.name} for u in users],
-        "tasks": [{"id": t.id, "code": t.code, "title": t.title} for t in tasks],
-        "rows": matrix_rows,
+        "tasks": [{"id": t.id, "code": t.code, "title": t.title, "project_id": t.project_id} for t in tasks],
+        "rows": rows,
         "gaps": [t.id for t in tasks if not t.responsible_id or not t.accountable_id],
     }
+
+
+@router.get("/matrix")
+def raci_matrix_all(company_id: int | None = None, function_id: int | None = None,
+                    department_id: int | None = None, db: Session = Depends(get_db)):
+    """All projects' tasks ("All projects" in the page)."""
+    return _build_matrix(db, None, company_id, function_id, department_id)
+
+
+@router.get("/matrix/{project_id}")
+def raci_matrix(project_id: int, company_id: int | None = None, function_id: int | None = None,
+                department_id: int | None = None, db: Session = Depends(get_db)):
+    """One project's tasks."""
+    if not db.get(models.Project, project_id):
+        raise HTTPException(404, "Project not found")
+    return _build_matrix(db, project_id, company_id, function_id, department_id)
