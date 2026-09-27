@@ -35,9 +35,9 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="card" style={{ width: 420, padding: 32, textAlign: 'center' }}>
-          <div className="badge green mb" style={{ padding: 16 }}>Password Reset Successfully!</div>
+      <div className="auth-page">
+        <div className="card auth-card" style={{ textAlign: 'center' }}>
+          <div className="alert success" role="status">Password updated. You can now log in with your new password.</div>
           <a href="/" className="btn primary mt">Go to Login</a>
         </div>
       </div>
@@ -45,19 +45,20 @@ export default function ResetPassword() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="card" style={{ width: 420, padding: 32 }}>
+    <div className="auth-page">
+      <div className="card auth-card">
         <h2 style={{ textAlign: 'center' }}>Set New Password</h2>
-        {error && <div className="badge red mb">{error}</div>}
+        {!token && <div className="alert error" role="alert">This link is missing its reset code. Please open the link from your email again, or request a new one.</div>}
+        {error && <div className="alert error" role="alert">{error}</div>}
         
         <form onSubmit={handleSubmit}>
           <div className="field mb">
-            <label>New Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} required />
+            <label htmlFor="rp-new">New Password</label>
+            <input id="rp-new" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} required />
           </div>
           <div className="field mb">
-            <label>Confirm Password</label>
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={busy} required />
+            <label htmlFor="rp-confirm">Confirm Password</label>
+            <input id="rp-confirm" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={busy} required />
           </div>
           <button type="submit" className="btn primary" style={{ width: '100%' }} disabled={busy || !token}>
             {busy ? 'Updating...' : 'Update Password'}

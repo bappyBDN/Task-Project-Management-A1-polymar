@@ -3,6 +3,7 @@ import { api } from '../api'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
+import { clearPrivilegedCache } from '../usePrivileged'
 
 const ROLES = ['group_executive', 'business_head', 'functional_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
 
@@ -94,6 +95,14 @@ export default function AdminPanel() {
   const [form, setForm] = useState<UserForm>(EMPTY_USER)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
+  const [pageErr, setPageErr] = useState('')
+  const [confirmDeactivate, setConfirmDeactivate] = useState<number | null>(null)
+
+  // Runs an admin action and shows a readable error instead of failing silently.
+  const run = async (fn: () => Promise<void>) => {
+    setPageErr('')
+    try { await fn() } catch (e: any) { setMsg(''); setPageErr(e?.message || 'Something went wrong. Please try again.') }
+  }
   const [privileged, setPrivileged] = useState<string[]>([])
   const [allRoles, setAllRoles] = useState<string[]>([])
   const [newRole, setNewRole] = useState('')
@@ -115,17 +124,19 @@ export default function AdminPanel() {
 
   useEffect(load, [])
 
-  const addRole = async () => {
+  const addRole = () => run(async () => {
     if (!newRole.trim()) return
     await api.post('/privileged-roles', { role: newRole.trim().toLowerCase().replace(/\s+/g, '_') })
+    clearPrivilegedCache()
     setNewRole('')
     load()
-  }
+  })
 
-  const removeRole = async (role: string) => {
+  const removeRole = (role: string) => run(async () => {
     await api.del(`/privileged-roles?role=${encodeURIComponent(role)}`)
+    clearPrivilegedCache()
     load()
-  }
+  })
 
   const projectName = (id?: number) => projects.find((p) => p.id === id)?.name ?? '—'
   const set = (k: keyof UserForm, v: string | number | null) => setForm((f) => ({ ...f, [k]: v }))
@@ -165,18 +176,21 @@ export default function AdminPanel() {
     } catch (e: any) { setErr(e.message) }
   }
 
-  const deactivate = async (u: User) => {
+  // Two-step: first click asks "Confirm?", second click deactivates.
+  const deactivate = (u: User) => run(async () => {
+    if (confirmDeactivate !== u.id) { setConfirmDeactivate(u.id); return }
+    setConfirmDeactivate(null)
     await api.del(`/organizations/users/${u.id}`)
-    setMsg(`Deactivated ${u.name}`)
+    setMsg(`Deactivated ${u.name}. They can no longer log in.`)
     load()
-  }
+  })
 
-  const removeUser = async (u: User) => {
+  const removeUser = (u: User) => run(async () => {
     if (!confirm(`Permanently delete user "${u.name}" (${u.email})? This cannot be undone.`)) return
     await api.del(`/organizations/users/${u.id}/permanent`)
     setMsg(`Permanently deleted ${u.name}`)
     load()
-  }
+  })
 
   // ---------------------------------------------------------------- Company / Function / Department
   const companyItems = companies.map((c) => ({ value: String(c.id), label: c.name }))
@@ -191,31 +205,31 @@ export default function AdminPanel() {
     load()
   }
 
-  const removeCompany = async (value: string) => {
+  const removeCompany = (value: string) => run(async () => {
     if (!confirm('Remove this SBU?')) return
     await api.del(`/organizations/companies/${value}`)
     if (String(form.company_id) === value) set('company_id', null)
     load()
-  }
-  const removeFunction = async (value: string) => {
+  })
+  const removeFunction = (value: string) => run(async () => {
     if (!confirm('Remove this function?')) return
     await api.del(`/organizations/functions/${value}`)
     if (String(form.function_id) === value) set('function_id', null)
     load()
-  }
-  const removeDepartment = async (value: string) => {
+  })
+  const removeDepartment = (value: string) => run(async () => {
     if (!confirm('Remove this department?')) return
     await api.del(`/organizations/departments/${value}`)
     if (String(form.department_id) === value) set('department_id', null)
     load()
-  }
+  })
 
-  const removeTask = async (t: Task) => {
+  const removeTask = (t: Task) => run(async () => {
     if (!confirm(`Permanently delete ${t.code} — "${t.title}"? This cannot be undone.`)) return
     await api.del(`/tasks/${t.id}/permanent`)
     setMsg(`Permanently deleted ${t.code}`)
     load()
-  }
+  })
 
   // ---------------------------------------------------------------- Quick "create manager" from inside the Reports To search
   const quickCreatedUser = (u: User) => {
@@ -243,7 +257,8 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {msg && <div className="card mb" style={{ background: '#e3f5ea' }}>{msg}</div>}
+      {msg && <div className="alert success" role="status">{msg}</div>}
+      {pageErr && <div className="alert error" role="alert">{pageErr}</div>}
 
       <div className="row mb">
         <button className={`btn ${tab === 'users' ? 'primary' : ''}`} onClick={() => setTab('users')}>Users ({users.length})</button>
@@ -397,7 +412,7 @@ export default function AdminPanel() {
                         <button className="btn sm" onClick={() => openEdit(u)}>Edit</button>
                         {u.role !== 'admin' && (
                           <>
-                            {u.is_active && <button className="btn sm danger" onClick={() => deactivate(u)}>Deactivate</button>}
+                            {u.is_active && <button className="btn sm danger" onClick={() => deactivate(u)} onBlur={() => setConfirmDeactivate((id) => (id === u.id ? null : id))}>{confirmDeactivate === u.id ? 'Click again to confirm' : 'Deactivate'}</button>}
                             <button className="btn sm danger" onClick={() => removeUser(u)}>Remove</button>
                           </>
                         )}

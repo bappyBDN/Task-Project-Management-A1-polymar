@@ -1,7 +1,7 @@
 """Automated email-notification scan.
 
 Three things are checked every run:
-  1. Tasks that just became completed/closed        -> email supervisors.
+  1. Tasks that just became completed/closed        -> email supervisors (once).
   2. Tasks that are overdue or due soon              -> email assignee + supervisors.
   3. Backlog items sitting open too long             -> email requester + supervisors.
 
@@ -90,6 +90,19 @@ def _user_email(db: Session, user_id: Optional[int]) -> Optional[str]:
 
 
 # ---------------------------------------------------------------- 1. Completed tasks
+def _completion_already_emailed(db: Session, task: models.Task) -> bool:
+    """A completion is announced once, not every day forever. If the task was
+    reopened and completed again (newer completion date), it is announced again."""
+    last = db.query(models.EmailLog.sent_date).filter(
+        models.EmailLog.entity_type == "task",
+        models.EmailLog.entity_id == task.id,
+        models.EmailLog.email_type == "completed",
+    ).order_by(models.EmailLog.sent_date.desc()).first()
+    if last is None:
+        return False
+    return task.actual_due_date is None or last[0] >= task.actual_due_date
+
+
 def run_task_completion_emails(db: Session, force: bool = False) -> int:
     tasks = db.query(models.Task).filter(
         models.Task.is_deleted.is_(False),
@@ -97,7 +110,7 @@ def run_task_completion_emails(db: Session, force: bool = False) -> int:
     ).all()
     sent = 0
     for t in tasks:
-        if not force and _already_sent_today(db, "task", t.id, "completed"):
+        if not force and _completion_already_emailed(db, t):
             continue
         recipients = _project_supervisors(db, t.project_id)
         acc_email = _user_email(db, t.accountable_id)

@@ -13,26 +13,31 @@ export default function Login() {
     setError('')
     setBusy(true)
     try {
-      await login({ email, password })
+      await login({ email: email.trim(), password })
       // No manual redirect: AuthProvider updates `user`,
       // App.tsx then renders the main layout automatically.
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.')
+      setError(err.message === 'Invalid credentials'
+        ? 'Wrong email / employee ID or password.'
+        : err.message || 'Login failed. Please check your credentials.')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-      <form className="card" onSubmit={handleSubmit} style={{ width: 350, padding: 32 }}>
+    <div className="auth-page">
+      <form className="card auth-card" onSubmit={handleSubmit}>
         <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Login</h2>
-        {error && <div className="badge red mb">{error}</div>}
+        {error && <div className="alert error" role="alert">{error}</div>}
 
         <div className="field" style={{ marginBottom: '15px' }}>
-          <label>Email</label>
+          <label htmlFor="login-id">Email or Employee ID</label>
           <input
-            type="email"
+            id="login-id"
+            type="text"
+            autoComplete="username"
+            autoFocus
             value={email}
             onChange={e => setEmail(e.target.value)}
             style={{ width: '100%', padding: '8px' }}
@@ -40,9 +45,11 @@ export default function Login() {
           />
         </div>
         <div className="field" style={{ marginBottom: '20px' }}>
-          <label>Password</label>
+          <label htmlFor="login-password">Password</label>
           <input
+            id="login-password"
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             style={{ width: '100%', padding: '8px' }}
@@ -53,7 +60,7 @@ export default function Login() {
         <button
           type="submit"
           className="btn primary mt"
-          style={{ width: '100%', padding: '10px' }}
+          style={{ width: '100%', padding: '10px', justifyContent: 'center' }}
           disabled={busy}
         >
           {busy ? 'Signing in…' : 'Login'}

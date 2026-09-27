@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
@@ -49,21 +49,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)          # 👈 mounts /auth/login, /auth/forgot-password, /auth/reset-password
-app.include_router(organizations.router)
-app.include_router(projects.router)
-app.include_router(tasks.router)
-app.include_router(delays.router)
-app.include_router(approvals.router)
-app.include_router(backlogs.router)
-app.include_router(dashboards.router)
-app.include_router(audit.router)
-app.include_router(governance.router)
-app.include_router(raci.router)
-app.include_router(privileged.router)
-app.include_router(list_options.router)
-app.include_router(email_notifications.router)
-app.include_router(user_mapping.router)
+app.include_router(auth.router)          # 👈 mounts /auth/login, /auth/forgot-password, /auth/reset-password — public
+
+# Every other route needs a logged-in user (valid JWT). Before, most of the API
+# (tasks, projects, users list, audit, ...) could be called with no login at all.
+# Admin-only routes still check get_admin_user on top of this.
+_login_required = [Depends(auth.get_current_user)]
+for _r in (
+    organizations, projects, tasks, delays, approvals, backlogs, dashboards,
+    audit, governance, raci, privileged, list_options, email_notifications, user_mapping,
+):
+    app.include_router(_r.router, dependencies=_login_required)
 
 
 @app.on_event("startup")

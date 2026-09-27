@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { store } from '../store'
+import { useIsPrivileged } from '../usePrivileged'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import TaskForm from '../components/TaskForm'
@@ -30,20 +30,29 @@ export default function Tasks() {
   const [filter, setFilter] = useState({ project_id: '', company_id: '', function_id: '', department_id: '', status: '', priority: '', overdue: '', responsible_id: '' })
   const navigate = useNavigate()
 
-  const canSeeAll = user ? store.isPrivileged(user.role) : false
+  const canSeeAll = useIsPrivileged(user?.role)
+  const [loading, setLoading] = useState(true)
+  const [loadErr, setLoadErr] = useState('')
   const isAdmin = user?.role === 'admin'   // only admins get a Delete button (the API enforces this too)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
-  useEffect(() => {
-    api.get<Task[]>('/tasks').then(setTasks)
-    api.get<Project[]>('/projects').then(setProjects)
-    api.get<User[]>('/organizations/users').then(setUsers)
-    api.get<Company[]>('/organizations/companies').then(setCompanies)
-    api.get<Function[]>('/organizations/functions').then(setFunctions)
-    api.get<Department[]>('/organizations/departments').then(setDepartments)
-  }, [])
+  const reload = () => {
+    setLoadErr('')
+    return api.get<Task[]>('/tasks')
+      .then(setTasks)
+      .catch((e) => setLoadErr(errText(e)))
+      .finally(() => setLoading(false))
+  }
 
-  const reload = () => api.get<Task[]>('/tasks').then(setTasks)
+  useEffect(() => {
+    reload()
+    // Lookups only fill in names / filter lists; a failure just shows "—".
+    api.get<Project[]>('/projects').then(setProjects).catch(() => {})
+    api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
+    api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
+    api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
+    api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
+  }, [])
 
   // Admin-only. Uses the existing DELETE /tasks/{id}/permanent route, which removes the task's
   // dependent rows first (dependencies, RACI, progress, RCA, approvals) so no foreign key breaks.
@@ -149,6 +158,12 @@ export default function Tasks() {
         )}
       </div>
 
+      {loadErr && (
+        <div className="alert error" role="alert">
+          Could not load tasks: {loadErr} <button className="btn sm" onClick={reload} style={{ marginLeft: 8 }}>Retry</button>
+        </div>
+      )}
+
       <div className="small muted" style={{ margin: '0 0 10px 2px' }}>
         {filtered.length} of {visibleTasks.length} tasks{!canSeeAll && user ? ' (your tasks only)' : ''}
       </div>
@@ -206,7 +221,14 @@ export default function Tasks() {
             })}
           </tbody>
         </table>
-        {filtered.length === 0 && <div className="empty">No tasks match your filters.</div>}
+        {filtered.length === 0 && (
+          <div className="empty">
+            {loading ? 'Loading tasks…'
+              : loadErr ? 'Tasks could not be loaded.'
+              : visibleTasks.length === 0 ? 'No tasks yet. Click "+ New Task" to create one.'
+              : 'No tasks match your filters.'}
+          </div>
+        )}
       </div>
 
       {showForm && (
@@ -218,7 +240,7 @@ export default function Tasks() {
           departments={departments}
           onClose={() => setShowForm(false)}
           onSaved={() => { setShowForm(false); reload() }}
-          onRefresh={() => { api.get<Project[]>('/projects').then(setProjects); api.get<User[]>('/organizations/users').then(setUsers) }}
+          onRefresh={() => { api.get<Project[]>('/projects').then(setProjects).catch(() => {}); api.get<User[]>('/organizations/users').then(setUsers).catch(() => {}) }}
         />
       )}
     </div>

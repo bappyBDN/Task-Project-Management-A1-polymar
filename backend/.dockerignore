@@ -5,3 +5,8 @@ venv/
 .env
 *.db
 .git
+# One-off admin/debug scripts: never ship them in the image
+check_login.py
+set_passwords.py
+test_email.py
+test_send_email.py

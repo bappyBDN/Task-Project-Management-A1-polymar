@@ -44,14 +44,15 @@ async function remote<T>(path: string, options?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  // পুরোনো X-User-Id রাখা হয়েছে ব্যাকওয়ার্ড কম্প্যাটিবিলিটির জন্য
-  if (currentUserId !== null) headers['X-User-Id'] = String(currentUserId)
+  // The old X-User-Id header is gone: the backend only trusts the JWT now.
   
   const res = await fetch(`${BASE}${path}`, { headers, ...options })
   
   if (!res.ok) {
     // --- 401 Unauthorized হলে অটো লগআউট ---
-    if (res.status === 401) {
+    // Not for /auth/* (e.g. a wrong password on the login page): the reload
+    // used to wipe the "Invalid credentials" message before anyone saw it.
+    if (res.status === 401 && token && !path.startsWith('/auth/')) {
       storage.remove('token')
       storage.remove('user')
       window.location.href = '/' // লগিন পেজে রিডাইরেক্ট

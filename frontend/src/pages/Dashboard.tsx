@@ -16,16 +16,21 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .ad-err{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff5f5;border:1px solid #fbd2d2;color:#b42318;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px}
 .ad-hello h1{margin:0;font-size:25px;color:var(--navy);display:flex;gap:10px;align-items:center}
 .ad-hello p{margin:2px 0 0 44px;color:var(--mut);font-size:14px}
+.ad-date{flex-wrap:wrap}
+.ad-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.ad-row .ad-leg{flex:1;min-width:140px}
+.ad-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px}
 .ad-date{display:flex;align-items:center;gap:10px;color:#334;margin-top:14px;font-size:13.5px}
 .ad-live{border:1px solid #bfe8cf;background:#effaf3;color:#12a150;border-radius:99px;padding:3px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
 .ad-live i{width:8px;height:8px;border:2px solid #12a150;border-radius:50%}
-.ad-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-bottom:22px}
-.ad-kpi{border-radius:12px;padding:16px 16px 12px;border:1px solid;position:relative;min-height:136px}
-.ad-kpi .h{display:flex;align-items:center;gap:12px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#3a475c}
+.ad-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-bottom:22px}
+.ad-kpi{border-radius:12px;padding:16px 16px 12px;border:1px solid;min-height:136px;display:flex;flex-direction:column;min-width:0}
+.ad-kpi .h{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#3a475c;min-width:0}
 .ad-kpi .ib{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}
 .ad-kpi .v{font-size:30px;font-weight:700;color:var(--navy);margin-top:10px;line-height:1}
-.ad-kpi .d{font-size:12px;margin-top:8px;display:block}.ad-kpi .d s{text-decoration:none;color:var(--mut);display:block;margin-top:2px;font-size:11.5px}
-.ad-kpi svg.sp{position:absolute;right:12px;bottom:14px}
+.ad-kpi .f{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto;padding-top:8px}
+.ad-kpi .d{font-size:12px;display:block;white-space:nowrap;flex:none}.ad-kpi .d s{text-decoration:none;color:var(--mut);display:block;margin-top:2px;font-size:11.5px}
+.ad-kpi svg.sp{display:block;flex:0 1 100px;min-width:40px;max-width:100px;height:40px}
 .ad-cols{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:16px;align-items:start}
 .ad-stack{display:flex;flex-direction:column;gap:16px;min-width:0}
 .ad-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px}
@@ -39,14 +44,16 @@ color:var(--ink);font-family:inherit;font-size:13px}
 table.ad-t{width:100%;border-collapse:collapse}
 .ad-t th{font-size:11px;color:var(--mut);font-weight:500;text-align:left;padding:8px 6px;letter-spacing:.03em}
 .ad-t td{padding:11px 6px;border-top:1px solid var(--line);font-size:12.5px}
+.ad-t td:first-child,.ad-t td:last-child{white-space:nowrap}
 .ad-t tbody tr{cursor:pointer}.ad-t tbody tr:hover{background:#f7f9fd}
-.pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:3px 9px;font-size:11.5px}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:3px 9px;font-size:11.5px;white-space:nowrap}
 .pb{height:5px;border-radius:9px;background:#e8edf4;width:100px;display:inline-block;vertical-align:middle;overflow:hidden;margin-right:12px}.pb span{display:block;height:100%;border-radius:9px}
 .ad-btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;color:#334}
-.ad-port{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px}
-.ad-p{border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-height:88px;position:relative;background:linear-gradient(180deg,#fff,#f5f9ff)}
-.ad-p small{font-size:11px;color:#3a475c;letter-spacing:.02em}.ad-p b{display:block;font-size:24px;margin-top:6px}
-.ad-p svg{position:absolute;right:10px;bottom:10px}
+.ad-port{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.ad-p{border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-height:88px;min-width:0;display:flex;flex-direction:column;background:linear-gradient(180deg,#fff,#f5f9ff)}
+.ad-p small{font-size:11px;color:#3a475c;letter-spacing:.02em}
+.ad-p .pv{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:auto;padding-top:6px}.ad-p b{font-size:24px;line-height:1;min-width:0;overflow-wrap:anywhere}
+.ad-p svg{flex:none}
 .ad-tabs{display:inline-flex;max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
 .ad-tabs button{border:0;background:#fff;font-size:14px;padding:10px 20px;cursor:pointer;color:#334;white-space:nowrap}.ad-tabs .on{background:#eef3ff;color:var(--navy);font-weight:700;box-shadow:inset 0 -2px 0 var(--blue)}
 .ad-mini th{font-size:12px;padding:14px 12px;letter-spacing:.05em}
@@ -60,8 +67,10 @@ table.ad-t{width:100%;border-collapse:collapse}
 .cal .p{outline:2px solid var(--amber);outline-offset:-3px}
 .cal button u{position:absolute;bottom:2px;left:50%;width:5px;height:5px;border-radius:50%;margin-left:-2.5px}
 .ad-hint{display:flex;gap:10px;align-items:center;background:#f3f7ff;border-radius:8px;padding:10px 12px;color:var(--mut);font-size:11px;margin-top:6px}
-@media(max-width:1200px){.ad-cols{grid-template-columns:1fr}.ad-kpis{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:860px){.ad-side{display:none}.ad-2{grid-template-columns:1fr}.ad-port{grid-template-columns:repeat(2,1fr)}.ad-kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1440px){.ad-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1200px){.ad-cols{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:860px){.ad-2{grid-template-columns:minmax(0,1fr)}.ad-port{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.ad-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ad-kpi{padding:12px;min-height:0}.ad-kpi .v{font-size:24px}.ad-kpi svg.sp{display:none}.ad-hello h1{font-size:20px}.ad-hello p{margin-left:0}}
 `
 
 // ---------------------------------------------------------------- types / helpers
@@ -119,7 +128,7 @@ function Spark({ pts: raw, c, id }: { pts: number[]; c: string; id: string }) {
   const xy = pts.map((v, i) => [(i / (pts.length - 1)) * W, H - 4 - ((v - mn) / (mx - mn || 1)) * (H - 10)] as [number, number])
   const d = smooth(xy)
   return (
-    <svg className="sp" width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+    <svg className="sp" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
       <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c} stopOpacity=".25" /><stop offset="1" stopColor={c} stopOpacity="0" /></linearGradient></defs>
       <path d={`${d} L${W},${H} L0,${H}Z`} fill={`url(#${id})`} /><path d={d} fill="none" stroke={c} strokeWidth="1.6" />
     </svg>
@@ -145,7 +154,7 @@ function Progress({ data }: { data: Trends['chart'] }) {
   const W = 400, H = 175, L = 22, B = 152, T = 12, n = Math.max(data.length, 2)
   const peak = Math.max(...data.map((d) => Math.max(d.completed, d.in_progress)), 1)
   const mx = Math.max(4, Math.ceil(peak / 4) * 4)
-  const X = (i: number) => L + 10 + (i * (W - L - 20)) / (n - 1), Y = (v: number) => B - (v / mx) * (B - T)
+  const X = (i: number) => L + 16 + (i * (W - L - 40)) / (n - 1), Y = (v: number) => B - (v / mx) * (B - T)
   const g = data.map((d, i) => [X(i), Y(d.completed)] as [number, number])
   const b = data.map((d, i) => [X(i), Y(d.in_progress)] as [number, number])
   const hi = data.reduce((m, d, i) => (d.completed > data[m].completed ? i : m), 0)
@@ -328,8 +337,10 @@ export default function Dashboard() {
               <div key={k.l} className="ad-kpi" style={{ background: `linear-gradient(160deg,${k.bg},#fff)`, borderColor: k.bd }}>
                 <div className="h"><span className="ib" style={{ background: k.c }}><Ic n={k.ic} s={17} c="#fff" /></span>{k.l}</div>
                 <div className="v">{taskKpi ? taskKpi[k.k as keyof TaskKpi] : '—'}</div>
-                <span className="d"><span style={{ color: d.c }}>{d.t}</span><s>vs. last week</s></span>
-                <Spark pts={pts} c={k.c} id={`sp${i}`} />
+                <div className="f">
+                  <span className="d"><span style={{ color: d.c }}>{d.t}</span><s>vs. last week</s></span>
+                  <Spark pts={pts} c={k.c} id={`sp${i}`} />
+                </div>
               </div>
             )
           })}
@@ -340,11 +351,11 @@ export default function Dashboard() {
             <div className="ad-2">
               <div className="ad-card">
                 <h3>Task Completion Overview</h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+                <div className="ad-row">
                   <Ring size={152} sw={16} segs={[{ f: cnt.done / nT, c: '#12a150' }, { f: cnt.doing / nT, c: '#1d6bff' }, { f: cnt.todo / nT, c: '#6b7a90' }, { f: cnt.blocked / nT, c: '#ef4444' }]}>
                     <div><div style={{ fontSize: 26, fontWeight: 700, color: 'var(--navy)' }}>{donePct}%</div><div style={{ fontSize: 12, color: 'var(--mut)' }}>Completed</div></div>
                   </Ring>
-                  <div className="ad-leg" style={{ flex: 1 }}>
+                  <div className="ad-leg">
                     {[['Completed', cnt.done, '#12a150'], ['In Progress', cnt.doing, '#1d6bff'], ['Not Started', cnt.todo, '#6b7a90'], ['Blocked', cnt.blocked, '#ef4444']].map(([l, v, c]) => <div key={l as string}><i style={{ background: c as string }} />{l}<b>{v}</b></div>)}
                   </div>
                 </div>
@@ -353,8 +364,8 @@ export default function Dashboard() {
             </div>
 
             <div className="ad-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <h3 style={{ margin: 0 }}><Ic n="cal" />My Tasks{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}</h3>
+              <div className="ad-head">
+                <h3 style={{ margin: 0, flexWrap: 'wrap' }}><Ic n="cal" />My Tasks{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}</h3>
                 {picked && <button className="ad-btn" onClick={() => setPicked(null)}>Clear date filter</button>}
               </div>
               <div className="ad-scroll"><table className="ad-t">
@@ -383,7 +394,7 @@ export default function Dashboard() {
                 <h3><Ic n="users" s={17} />Group Portfolio</h3>
                 <div className="ad-port">
                   {[['TOTAL PROJECTS', projKpi?.total, '#1d6bff', 'proj'], ['ACTIVE PROJECTS', projKpi?.active, '#12a150', 'play'], ['GREEN', projKpi?.green, '#12a150', 'leaf'], ['AMBER', projKpi?.amber, '#f59e0b', 'shield'], ['RED', projKpi?.red, '#ef4444', 'warn']].map(([l, v, c, i]) => (
-                    <div key={l as string} className="ad-p"><small>{l}</small><b style={{ color: c as string }}>{(v as number | undefined) ?? '—'}</b><Ic n={i as string} s={20} c={c as string} /></div>
+                    <div key={l as string} className="ad-p"><small>{l}</small><div className="pv"><b style={{ color: c as string }}>{(v as number | undefined) ?? '—'}</b><Ic n={i as string} s={20} c={c as string} /></div></div>
                   ))}
                 </div>
               </div>
@@ -405,9 +416,9 @@ export default function Dashboard() {
             <div className="ad-card">
               <h3><Ic n="pulse" s={17} />Project Health Distribution</h3>
               {hTotal === 0 ? <div style={{ color: 'var(--mut)' }}>No projects</div> : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+                <div className="ad-row" style={{ gap: 28 }}>
                   <Ring size={112} sw={14} segs={hEntries.map((h) => ({ f: healthDist[h] / hTotal, c: HEALTH_HEX[h] }))}><div><b style={{ fontSize: 18 }}>{hTotal}</b><div style={{ fontSize: 11, color: 'var(--mut)' }}>Projects</div></div></Ring>
-                  <div className="ad-leg" style={{ flex: 1 }}>
+                  <div className="ad-leg">
                     {hEntries.map((h) => <div key={h} style={{ border: 0, padding: '7px 0' }}><i style={{ background: HEALTH_HEX[h], borderRadius: '50%', width: 10, height: 10 }} />{label(h)}<b style={{ fontSize: 12 }}>{healthDist[h]} · {Math.round((healthDist[h] / hTotal) * 100)}%</b></div>)}
                   </div>
                 </div>
@@ -417,7 +428,7 @@ export default function Dashboard() {
               <h3><Ic n="target" s={17} />Top Delay Causes</h3>
               {delayCauses.map((d) => (
                 <div key={d.category} style={{ marginBottom: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>{label(d.category)}</span><b>{d.count}</b></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}><span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{label(d.category)}</span><b>{d.count}</b></div>
                   <div style={{ height: 5, borderRadius: 9, background: '#e8edf4', marginTop: 6 }}><div style={{ height: '100%', width: `${(d.count / maxDelay) * 100}%`, borderRadius: 9, background: '#ef4444' }} /></div>
                 </div>
               ))}

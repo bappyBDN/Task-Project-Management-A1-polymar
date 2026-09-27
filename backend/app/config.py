@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        # .env also holds keys read elsewhere (JWT_SECRET_KEY, VITE_STORAGE_MODE);
+        # without this, a local run crashed at startup with "Extra inputs are not permitted".
+        extra = "ignore"
 
     @property                                              # 👈 এটা যোগ করুন
     def mail_allowed_list(self) -> list[str]:

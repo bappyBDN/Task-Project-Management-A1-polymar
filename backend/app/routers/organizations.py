@@ -71,24 +71,27 @@ def create_user(
         db.commit()
 
         set_link = f"{settings.frontend_url}/reset-password?token={token}"
-        email_service.send_welcome_set_password_email(
+        sent = email_service.send_welcome_set_password_email(
             user_name=user.name,
             to_email=user.email,
             set_link=set_link,
             expires_hours=24,
         )
-        # Dev fallback — also print in the terminal for quick testing.
-        print(f"[dev] Set-password link for {user.email}: {set_link}")
+        # The link is a password key: only print it when the email failed.
+        if not sent:
+            print(f"[users] Welcome email NOT sent. Set-password link for {user.email}: {set_link}")
 
     return user
 
 
 @router.patch("/users/{user_id}", response_model=schemas.UserOut)
-def update_user(user_id: int, payload: schemas.UserBase, admin: models.User = Depends(get_admin_user), db: Session = Depends(get_db)):
+def update_user(user_id: int, payload: schemas.UserUpdate, admin: models.User = Depends(get_admin_user), db: Session = Depends(get_db)):
     user = db.get(models.User, user_id)
     if not user:
         raise HTTPException(404, "User not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
+        if v is None and k in {"employee_id", "name", "email", "role"}:
+            continue  # required column: an explicit null must not wipe it
         setattr(user, k, v)
     db.commit()
     db.refresh(user)

@@ -163,3 +163,53 @@ label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); 
   cursor: not-allowed; 
   filter: grayscale(0.5); 
 }
+/* ---------------------------------------------------------------- messages */
+.alert { border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.4; }
+.alert.error { background: #fdecec; color: #a42a2a; border: 1px solid #f3c6c6; }
+.alert.success { background: #e3f5ea; color: #17613a; border: 1px solid #bfe3cc; }
+.alert.info { background: #eef3fb; color: var(--navy); border: 1px solid #d5e0f0; }
+
+/* ---------------------------------------------------------------- login / reset pages */
+.auth-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 16px; }
+.auth-card { width: 380px; max-width: 100%; padding: 32px; }
+
+/* ---------------------------------------------------------------- keyboard focus
+   (inputs hide the browser outline above; keep a visible ring for keyboard users) */
+.btn:focus-visible, a:focus-visible, .nav a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+tr.clickable, .clickable { cursor: pointer; }
+
+/* wide tables scroll inside their card instead of pushing the page sideways */
+.table-wrap { width: 100%; overflow-x: auto; }
+
+/* ---------------------------------------------------------------- phones / tablets */
+.mobile-bar { display: none; }
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  .mobile-bar {
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 15;
+    background: var(--navy); color: #fff; padding: 10px 14px;
+  }
+  .mobile-bar .mobile-title { font-weight: 700; font-size: 15px; }
+  .app { flex-direction: column; }
+  .sidebar { transform: translateX(-100%); transition: transform .2s ease; width: 260px; max-width: 85vw; z-index: 40; }
+  .sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.35); }
+  .sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(11,31,58,.45); z-index: 30; }
+  .main { margin-left: 0; padding: 16px; min-width: 0; }
+  .topbar { flex-wrap: wrap; gap: 10px; }
+  .form-row, .form-row.three { grid-template-columns: 1fr; gap: 0; }
+  .filters .field { min-width: 0; flex: 1 1 140px; }
+  .modal { padding: 18px; }
+  .modal-backdrop { padding: 16px 10px; }
+  /* tables scroll sideways on their own (not the whole card, which would clip dropdowns) */
+  .card > table, .modal table { display: block; overflow-x: auto; }
+}
+
+/* two-column detail pages (task / project) */
+.detail-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+@media (max-width: 900px) { .detail-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Kanban: 6 columns on wide screens, side-scroll on smaller ones */
+.kanban-board { grid-template-columns: repeat(6, minmax(220px, 1fr)); min-width: 1400px; }
+@media (max-width: 900px) { .kanban-board { grid-template-columns: repeat(6, 250px); min-width: 0; } }

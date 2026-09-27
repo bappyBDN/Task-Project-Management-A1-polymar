@@ -18,21 +18,33 @@ export default function Backlog({ onConverted }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<any>({ priority: 'medium', status: 'new', project_id: '', company_id: '', function_id: '', department_id: '' })
   const [err, setErr] = useState('')
+  const [pageErr, setPageErr] = useState('')
+  const [pageMsg, setPageMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [convertingId, setConvertingId] = useState<number | null>(null)
+  const [confirmId, setConfirmId] = useState<number | null>(null)
+  // Items whose task was already created but whose status update failed:
+  // retrying must not create a second task.
+  const [taskCreatedFor, setTaskCreatedFor] = useState<Record<number, string>>({})
+
+  const reload = () => api.get<BacklogItem[]>('/backlogs').then(setItems).catch((e) => setPageErr(`Could not load the backlog: ${e.message || e}`))
 
   useEffect(() => {
-    api.get<BacklogItem[]>('/backlogs').then(setItems)
-    api.get<Project[]>('/projects').then(setProjects)
-    api.get<Company[]>('/organizations/companies').then(setCompanies)
-    api.get<Function[]>('/organizations/functions').then(setFunctions)
-    api.get<Department[]>('/organizations/departments').then(setDepartments)
+    reload()
+    api.get<Project[]>('/projects').then(setProjects).catch(() => {})
+    api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
+    api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
+    api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
   }, [])
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
 
-  const reload = () => api.get<BacklogItem[]>('/backlogs').then(setItems)
-
   const create = async () => {
     if (!form.requirement?.trim()) { setErr('Requirement is mandatory'); return }
+    if (saving) return
+    setSaving(true)
+    setErr('')
+    try {
     await api.post('/backlogs', {
       ...form,
       project_id: form.project_id ? Number(form.project_id) : null,
@@ -45,11 +57,27 @@ export default function Backlog({ onConverted }: Props) {
     setShowForm(false)
     setErr('')
     setForm({ priority: 'medium', status: 'new', project_id: '', company_id: '', function_id: '', department_id: '' })
+    setPageMsg('Backlog item added.')
     reload()
+    } catch (e: any) {
+      setErr(e.message || 'Could not save. Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const convert = async (item: BacklogItem) => {
-    await api.post('/tasks', {
+    if (convertingId !== null) return
+    // Two-step: the first click asks for confirmation.
+    if (confirmId !== item.id) { setConfirmId(item.id); return }
+    setConfirmId(null)
+    setConvertingId(item.id)
+    setPageErr('')
+    setPageMsg('')
+    let code = taskCreatedFor[item.id]
+    try {
+      if (!code) {
+        const t = await api.post<{ code: string }>('/tasks', {
       code: null,
       project_id: item.project_id,
       company_id: item.company_id,
@@ -63,10 +91,22 @@ export default function Backlog({ onConverted }: Props) {
       priority: item.priority,
       status: 'backlog',
       acceptance_criteria: item.acceptance_criteria,
-    })
-    await api.patch(`/backlogs/${item.id}`, { ...item, status: 'converted' })
-    reload()
-    onConverted?.()
+        })
+        code = t?.code ?? 'new task'
+        setTaskCreatedFor((m) => ({ ...m, [item.id]: code }))
+      }
+      await api.patch(`/backlogs/${item.id}`, { ...item, status: 'converted' })
+      setTaskCreatedFor((m) => { const n = { ...m }; delete n[item.id]; return n })
+      setPageMsg(`Converted to task ${code}.`)
+      reload()
+      onConverted?.()
+    } catch (e: any) {
+      setPageErr(code
+        ? `Task ${code} was created, but the backlog item could not be marked as converted: ${e?.message}. Click Convert again to retry (no duplicate task will be created).`
+        : `Could not convert: ${e.message || e}`)
+    } finally {
+      setConvertingId(null)
+    }
   }
 
   const filtered = useMemo(() => {
@@ -103,6 +143,9 @@ export default function Backlog({ onConverted }: Props) {
         </div>
         <button className="btn primary" onClick={() => setShowForm(true)}>+ New Backlog Item</button>
       </div>
+
+      {pageMsg && <div className="alert success" role="status">{pageMsg}</div>}
+      {pageErr && <div className="alert error" role="alert">{pageErr}</div>}
 
       <div className="filters">
         <div className="field" style={{ minWidth: 190 }}>
@@ -155,7 +198,9 @@ export default function Backlog({ onConverted }: Props) {
                 <td className="small">{i.estimated_effort ? `${i.estimated_effort}d` : '—'}</td>
                 <td>
                   {i.status !== 'converted' ? (
-                    <button className="btn sm" onClick={() => convert(i)}>Convert to Task</button>
+                    <button className="btn sm" disabled={convertingId !== null} onClick={() => convert(i)} onBlur={() => setConfirmId((id) => (id === i.id ? null : id))}>
+                      {convertingId === i.id ? 'Converting…' : confirmId === i.id ? 'Click again to confirm' : 'Convert to Task'}
+                    </button>
                   ) : <span className="small muted">Done</span>}
                 </td>
               </tr>
@@ -169,7 +214,7 @@ export default function Backlog({ onConverted }: Props) {
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>New Backlog Item</h2>
-            {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
+            {err && <div className="alert error" role="alert">{err}</div>}
             <label>Requirement *</label>
             <input value={form.requirement} onChange={(e) => set('requirement', e.target.value)} />
             <label>Description</label>

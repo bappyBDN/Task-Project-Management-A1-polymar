@@ -36,11 +36,13 @@ def create_delay(payload: schemas.DelayRcaBase, db: Session = Depends(get_db)):
 
 
 @router.patch("/{rca_id}", response_model=schemas.DelayRcaOut)
-def update_delay(rca_id: int, payload: schemas.DelayRcaBase, db: Session = Depends(get_db)):
+def update_delay(rca_id: int, payload: schemas.DelayRcaUpdate, db: Session = Depends(get_db)):
     rca = db.get(models.DelayRca, rca_id)
     if not rca:
         raise HTTPException(404, "Delay RCA not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
+        if v is None and k in {"is_internal", "dependency_related", "management_intervention", "approval_status"}:
+            continue  # required column: an explicit null must not wipe it
         setattr(rca, k, v)
     db.commit()
     db.refresh(rca)

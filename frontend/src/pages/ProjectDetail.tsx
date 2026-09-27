@@ -12,17 +12,19 @@ export default function ProjectDetail() {
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
+  const [loadErr, setLoadErr] = useState('')
 
   useEffect(() => {
-    api.get<User[]>('/organizations/users').then(setUsers)
-    api.get<Company[]>('/organizations/companies').then(setCompanies)
+    api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
+    api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (!id) return
-    api.get<Project>(`/projects/${id}`).then(setProject)
-    api.get<Task[]>(`/tasks?project_id=${id}`).then(setTasks)
-    api.get<Milestone[]>(`/projects/${id}/milestones`).then(setMilestones)
+    setLoadErr('')
+    api.get<Project>(`/projects/${id}`).then(setProject).catch((e) => setLoadErr(e.message || 'Could not load this project.'))
+    api.get<Task[]>(`/tasks?project_id=${id}`).then(setTasks).catch(() => {})
+    api.get<Milestone[]>(`/projects/${id}/milestones`).then(setMilestones).catch(() => {})
   }, [id])
 
   const userName = (uid?: number) => users.find((u) => u.id === uid)?.name
@@ -51,7 +53,18 @@ export default function ProjectDetail() {
       .sort((a, b) => (a.user!.name > b.user!.name ? 1 : -1))
   }, [project, tasks, users])
 
-  if (!project) return <div className="empty">Loading…</div>
+  if (!project) {
+    if (loadErr) {
+      return (
+        <div className="card empty" style={{ marginTop: 40 }}>
+          <h2 style={{ color: 'var(--navy)', marginTop: 0 }}>Project not available</h2>
+          <p>{/not found/i.test(loadErr) ? 'This project does not exist or was deleted.' : loadErr}</p>
+          <button className="btn primary" onClick={() => navigate('/projects')}>Back to Projects</button>
+        </div>
+      )
+    }
+    return <div className="empty">Loading…</div>
+  }
 
   const companyName = companies.find((c) => c.id === project.company_id)?.name ?? '—'
 

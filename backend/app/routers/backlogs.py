@@ -27,11 +27,13 @@ def create_backlog(payload: schemas.BacklogBase, db: Session = Depends(get_db)):
 
 
 @router.patch("/{item_id}", response_model=schemas.BacklogOut)
-def update_backlog(item_id: int, payload: schemas.BacklogBase, db: Session = Depends(get_db)):
+def update_backlog(item_id: int, payload: schemas.BacklogUpdate, db: Session = Depends(get_db)):
     item = db.get(models.BacklogItem, item_id)
     if not item:
         raise HTTPException(404, "Backlog item not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
+        if v is None and k in {"code", "requirement", "priority", "status"}:
+            continue  # required column: an explicit null must not wipe it
         setattr(item, k, v)
     db.commit()
     db.refresh(item)

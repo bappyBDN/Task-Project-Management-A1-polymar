@@ -1,4 +1,5 @@
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth'
 import { STORAGE_MODE } from './api'
 import { store } from './store'
@@ -53,9 +54,22 @@ function buildSections(isAdmin: boolean): NavSection[] {
   return sections
 }
 
+function NotFound() {
+  return (
+    <div className="card empty" style={{ marginTop: 40 }}>
+      <h2 style={{ color: 'var(--navy)', marginTop: 0 }}>Page not found</h2>
+      <p>This page doesn't exist or you don't have access to it.</p>
+      <Link to="/" className="btn primary">Go to My Dashboard</Link>
+    </div>
+  )
+}
+
 export default function App() {
   const { user, loading, logout } = useAuth()
   const location = useLocation()
+  const [navOpen, setNavOpen] = useState(false)
+  // close the phone menu after navigating
+  useEffect(() => { setNavOpen(false) }, [location.pathname])
 
   if (loading) {
     return (
@@ -78,7 +92,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      {/* Phone / small screens: the sidebar is hidden and opens from this bar */}
+      <header className="mobile-bar">
+        <button className="btn sm" aria-label="Open menu" aria-expanded={navOpen} onClick={() => setNavOpen(true)}>☰</button>
+        <span className="mobile-title">Anwar Group</span>
+      </header>
+      <aside className={`sidebar${navOpen ? ' open' : ''}`}>
         <div className="brand">
           <div className="title">Anwar Group</div>
           <div className="sub">Task &amp; Project Management</div>
@@ -108,15 +127,20 @@ export default function App() {
             {STORAGE_MODE === 'local' ? 'Data stored in browser (localStorage)' : 'Connected to database'}
           </div>
           <button className="btn sm" style={{ marginTop: 8, width: '100%' }} onClick={logout}>Sign Out</button>
-          <button
-            className="btn sm"
-            style={{ marginTop: 4, width: '100%', color: 'var(--red)' }}
-            onClick={() => { if (confirm('Reset all data to defaults?')) { store.reset(); window.location.reload() } }}
-          >
-            Reset Data
-          </button>
+          {/* Only meaningful for the browser-only demo mode: it never touches the real database,
+              so showing it to everyone in database mode was just alarming. */}
+          {STORAGE_MODE === 'local' && (
+            <button
+              className="btn sm"
+              style={{ marginTop: 4, width: '100%', color: 'var(--red)' }}
+              onClick={() => { if (confirm('Reset all browser demo data to defaults?')) { store.reset(); window.location.reload() } }}
+            >
+              Reset Demo Data
+            </button>
+          )}
         </div>
       </aside>
+      {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
       <main className="main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -133,6 +157,7 @@ export default function App() {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/audit" element={<Audit />} />
           {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
     </div>

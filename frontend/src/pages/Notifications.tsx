@@ -15,13 +15,19 @@ export default function Notifications() {
   const [users, setUsers] = useState<User[]>([])
   const [userId, setUserId] = useState<number | ''>('')
   const [scanMsg, setScanMsg] = useState('')
+  const [err, setErr] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [scanning, setScanning] = useState(false)
 
   // Admins can browse everyone's notifications; everyone else sees only their own.
   const load = () => {
     const uid = isAdmin ? userId : user?.id
     if (!isAdmin && !uid) { setNotifs([]); return }
     const q = uid ? `?user_id=${uid}` : ''
-    api.get<Notification[]>(`/audit/notifications${q}`).then(setNotifs).catch(() => setNotifs([]))
+    api.get<Notification[]>(`/audit/notifications${q}`)
+      .then((n) => { setNotifs(n); setErr('') })
+      .catch((e) => setErr(`Could not load notifications: ${e.message || e}`))
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -30,14 +36,27 @@ export default function Notifications() {
   }, [userId, user?.id, isAdmin])
 
   const markRead = async (n: Notification) => {
-    await api.post(`/audit/notifications/${n.id}/read`)
-    load()
+    try {
+      await api.post(`/audit/notifications/${n.id}/read`)
+      load()
+    } catch (e: any) {
+      setErr(`Could not mark as read: ${e.message || e}`)
+    }
   }
 
   const scan = async () => {
-    const r = await api.post<{ events: { code: string; kind: string }[] }>('/audit/escalations/scan')
-    setScanMsg(`Escalation scan complete — ${r.events.length} event(s) generated.`)
-    load()
+    if (scanning) return
+    setScanning(true)
+    setScanMsg('')
+    try {
+      const r = await api.post<{ events: { code: string; kind: string }[] }>('/audit/escalations/scan')
+      setScanMsg(`Escalation scan complete — ${r.events.length} event(s) generated.`)
+      load()
+    } catch (e: any) {
+      setErr(`Escalation scan failed: ${e.message || e}`)
+    } finally {
+      setScanning(false)
+    }
   }
 
   return (
@@ -47,10 +66,11 @@ export default function Notifications() {
           <h1>Notification Center</h1>
           <div className="crumb">Event-driven reminders, warnings and escalations</div>
         </div>
-        <button className="btn gold" onClick={scan}>Run Escalation Scan</button>
+        <button className="btn gold" onClick={scan} disabled={scanning}>{scanning ? 'Scanning…' : 'Run Escalation Scan'}</button>
       </div>
 
-      {scanMsg && <div className="card mb" style={{ background: '#e3f5ea' }}>{scanMsg}</div>}
+      {scanMsg && <div className="alert success" role="status">{scanMsg}</div>}
+      {err && <div className="alert error" role="alert">{err}</div>}
 
       {isAdmin && (
         <div className="filters">
@@ -87,7 +107,7 @@ export default function Notifications() {
             ))}
           </tbody>
         </table>
-        {notifs.length === 0 && <div className="empty">No notifications. Run an escalation scan to generate them.</div>}
+        {notifs.length === 0 && <div className="empty">{loading ? 'Loading…' : err ? 'Notifications could not be loaded.' : 'No notifications. You are all caught up.'}</div>}
       </div>
     </div>
   )

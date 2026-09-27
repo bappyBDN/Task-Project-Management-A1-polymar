@@ -27,7 +27,29 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # --- JWT tokens -----------------------------------------------------------
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-insecure-secret-change-me")
+_DEV_SECRET = "dev-only-insecure-secret-change-me"
+
+
+def _load_secret() -> str:
+    # 1) real environment variable (Docker: passed in by docker-compose.yml)
+    # 2) JWT_SECRET_KEY in backend/.env (local runs: nothing else loads .env
+    #    into os.environ, so this used to silently fall back to the public default)
+    secret = os.getenv("JWT_SECRET_KEY")
+    if not secret:
+        try:
+            from dotenv import dotenv_values
+            secret = dotenv_values(".env").get("JWT_SECRET_KEY")
+        except Exception:
+            secret = None
+    if not secret:
+        # Keep running (never crash a deployed system), but say it loudly.
+        print("[security] WARNING: JWT_SECRET_KEY is not set - using the public dev "
+              "default. Anyone could forge login tokens. Set it in .env.")
+        secret = _DEV_SECRET
+    return secret
+
+
+SECRET_KEY = _load_secret()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 

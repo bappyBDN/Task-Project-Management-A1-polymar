@@ -171,6 +171,7 @@ def individual_trends(user_id: int, days: int = 7, db: Session = Depends(get_db)
     done on D if it is in a done status and actual_due_date (used as the
     completion date) <= D. Read-only, no schema change.
     """
+    days = max(1, min(days, 90))  # days<0 used to crash (empty list), huge values hung the server
     today = date.today()
     tasks = db.query(models.Task).filter(
         models.Task.is_deleted.is_(False),

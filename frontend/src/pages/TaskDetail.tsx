@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { store } from '../store'
+import { useIsPrivileged } from '../usePrivileged'
 import { Approval, Company, DelayRca, Department, Function, ProgressUpdate, Project, Task, User } from '../types'
 import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import TaskForm from '../components/TaskForm'
@@ -26,25 +26,42 @@ export default function TaskDetail() {
 
   // New states for success message and button cooldown
   const [successMsg, setSuccessMsg] = useState('')
+  const [actionErr, setActionErr] = useState('')
   const [cooldown, setCooldown] = useState(false)
+  const [loadErr, setLoadErr] = useState('')
+  const isPrivileged = useIsPrivileged(user?.role)
 
   const load = () => {
     if (!id) return
-    api.get<Task>(`/tasks/${id}`).then(setTask)
-    api.get<ProgressUpdate[]>(`/tasks/${id}/progress`).then(setProgress)
-    api.get<DelayRca[]>(`/delays?task_id=${id}`).then(setDelays)
+    setLoadErr('')
+    api.get<Task>(`/tasks/${id}`).then(setTask).catch((e) => setLoadErr(e.message || 'Could not load this task.'))
+    api.get<ProgressUpdate[]>(`/tasks/${id}/progress`).then(setProgress).catch(() => {})
+    api.get<DelayRca[]>(`/delays?task_id=${id}`).then(setDelays).catch(() => {})
   }
 
   useEffect(() => {
-    api.get<Project[]>('/projects').then(setProjects)
-    api.get<User[]>('/organizations/users').then(setUsers)
-    api.get<Company[]>('/organizations/companies').then(setCompanies)
-    api.get<Function[]>('/organizations/functions').then(setFunctions)
-    api.get<Department[]>('/organizations/departments').then(setDepartments)
+    // Lookups only fill in names; a failure just shows "—".
+    api.get<Project[]>('/projects').then(setProjects).catch(() => {})
+    api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
+    api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
+    api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
+    api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
   }, [])
   useEffect(load, [id])
 
-  if (!task) return <div className="empty">Loading…</div>
+  if (!task) {
+    if (loadErr) {
+      return (
+        <div className="card empty" style={{ marginTop: 40 }}>
+          <h2 style={{ color: 'var(--navy)', marginTop: 0 }}>Task not available</h2>
+          <p>{/not found/i.test(loadErr) ? 'This task does not exist or was deleted.' : loadErr}</p>
+          <button className="btn" onClick={load} style={{ marginRight: 8 }}>Try again</button>
+          <button className="btn primary" onClick={() => navigate('/tasks')}>Back to Tasks</button>
+        </div>
+      )
+    }
+    return <div className="empty">Loading…</div>
+  }
 
   const proj = projects.find((p) => p.id === task.project_id)
   const owner = users.find((u) => u.id === task.responsible_id)
@@ -56,26 +73,25 @@ export default function TaskDetail() {
     .sort((a, b) => b.id - a.id)[0]
 
   const isMine = user?.id === task.responsible_id || user?.id === task.accountable_id
-  const isPrivileged = user ? store.isPrivileged(user.role) : false
 
   const requestApproval = async (type: string, revisedDate?: string) => {
     if (cooldown) return // Prevent double clicks during cooldown
 
     setCooldown(true)
     setSuccessMsg('')
-    const approver = store.approverFor(task)
+    setActionErr('')
     try {
+      // The server picks the approver (Reviewer -> Accountable -> line manager)
+      // from the real database; the old code sent one from browser demo data.
       await api.post('/approvals', {
         approval_type: type,
         entity_type: 'task',
         entity_id: task.id,
-        requested_by_id: user?.id ?? task.responsible_id,
-        approver_id: approver?.id ?? null,
         reason: type === 'revised_date' && revisedDate
           ? `Requesting revised due date ${fmtDate(revisedDate)} for ${task.code}`
           : `Requesting ${label(type)} for ${task.code}`,
       })
-      
+
       setSuccessMsg('Task is submitted for approval.')
       load()
 
@@ -85,6 +101,7 @@ export default function TaskDetail() {
         setSuccessMsg('')
       }, 20000)
     } catch (e: any) {
+      setActionErr(e.message || 'Could not submit for approval. Please try again.')
       setCooldown(false)
     }
   }
@@ -97,11 +114,11 @@ export default function TaskDetail() {
           <h1>{task.title}</h1>
           <div className="crumb">{task.code} · {proj?.name ?? 'Standalone'} · <span className={`badge ${STATUS_COLORS[task.status]}`}>{label(task.status)}</span> <span className={`health-dot ${HEALTH_COLORS[task.health]}`} /> {label(task.health)}</div>
         </div>
-        <div className="row">
+        <div className="row" style={{ flexWrap: 'wrap' }}>
           <button className="btn sm" onClick={() => setShowProgress(true)} disabled={!isMine && !isPrivileged}>+ Update Progress</button>
-          <button 
-            className="btn sm gold" 
-            onClick={() => requestApproval('completion')} 
+          <button
+            className="btn sm gold"
+            onClick={() => requestApproval('completion')}
             disabled={(!isMine && !isPrivileged) || cooldown}
           >
             {cooldown ? 'Submitted...' : 'Submit for Completion'}
@@ -112,12 +129,13 @@ export default function TaskDetail() {
 
       {/* Success Message Banner */}
       {successMsg && (
-        <div className="card mb" style={{ background: '#e3f5ea', color: '#22a06b', padding: '12px 16px', marginBottom: '16px' }}>
+        <div className="alert success" role="status">
           <strong>Success:</strong> {successMsg}
         </div>
       )}
+      {actionErr && <div className="alert error" role="alert">{actionErr}</div>}
 
-      <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr', alignItems: 'start' }}>
+      <div className="grid detail-grid" style={{ alignItems: 'start' }}>
         <div>
           <div className="card">
             <div className="section-title" style={{ marginTop: 0 }}>Details</div>
@@ -130,9 +148,9 @@ export default function TaskDetail() {
               <div><label>Priority</label><span className={`badge ${PRIORITY_COLORS[task.priority]}`}>{label(task.priority)}</span></div>
             </div>
             <div className="form-row three" style={{ marginTop: 12 }}>
-              <div><label>SBU</label><div className="small">{store.companies().find((c) => c.id === task.company_id)?.name ?? '—'}</div></div>
-              <div><label>Function</label><div className="small">{store.functions().find((f) => f.id === task.function_id)?.name ?? '—'}</div></div>
-              <div><label>Department</label><div className="small">{store.departments().find((d) => d.id === task.department_id)?.name ?? '—'}</div></div>
+              <div><label>SBU</label><div className="small">{companies.find((c) => c.id === task.company_id)?.name ?? '—'}</div></div>
+              <div><label>Function</label><div className="small">{functions.find((f) => f.id === task.function_id)?.name ?? '—'}</div></div>
+              <div><label>Department</label><div className="small">{departments.find((d) => d.id === task.department_id)?.name ?? '—'}</div></div>
             </div>
             {task.blocker && (
               <div style={{ marginTop: 12, padding: 10, background: '#fbe5e5', borderRadius: 8 }}>
@@ -261,25 +279,24 @@ function ReviseForm({ task, users, onClose, onSaved }: { task: Task; users: User
         approval_type: 'revised_date',
         entity_type: 'task',
         entity_id: task.id,
-        requested_by_id: user?.id ?? task.responsible_id,
         approver_id: task.reviewer_id,
         reason: `Requesting revised due date ${fmtDate(f.proposed_date)} — ${f.reason.trim()}`,
       })
-      
+
       setSuccessMsg('Date revision request submitted.')
       setTimeout(onSaved, 1500)
-    } catch (e: any) { 
+    } catch (e: any) {
       setErr(e.message)
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
         <h2>Request Date Revision — {task.code}</h2>
-        {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
-        {successMsg && <div className="badge green" style={{ marginBottom: 12 }}>{successMsg}</div>}
+        {err && <div className="alert error" role="alert">{err}</div>}
+        {successMsg && <div className="alert success" role="status">{successMsg}</div>}
         <label>Proposed New Due Date *</label>
         <input type="date" value={f.proposed_date} onChange={(e) => set('proposed_date', e.target.value)} disabled={isSubmitting} />
         <label>Reason *</label>
@@ -308,10 +325,10 @@ function RcaForm({ task, users, onClose, onSaved }: { task: Task; users: User[];
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
   const set = (k: string, v: any) => setF((x: any) => ({ ...x, [k]: v }))
-  
+
   const submit = async () => {
     if (!f.delay_category || !f.delay_reason) { setErr('Delay category and reason are required'); return }
-    
+
     setIsSubmitting(true)
     setErr('')
     try {
@@ -325,11 +342,11 @@ function RcaForm({ task, users, onClose, onSaved }: { task: Task; users: User[];
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Log Delay / RCA — {task.code}</h2>
-        {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
-        {successMsg && <div className="badge green" style={{ marginBottom: 12 }}>{successMsg}</div>}
+        {err && <div className="alert error" role="alert">{err}</div>}
+        {successMsg && <div className="alert success" role="status">{successMsg}</div>}
         <div className="form-row">
           <div>
             <label>Delay Category *</label>
@@ -375,14 +392,19 @@ function ProgressForm({ task, onClose, onSaved }: { task: Task; onClose: () => v
   const [f, setF] = useState<any>({ progress_pct: task.progress_pct, status: task.status, blocker: task.blocker })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
+  const [err, setErr] = useState('')
   const set = (k: string, v: any) => setF((x: any) => ({ ...x, [k]: v }))
-  
+
   const submit = async () => {
+    const pct = Number(f.progress_pct)
+    if (f.progress_pct === '' || !Number.isFinite(pct) || pct < 0 || pct > 100) { setErr('Progress must be a number from 0 to 100.'); return }
+    if (f.blocker && !(f.blocker_details || '').trim()) { setErr('Please describe the blocker.'); return }
+    setErr('')
     setIsSubmitting(true)
     try {
       await api.post(`/tasks/${task.id}/progress`, {
         task_id: task.id,
-        progress_pct: Number(f.progress_pct),
+        progress_pct: pct,
         status: f.status,
         remarks: f.remarks,
         blocker: f.blocker,
@@ -394,15 +416,17 @@ function ProgressForm({ task, onClose, onSaved }: { task: Task; onClose: () => v
       setSuccessMsg('Progress updated successfully.')
       setTimeout(onSaved, 1500)
     } catch (e: any) {
+      setErr(e.message || 'Could not save the update. Please try again.')
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Update Progress — {task.code}</h2>
-        {successMsg && <div className="badge green" style={{ marginBottom: 12 }}>{successMsg}</div>}
+        {err && <div className="alert error" role="alert">{err}</div>}
+        {successMsg && <div className="alert success" role="status">{successMsg}</div>}
         <div className="form-row">
           <div>
             <label>Progress %</label>

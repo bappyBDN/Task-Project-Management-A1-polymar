@@ -5,6 +5,9 @@ data (category / task_type / priority / status) the UI needs to function.
 No companies, projects, or dummy users — the admin creates everything else
 from the Admin Panel from here on.
 """
+import os
+import secrets
+
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 
@@ -57,13 +60,20 @@ def seed(db: Session):
 
     _seed_list_options(db)
 
+    # Only runs on a brand-new, empty database. The first admin password comes
+    # from SEED_ADMIN_PASSWORD, else a random one is generated and printed once.
+    # (It used to be hardcoded in the source code.)
+    password = os.getenv("SEED_ADMIN_PASSWORD") or secrets.token_urlsafe(12)
+    if not os.getenv("SEED_ADMIN_PASSWORD"):
+        print(f"[seed] First admin created: ADMIN-001 / password: {password}  (change it after login)")
+
     db.add(models.User(
         employee_id="ADMIN-001",
         name="Bappy Chandra Debnath",
         email="bappynath2001@gmail.com",
         designation="Platform Admin",
         role="admin",
-        hashed_password=get_password_hash("123abc123"),
+        hashed_password=get_password_hash(password),
         is_active=True,
     ))
     db.commit()

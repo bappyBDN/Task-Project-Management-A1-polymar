@@ -182,8 +182,13 @@ def create_approval(
     current_user: models.User = Depends(get_current_user),
 ):
     data = payload.model_dump()
-    if not data.get("requested_by_id"):
+    # The requester is always the logged-in user (admins may file on someone's
+    # behalf). Before, anyone could name another requester and themselves as
+    # approver, then approve their own work.
+    if not _is_admin(current_user) or not data.get("requested_by_id"):
         data["requested_by_id"] = current_user.id
+    if data.get("approver_id") == data["requested_by_id"]:
+        data["approver_id"] = None  # nobody approves their own request; resolved below
     approval = models.Approval(**data, status="pending")
     entity = _entity(db, approval)
 

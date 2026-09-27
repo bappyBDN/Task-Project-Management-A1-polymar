@@ -55,6 +55,19 @@ class UserOut(UserBase):
     id: int
 
 
+class UserUpdate(BaseModel):
+    """PATCH body: send only the fields you change (UserBase required all of them)."""
+    employee_id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    designation: Optional[str] = None
+    company_id: Optional[int] = None
+    function_id: Optional[int] = None
+    department_id: Optional[int] = None
+    role: Optional[str] = None
+    reports_to_id: Optional[int] = None
+
+
 class UserMappingOut(BaseModel):
     """One row of the simple User Mapping master-data table.
     Flat by design — each row shows only the immediate manager (reports_to_name).
@@ -254,6 +267,25 @@ class DelayRcaBase(BaseModel):
     approval_status: str = "pending"
 
 
+class DelayRcaUpdate(BaseModel):
+    """PATCH body: send only the fields you change."""
+    delay_category: Optional[str] = None
+    delay_reason: Optional[str] = None
+    root_cause: Optional[str] = None
+    is_internal: Optional[bool] = None
+    dependency_related: Optional[bool] = None
+    responsible_party: Optional[str] = None
+    business_impact: Optional[str] = None
+    schedule_impact_days: Optional[int] = None
+    recovery_action: Optional[str] = None
+    recovery_owner_id: Optional[int] = None
+    revised_due_date: Optional[date] = None
+    support_required: Optional[str] = None
+    management_intervention: Optional[bool] = None
+    preventive_action: Optional[str] = None
+    approval_status: Optional[str] = None
+
+
 class DelayRcaOut(DelayRcaBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -297,6 +329,22 @@ class BacklogBase(BaseModel):
     target_milestone_id: Optional[int] = None
     acceptance_criteria: Optional[str] = None
     status: str = "new"
+
+
+class BacklogUpdate(BaseModel):
+    """PATCH body: send only the fields you change."""
+    code: Optional[str] = None
+    project_id: Optional[int] = None
+    requirement: Optional[str] = None
+    description: Optional[str] = None
+    business_value: Optional[str] = None
+    priority: Optional[str] = None
+    complexity: Optional[str] = None
+    estimated_effort: Optional[float] = None
+    requested_by_id: Optional[int] = None
+    target_milestone_id: Optional[int] = None
+    acceptance_criteria: Optional[str] = None
+    status: Optional[str] = None
 
 
 class BacklogOut(BacklogBase):

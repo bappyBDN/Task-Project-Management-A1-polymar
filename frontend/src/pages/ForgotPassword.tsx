@@ -12,7 +12,7 @@ export default function ForgotPassword() {
     setBusy(true); setErr(''); setMsg('')
     try {
       await api.post('/auth/forgot-password', { email })
-      setMsg('If an account exists, a reset link has been sent. Check the backend terminal for the link.')
+      setMsg('If an account exists for this email, a password reset link has been sent. Please check your inbox (and spam folder).')
     } catch (e: any) {
       setErr(e.message || 'Something went wrong.')
     } finally {
@@ -21,16 +21,18 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-      <form className="card" onSubmit={submit} style={{ width: 380, padding: 32 }}>
+    <div className="auth-page">
+      <form className="card auth-card" onSubmit={submit}>
         <h2 style={{ textAlign: 'center' }}>Forgot Password</h2>
-        {msg && <div className="badge green mb">{msg}</div>}
-        {err && <div className="badge red mb">{err}</div>}
+        {msg && <div className="alert success" role="status">{msg}</div>}
+        {err && <div className="alert error" role="alert">{err}</div>}
 
         <div className="field mb">
-          <label>Email</label>
+          <label htmlFor="fp-email">Email</label>
           <input
+            id="fp-email"
             type="email"
+            autoComplete="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
