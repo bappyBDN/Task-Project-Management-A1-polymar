@@ -270,7 +270,8 @@ export default function Projects() {
           users={users}
           types={Array.from(new Set(projects.map((p) => p.project_type)))}
           onClose={() => setShowForm(false)}
-          onSaved={() => { setShowForm(false); reloadProjects() }}
+          onSaved={() => { setShowForm(false); reloadProjects(); api.get<Task[]>('/tasks').then(setTasks).catch(() => {}) }}
+          withTasks
         />
       )}
     </div>
