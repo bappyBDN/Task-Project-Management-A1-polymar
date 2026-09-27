@@ -91,7 +91,7 @@ export default function Raci() {
       {matrix && (
         <>
           <div className="card mb">
-            <div className="row" style={{ gap: 20 }}>
+            <div className="row" style={{ gap: 20, flexWrap: 'wrap' }}>
               {['R', 'A', 'C', 'I'].map((t) => (
                 <div key={t} className="row">
                   <strong style={{ color: RACI_COLORS[t], fontSize: 18 }}>{t}</strong>
@@ -112,8 +112,10 @@ export default function Raci() {
             {projectId ? projectName(Number(projectId)) ?? 'Project' : 'All projects'} · {matrix.tasks.length} tasks · {matrix.users.length} people{loading ? ' · updating…' : ''}
           </div>
 
-          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-            <table style={{ minWidth: 600 }}>
+          {/* Only the rows scroll: the header row (and the Task column) stay pinned. */}
+          <div className="card" style={{ padding: 0 }}>
+            <div className="raci-scroll">
+            <table className="raci-table" style={{ minWidth: 600 }}>
               <thead>
                 <tr>
                   <th>Task</th>
@@ -139,6 +141,7 @@ export default function Raci() {
                 ))}
               </tbody>
             </table>
+            </div>
             {matrix.rows.length === 0 && <div className="empty">No tasks match the current filters.</div>}
           </div>
         </>

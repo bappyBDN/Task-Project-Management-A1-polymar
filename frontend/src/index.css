@@ -56,7 +56,7 @@ body {
 .nav a.active span { color: #fff; }
 .nav .section { padding: 16px 18px 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #7e8aa0; }
 
-.main { margin-left: 240px; flex: 1; padding: 24px 28px; }
+.main { margin-left: 240px; flex: 1; padding: 24px 28px; min-width: 0; } /* min-width: wide tables scroll inside their box instead of stretching the page */
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .topbar h1 { font-size: 20px; margin: 0; font-weight: 700; color: var(--navy); }
 .topbar .crumb { font-size: 12px; color: var(--muted); }
@@ -213,3 +213,20 @@ tr.clickable, .clickable { cursor: pointer; }
 /* Kanban: 6 columns on wide screens, side-scroll on smaller ones */
 .kanban-board { grid-template-columns: repeat(6, minmax(220px, 1fr)); min-width: 1400px; }
 @media (max-width: 900px) { .kanban-board { grid-template-columns: repeat(6, 250px); min-width: 0; } }
+
+/* RACI matrix: header row stays fixed, only the rows scroll */
+.raci-scroll { max-height: calc(100vh - 300px); min-height: 280px; overflow: auto; border-radius: 10px; }
+.raci-table { border-collapse: separate; border-spacing: 0; }
+.raci-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: #f7f9fc; box-shadow: inset 0 -1px 0 var(--line);
+  white-space: nowrap;
+}
+/* first column (Task) also stays visible when scrolling sideways */
+.raci-table th:first-child, .raci-table td:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background: #fff; box-shadow: inset -1px 0 0 var(--line);
+  min-width: 200px;
+}
+.raci-table thead th:first-child { z-index: 3; background: #f7f9fc; }
+.raci-table tr:hover td:first-child { background: #fafbfd; }
