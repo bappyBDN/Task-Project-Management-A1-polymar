@@ -16,7 +16,14 @@ interface Props {
   onSaved: () => void
   onRefresh?: () => void
   task?: Task
+  // Responsible / Accountable person (not admin / PMO) editing their own task: Accountable, Reviewer,
+  // an already-set due date and Completed/Closed are locked (the server enforces the same).
+  limited?: boolean
+  // Responsible person (not Accountable): they also can't reassign the Responsible person.
+  lockResponsible?: boolean
 }
+
+const DONE_STATUSES = ['completed', 'closed']
 
 const EMPTY = {
   code: '',
@@ -61,7 +68,7 @@ const initialForm = (task?: Task) =>
     ? Object.fromEntries(Object.entries({ ...EMPTY, ...task }).map(([k, v]) => [k, v ?? '']))
     : { ...EMPTY }
 
-export default function TaskForm({ projects, users, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task }: Props) {
+export default function TaskForm({ projects, users, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockResponsible = false }: Props) {
   const { user } = useAuth()
   const [form, setForm] = useState<any>(() => initialForm(task))
   const [error, setError] = useState('')
@@ -203,6 +210,15 @@ export default function TaskForm({ projects, users, companies = [], functions = 
       blocker_details: form.blocker_details,
       acceptance_criteria: form.acceptance_criteria,
     }
+    if (limited && task) {
+      // fields this person may not change are left exactly as they are
+      delete payload.code
+      delete payload.accountable_id
+      delete payload.reviewer_id
+      delete payload.approved_due_date
+      if (task.baseline_due_date) delete payload.baseline_due_date
+      if (lockResponsible) delete payload.responsible_id
+    }
     try {
       if (task) await api.patch(`/tasks/${task.id}`, payload)
       else await api.post('/tasks', payload)
@@ -284,6 +300,13 @@ export default function TaskForm({ projects, users, companies = [], functions = 
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>{task ? `Edit ${task.code}` : 'New Task'}</h2>
+        {limited && (
+          <div className="alert info">
+            You are editing as the task's <strong>{lockResponsible ? 'Responsible' : 'Accountable'}</strong> person.
+            {lockResponsible ? ' Responsible, ' : ' '}Accountable, Reviewer and the due date can only be changed by an admin / PMO;
+            use "Request Date Revision" for a new date and "Submit for Completion" to finish the task.
+          </div>
+        )}
         {error && <div className="badge red" style={{ marginBottom: 12 }}>{error}</div>}
 
         <label>Task Title *</label>
@@ -381,7 +404,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             <label>Status *</label>
             <SearchableSelect
               value={str(form.status)}
-              items={statuses.map((s) => ({ value: s, label: label(s) }))}
+              items={statuses.filter((s) => !limited || !DONE_STATUSES.includes(s) || s === task?.status).map((s) => ({ value: s, label: label(s) }))}
               onChange={(v) => customAdd('status', statuses, v)}
               placeholder="Select or type…"
               allowCustom
@@ -397,7 +420,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
         <input value={form.expected_deliverable} onChange={(e) => set('expected_deliverable', e.target.value)} />
 
         <div className="form-row three">
-          <div>
+          <fieldset disabled={lockResponsible} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockResponsible ? 'Only the Accountable person or an admin / PMO can change this' : undefined}>
             <label>Responsible (R) *</label>
             <SearchableSelect
               value={str(form.responsible_id)}
@@ -408,8 +431,8 @@ export default function TaskForm({ projects, users, companies = [], functions = 
               addLabel="new user"
               onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
             />
-          </div>
-          <div>
+          </fieldset>
+          <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
             <label>Accountable (A) *</label>
             <SearchableSelect
               value={str(form.accountable_id)}
@@ -423,8 +446,8 @@ export default function TaskForm({ projects, users, companies = [], functions = 
             {form.responsible_id && form.accountable_id && form.accountable_id === managerIdOf(str(form.responsible_id)) && (
               <div className="small muted" style={{ marginTop: 4 }}>Auto-suggested: Responsible's immediate senior. Change it anytime.</div>
             )}
-          </div>
-          <div>
+          </fieldset>
+          <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
             <label>Reviewer *</label>
             <SearchableSelect
               value={str(form.reviewer_id)}
@@ -435,7 +458,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
               addLabel="new user"
               onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
             />
-          </div>
+          </fieldset>
         </div>
 
         <div className="form-row three">
@@ -445,7 +468,8 @@ export default function TaskForm({ projects, users, companies = [], functions = 
           </div>
           <div>
             <label>Baseline Due Date *</label>
-            <input type="date" value={form.baseline_due_date} onChange={(e) => set('baseline_due_date', e.target.value)} />
+            <input type="date" value={form.baseline_due_date} onChange={(e) => set('baseline_due_date', e.target.value)}
+              disabled={limited && !!task?.baseline_due_date} title={limited && task?.baseline_due_date ? 'Use "Request Date Revision" to change the due date' : undefined} />
           </div>
           <div>
             <label>Progress %</label>

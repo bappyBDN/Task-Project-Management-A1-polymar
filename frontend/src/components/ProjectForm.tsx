@@ -67,15 +67,27 @@ export function errText(e: any): string {
 /** "Capital Project" -> "capital_project", the same style as the built-in values. */
 const toKey = (v: string) => v.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 
-export default function ProjectForm({ companies, users, types, onClose, onSaved, withTasks = false }: {
+export default function ProjectForm({ companies, users, types, onClose, onSaved, withTasks = false, project, limited = false }: {
   companies: Company[]
   users: User[]
   types: string[] // project types already used by existing projects
   onClose: () => void
   onSaved: (p: Project, tasksCreated?: number) => void
   withTasks?: boolean // show the "Tasks" section (Projects page)
+  project?: Project // set = edit this project (PATCH) instead of creating one
+  // Manager / Owner (not admin / PMO) editing: manager and dates are locked (the server enforces the same)
+  limited?: boolean
 }) {
-  const [form, setForm] = useState({ ...EMPTY_FORM })
+  const editing = !!project
+  if (editing) withTasks = false
+  const [form, setForm] = useState(() => project ? {
+    name: project.name ?? '', company_id: project.company_id ? String(project.company_id) : '',
+    manager_id: project.manager_id ? String(project.manager_id) : '',
+    project_type: project.project_type || 'operational', methodology: project.methodology || 'hybrid',
+    status: project.status || 'planning', priority: project.priority || 'medium',
+    start_date: project.start_date || '', baseline_due_date: project.baseline_due_date || '',
+    objective: project.objective || '',
+  } : { ...EMPTY_FORM })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [newTypes, setNewTypes] = useState<string[]>([])
@@ -153,6 +165,16 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
 
     setSaving(true)
     setError('')
+    if (project) {
+      try {
+        onSaved(await updateProject(project))
+      } catch (e: any) {
+        setError(errText(e))
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     let p = created
     if (!p) {
       try {
@@ -208,6 +230,28 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
     }
   }
 
+  const updateProject = (pr: Project) => {
+    const payload: any = {
+      name: form.name.trim(),
+      company_id: Number(form.company_id),
+      project_type: form.project_type || 'operational',
+      methodology: form.methodology || 'hybrid',
+      status: form.status || 'planning',
+      priority: form.priority || 'medium',
+      objective: form.objective.trim() || null,
+    }
+    if (!limited) {
+      const p: any = pr
+      // keep an approved (revised) due date; only follow the baseline if they were the same
+      const keepApproved = p.approved_due_date && p.approved_due_date !== p.baseline_due_date
+      payload.manager_id = form.manager_id ? Number(form.manager_id) : null
+      payload.start_date = form.start_date
+      payload.baseline_due_date = form.baseline_due_date
+      payload.approved_due_date = keepApproved ? p.approved_due_date : form.baseline_due_date
+    }
+    return api.patch<Project>(`/projects/${pr.id}`, payload)
+  }
+
   const createProject = () =>
     api.post<Project>('/projects', {
       code: null,
@@ -236,23 +280,28 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
   return (
     <div className="modal-backdrop" onClick={close}>
       <div className="modal" style={withTasks ? { maxHeight: '92vh', overflowY: 'auto' } : undefined} onClick={(e) => e.stopPropagation()}>
-        <h2>{created ? `New Project - ${created.code || created.name} saved` : 'New Project'}</h2>
-        {error && <div className="badge red" style={{ marginBottom: 12 }}>{error}</div>}
+        <h2>{editing ? `Edit Project - ${project!.code || project!.name}` : created ? `New Project - ${created.code || created.name} saved` : 'New Project'}</h2>
+        {error && <div className="alert error" role="alert">{error}</div>}
+        {limited && (
+          <div className="alert info">
+            You are editing as the project's <strong>Manager / Owner</strong>. The Project Manager and the dates can only be changed by an admin / PMO.
+          </div>
+        )}
 
         <fieldset disabled={lock} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <label>Project Name *</label>
         <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Kiln 2 Vibration Monitoring" autoFocus />
-        <div className="small muted" style={{ marginTop: 6 }}>Project code is generated automatically.</div>
+        {!editing && <div className="small muted" style={{ marginTop: 6 }}>Project code is generated automatically.</div>}
 
         <div className="form-row">
           <div>
             <label>Company (SBU) *</label>
             <SearchableSelect value={form.company_id} items={companies.map((c) => ({ value: String(c.id), label: c.name }))} onChange={(v) => set('company_id', v)} placeholder="Search company…" />
           </div>
-          <div>
+          <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
             <label>Project Manager</label>
             <SearchableSelect value={form.manager_id} items={users.map((u) => ({ value: String(u.id), label: u.name }))} onChange={(v) => set('manager_id', v)} placeholder="Search person…" />
-          </div>
+          </fieldset>
         </div>
 
         <div className="form-row three">
@@ -277,11 +326,11 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
           </div>
           <div>
             <label>Start Date *</label>
-            <input type="date" value={form.start_date} onChange={(e) => set('start_date', e.target.value)} />
+            <input type="date" value={form.start_date} onChange={(e) => set('start_date', e.target.value)} disabled={limited} />
           </div>
           <div>
             <label>Due Date *</label>
-            <input type="date" value={form.baseline_due_date} min={form.start_date || undefined} onChange={(e) => set('baseline_due_date', e.target.value)} />
+            <input type="date" value={form.baseline_due_date} min={form.start_date || undefined} onChange={(e) => set('baseline_due_date', e.target.value)} disabled={limited} />
           </div>
         </div>
 
@@ -375,6 +424,7 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
           <button className="btn" onClick={() => close()} disabled={saving}>{created ? 'Close' : 'Cancel'}</button>
           <button className="btn primary" onClick={submit} disabled={saving}>
             {saving ? 'Saving…'
+              : editing ? 'Save Changes'
               : created ? `Retry ${drafts.length} Task${drafts.length === 1 ? '' : 's'}`
               : drafts.length ? `Create Project + ${drafts.length} Task${drafts.length === 1 ? '' : 's'}`
               : 'Create Project'}

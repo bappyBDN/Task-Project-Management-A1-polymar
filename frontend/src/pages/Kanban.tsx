@@ -66,8 +66,19 @@ export default function Kanban() {
     return list
   }, [tasks, user, canSeeAll, filter])
 
+  // Responsible / Accountable move their own cards; only admin / PMO can drop into Completed
+  // (everyone else finishes a task with "Submit for Completion" on the task page).
+  const canMove = (t: Task) => canSeeAll || t.responsible_id === user?.id || t.accountable_id === user?.id
+  const canMoveTo = (t: Task, status: string) => canMove(t) && (canSeeAll || status !== 'completed')
+
   const move = async (task: Task, status: string) => {
     if (!status || status === task.status || movingId !== null) return
+    if (!canMoveTo(task, status)) {
+      setErr(status === 'completed' && canMove(task)
+        ? `To complete ${task.code}, open it and use "Submit for Completion".`
+        : `Only the Responsible or Accountable person (or an admin / PMO) can move ${task.code}.`)
+      return
+    }
     setMovingId(task.id)
     setErr('')
     try {
@@ -158,7 +169,7 @@ export default function Kanban() {
                 </div>
                 {colTasks.map((t) => (
                   <div key={t.id} className="card" style={{ marginBottom: 8, padding: 10, cursor: 'grab', minWidth: 0, wordBreak: 'break-word', opacity: movingId === t.id ? 0.5 : 1 }}
-                    draggable={movingId === null}
+                    draggable={movingId === null && canMove(t)}
                     onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move' }}
                     onClick={() => navigate(`/tasks/${t.id}`)}>
                     <div className="small" style={{ fontWeight: 600 }}>{t.title}</div>
@@ -168,7 +179,7 @@ export default function Kanban() {
                       <span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span>
                       <span className={`health-dot ${HEALTH_COLORS[t.health]}`} />
                     </div>
-                    <select
+                    {canMove(t) && <select
                       aria-label={`Move ${t.code} to another column`}
                       value=""
                       disabled={movingId !== null}
@@ -177,8 +188,8 @@ export default function Kanban() {
                       style={{ marginTop: 8, padding: '4px 8px', fontSize: 12 }}
                     >
                       <option value="">{movingId === t.id ? 'Moving…' : 'Move to…'}</option>
-                      {COLUMNS.filter((c) => c.key !== col.key).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                    </select>
+                      {COLUMNS.filter((c) => c.key !== col.key && canMoveTo(t, c.key)).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                    </select>}
                   </div>
                 ))}
                 {colTasks.length === 0 && <div className="empty small" style={{ padding: 16 }}>—</div>}

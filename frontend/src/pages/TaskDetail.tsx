@@ -73,6 +73,9 @@ export default function TaskDetail() {
     .sort((a, b) => b.id - a.id)[0]
 
   const isMine = user?.id === task.responsible_id || user?.id === task.accountable_id
+  // Admin / PMO edit everything; the Responsible / Accountable person edits the task details (limited).
+  const isAccountable = user?.id === task.accountable_id
+  const canEdit = isPrivileged || isMine
 
   const requestApproval = async (type: string, revisedDate?: string) => {
     if (cooldown) return // Prevent double clicks during cooldown
@@ -123,7 +126,7 @@ export default function TaskDetail() {
           >
             {cooldown ? 'Submitted...' : 'Submit for Completion'}
           </button>
-          {isPrivileged && <button className="btn sm" onClick={() => setShowEdit(true)}>✎ Edit Task</button>}
+          {canEdit && <button className="btn sm" onClick={() => setShowEdit(true)}>✎ Edit Task</button>}
         </div>
       </div>
 
@@ -228,7 +231,7 @@ export default function TaskDetail() {
       </div>
 
       {showRca && <RcaForm task={task} users={users} onClose={() => setShowRca(false)} onSaved={() => { setShowRca(false); load() }} />}
-      {showProgress && <ProgressForm task={task} onClose={() => setShowProgress(false)} onSaved={() => { setShowProgress(false); load() }} />}
+      {showProgress && <ProgressForm task={task} canComplete={isPrivileged} onClose={() => setShowProgress(false)} onSaved={() => { setShowProgress(false); load() }} />}
       {showRevise && <ReviseForm task={task} users={users} onClose={() => setShowRevise(false)} onSaved={() => { setShowRevise(false); load() }} />}
       {showEdit && (
         <TaskForm
@@ -238,6 +241,8 @@ export default function TaskDetail() {
           functions={functions}
           departments={departments}
           task={task}
+          limited={!isPrivileged}
+          lockResponsible={!isPrivileged && !isAccountable}
           onClose={() => setShowEdit(false)}
           onSaved={() => { setShowEdit(false); load() }}
         />
@@ -388,7 +393,7 @@ function RcaForm({ task, users, onClose, onSaved }: { task: Task; users: User[];
   )
 }
 
-function ProgressForm({ task, onClose, onSaved }: { task: Task; onClose: () => void; onSaved: () => void }) {
+function ProgressForm({ task, canComplete, onClose, onSaved }: { task: Task; canComplete: boolean; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState<any>({ progress_pct: task.progress_pct, status: task.status, blocker: task.blocker })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
@@ -435,8 +440,11 @@ function ProgressForm({ task, onClose, onSaved }: { task: Task; onClose: () => v
           <div>
             <label>Status</label>
             <select value={f.status} onChange={(e) => set('status', e.target.value)} disabled={isSubmitting}>
-              {['backlog', 'ready', 'in_progress', 'in_review', 'completed', 'blocked', 'on_hold'].map((s) => <option key={s} value={s}>{label(s)}</option>)}
+              {['backlog', 'ready', 'in_progress', 'in_review', 'completed', 'blocked', 'on_hold']
+                .filter((s) => canComplete || s !== 'completed' || task.status === 'completed')
+                .map((s) => <option key={s} value={s}>{label(s)}</option>)}
             </select>
+            {!canComplete && <div className="small muted" style={{ marginTop: 4 }}>To finish the task, use "Submit for Completion".</div>}
           </div>
         </div>
         <label>Remarks</label>

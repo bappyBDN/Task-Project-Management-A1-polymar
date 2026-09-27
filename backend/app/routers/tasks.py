@@ -5,7 +5,7 @@ from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import models, schemas, services
+from app import models, permissions, schemas, services
 from app.auth import get_admin_user, get_current_user
 from app.database import get_db
 
@@ -119,7 +119,8 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{task_id}", response_model=schemas.TaskOut)
-def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends(get_db)):
+def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends(get_db),
+                current_user: models.User = Depends(get_current_user)):
     task = db.get(models.Task, task_id)
     if not task or task.is_deleted:
         raise HTTPException(404, "Task not found")
@@ -139,6 +140,8 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
         data["code"] = new_code
     if data.get("project_id") and not db.get(models.Project, data["project_id"]):
         raise HTTPException(400, "Selected project does not exist")
+    # Responsible / Accountable may edit their own task within limits (see app/permissions.py).
+    data = permissions.check_task_edit(db, current_user, task, data)
 
     previous = task.title
     old_project_id = task.project_id
@@ -147,7 +150,7 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
     _normalize(db, task)
     for pid in {old_project_id, task.project_id} - {None}:
         services.recalc_project_health(db, pid)
-    services.audit(db, "system", "task", task.id, "updated", previous_value=previous, new_value=task.title)
+    services.audit(db, current_user.name, "task", task.id, "updated", previous_value=previous, new_value=task.title)
     try:
         db.commit()
     except IntegrityError:
@@ -158,14 +161,16 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_db)):
+def delete_task(task_id: int, db: Session = Depends(get_db),
+                current_user: models.User = Depends(get_current_user)):
     task = db.get(models.Task, task_id)
     if not task:
         raise HTTPException(404, "Task not found")
+    permissions.check_task_delete(db, current_user, task)
     task.is_deleted = True
     if task.project_id:
         services.recalc_project_health(db, task.project_id)
-    services.audit(db, "system", "task", task.id, "deleted", previous_value=task.title)
+    services.audit(db, current_user.name, "task", task.id, "deleted", previous_value=task.title)
     db.commit()
 
 
@@ -206,10 +211,12 @@ def permanent_delete_task(task_id: int, admin: models.User = Depends(get_admin_u
 
 # ---------------------------------------------------------------- Progress
 @router.post("/{task_id}/progress", response_model=schemas.ProgressUpdateOut, status_code=201)
-def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session = Depends(get_db)):
+def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
     task = db.get(models.Task, task_id)
     if not task or task.is_deleted:
         raise HTTPException(404, "Task not found")
+    permissions.check_task_progress(db, current_user, task, payload.status)
     update = models.ProgressUpdate(**{**payload.model_dump(), "task_id": task_id})
     task.progress_pct = payload.progress_pct
     if payload.status:
@@ -224,7 +231,7 @@ def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session 
     if task.project_id:
         services.recalc_project_health(db, task.project_id)
     db.add(update)
-    services.audit(db, "system", "task", task.id, "progress_updated", new_value=str(task.progress_pct))
+    services.audit(db, current_user.name, "task", task.id, "progress_updated", new_value=str(task.progress_pct))
     db.commit()
     db.refresh(update)
     return update

@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import models, schemas, services
-from app.auth import get_admin_user
+from app import models, permissions, schemas, services
+from app.auth import get_admin_user, get_current_user
 from app.database import get_db
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -70,7 +70,8 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{project_id}", response_model=schemas.ProjectOut)
-def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session = Depends(get_db)):
+def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
     project = db.get(models.Project, project_id)
     if not project:
         raise HTTPException(404, "Project not found")
@@ -81,9 +82,11 @@ def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session 
         if db.query(models.Project).filter(models.Project.code == new_code, models.Project.id != project.id).first():
             raise HTTPException(409, f"Project code {new_code} already exists")
         data["code"] = new_code
+    # Manager / Owner may edit project details (see app/permissions.py).
+    data = permissions.check_project_edit(db, current_user, project, data)
     for k, v in data.items():
         setattr(project, k, v)
-    services.audit(db, "system", "project", project.id, "updated", new_value=project.name)
+    services.audit(db, current_user.name, "project", project.id, "updated", new_value=project.name)
     db.commit()
     db.refresh(project)
     return project
@@ -95,7 +98,13 @@ def list_milestones(project_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{project_id}/milestones", response_model=schemas.MilestoneOut, status_code=201)
-def create_milestone(project_id: int, payload: schemas.MilestoneBase, db: Session = Depends(get_db)):
+def create_milestone(project_id: int, payload: schemas.MilestoneBase, db: Session = Depends(get_db),
+                     current_user: models.User = Depends(get_current_user)):
+    project = db.get(models.Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if not permissions.can_edit_project(db, current_user, project):
+        raise HTTPException(403, "Only the project's Manager or Owner (or an admin / PMO) can add milestones.")
     ms = models.Milestone(**{**payload.model_dump(), "project_id": project_id})
     db.add(ms)
     db.commit()

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
+import { useAuth } from '../auth'
+import { useIsPrivileged } from '../usePrivileged'
+import ProjectForm from '../components/ProjectForm'
 import { Company, Milestone, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 
@@ -13,6 +16,10 @@ export default function ProjectDetail() {
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loadErr, setLoadErr] = useState('')
+  const [showEdit, setShowEdit] = useState(false)
+  const [savedMsg, setSavedMsg] = useState('')
+  const { user } = useAuth()
+  const isPrivileged = useIsPrivileged(user?.role)
 
   useEffect(() => {
     api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
@@ -67,6 +74,9 @@ export default function ProjectDetail() {
   }
 
   const companyName = companies.find((c) => c.id === project.company_id)?.name ?? '—'
+  // Admin / PMO edit everything; the project's Manager or Owner edits the details (limited).
+  const isProjectLead = !!user && (user.id === project.manager_id || user.id === project.owner_id)
+  const canEdit = isPrivileged || isProjectLead
 
   return (
     <div>
@@ -80,7 +90,21 @@ export default function ProjectDetail() {
             <span className={`health-dot ${HEALTH_COLORS[project.health]}`} /> {label(project.health)}
           </div>
         </div>
+        {canEdit && <button className="btn sm" onClick={() => { setSavedMsg(''); setShowEdit(true) }}>✎ Edit Project</button>}
       </div>
+
+      {savedMsg && <div className="alert success" role="status">{savedMsg}</div>}
+      {showEdit && (
+        <ProjectForm
+          project={project}
+          limited={!isPrivileged}
+          companies={companies}
+          users={users}
+          types={[project.project_type]}
+          onClose={() => setShowEdit(false)}
+          onSaved={(p) => { setProject(p); setShowEdit(false); setSavedMsg('Project updated.') }}
+        />
+      )}
 
       <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr', alignItems: 'start', gap: 16 }}>
         <div>
