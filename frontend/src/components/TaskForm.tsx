@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import ProjectForm from './ProjectForm'
 
 interface Props {
   projects: Project[]
@@ -221,6 +222,8 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
   const createdProject = async (p: Project) => {
     set('project_id', String(p.id))
+    // the new project always has an SBU - use it for the task if none picked yet
+    if (!form.company_id && p.company_id) set('company_id', String(p.company_id))
     setShowProjectModal(false)
     onRefresh?.() // refresh parent lists WITHOUT closing the task form
   }
@@ -458,7 +461,15 @@ export default function TaskForm({ projects, users, companies = [], functions = 
         </div>
       </div>
 
-      {showProjectModal && <ProjectModal onClose={() => setShowProjectModal(false)} onCreated={createdProject} />}
+      {showProjectModal && (
+        <ProjectForm
+          companies={companies}
+          users={users}
+          types={projects.map((p) => p.project_type)}
+          onClose={() => setShowProjectModal(false)}
+          onSaved={createdProject}
+        />
+      )}
       {showUserModal && <UserModal onClose={() => setShowUserModal(false)} onCreated={createdUser} isAdmin={user?.role === 'admin'} />}
       {showOrgModal && <OrgModal kind={showOrgModal} onClose={() => setShowOrgModal(null)} onCreated={(o) => createdOrg(showOrgModal, o)} />}
     </div>
@@ -498,38 +509,6 @@ function OrgModal({ kind, onClose, onCreated }: { kind: 'company' | 'function' |
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Create'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => void }) {
-  const [name, setName] = useState('')
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async () => {
-    if (!name.trim()) { setErr('Project name is required'); return }
-    setBusy(true)
-    setErr('')
-    try {
-      const p = await api.post<Project>('/projects', { name: name.trim(), code: null })
-      onCreated(p)
-    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
-        <h2>New Project</h2>
-        {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
-        <label>Project Name *</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-        <div className="small muted" style={{ marginTop: 6 }}>Project code is generated automatically.</div>
-        <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Create Project'}</button>
         </div>
       </div>
     </div>
