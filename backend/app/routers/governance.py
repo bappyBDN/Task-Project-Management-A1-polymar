@@ -20,19 +20,25 @@ Who sees a meeting in the list:
   Admins see all; everyone else sees meetings they organised or attend.
 """
 import json
+import logging
 import re
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import models, schemas, services
+from app import email_service, models, schemas, services
 from app.auth import get_current_user
 from app.database import get_db
 
 router = APIRouter(tags=["governance"])
+logger = logging.getLogger("app.governance")
+
+# Meeting invitation EMAILS go only to invitees who hold one of these roles on
+# the project's tasks (in-app notifications still go to every invitee).
+EMAIL_ROLES = {"Responsible", "Accountable", "Reviewer"}
 
 ADMIN_ROLE = "admin"
 MEETING_DETAILS = "meeting_scheduled"
@@ -58,6 +64,7 @@ class MeetingFullOut(schemas.MeetingOut):
     location: Optional[str] = None
     organizer_id: Optional[int] = None
     attendee_ids: list[int] = []
+    emailed_ids: list[int] = []   # invitees an email invitation was sent to
     can_manage: bool = False
 
 
@@ -121,8 +128,24 @@ def _to_out(m: models.Meeting, details: dict, user) -> MeetingFullOut:
         project_id=d.get("project_id"), meeting_time=d.get("meeting_time"),
         purpose=d.get("purpose"), location=d.get("location"),
         organizer_id=d.get("organizer_id"), attendee_ids=d.get("attendee_ids") or [],
+        emailed_ids=d.get("emailed_ids") or [],
         can_manage=_is_admin(user) or (user is not None and user.id == d.get("organizer_id")),
     )
+
+
+def _send_meeting_invites(invites: list, meeting: dict) -> None:
+    """Runs AFTER the response is sent (background task), so the page stays fast.
+    Uses plain data only (no database session). Any email problem is logged and
+    never affects the saved meeting."""
+    sent = 0
+    for inv in invites:
+        try:
+            if email_service.send_meeting_invite_email(to_email=inv["email"], recipient_name=inv["name"],
+                                                       roles=inv["roles"], **meeting):
+                sent += 1
+        except Exception:
+            logger.exception("Meeting invitation email to %s failed", inv.get("email"))
+    logger.info("Meeting %s: invitation emails sent %s/%s", meeting.get("meeting_id"), sent, len(invites))
 
 
 def _can_see(details: dict, user) -> bool:
@@ -178,7 +201,7 @@ def project_people(project_id: int, db: Session = Depends(get_db), current_user:
 
 
 @router.post("/meetings", response_model=MeetingFullOut, status_code=201)
-def create_meeting(payload: MeetingCreate, db: Session = Depends(get_db),
+def create_meeting(payload: MeetingCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db),
                    current_user: models.User = Depends(get_current_user)):
     title = payload.title.strip()
     purpose = payload.purpose.strip()
@@ -211,6 +234,9 @@ def create_meeting(payload: MeetingCreate, db: Session = Depends(get_db),
     db.add(meeting)
     db.flush()
 
+    # Email only invitees who are Responsible / Accountable / Reviewer on the project.
+    emailed_ids = sorted(uid for uid in attendees - {current_user.id} if people.get(uid, set()) & EMAIL_ROLES)
+
     details = {
         "project_id": project.id,
         "meeting_time": time,
@@ -218,6 +244,7 @@ def create_meeting(payload: MeetingCreate, db: Session = Depends(get_db),
         "location": (payload.location or "").strip() or None,
         "organizer_id": current_user.id,
         "attendee_ids": sorted(attendees),
+        "emailed_ids": emailed_ids,
     }
     db.add(models.AuditLog(
         actor=current_user.name, entity_type="meeting", entity_id=meeting.id,
@@ -234,6 +261,27 @@ def create_meeting(payload: MeetingCreate, db: Session = Depends(get_db),
 
     db.commit()
     db.refresh(meeting)
+
+    # Queue the invitation emails; they are sent after this response returns.
+    if emailed_ids:
+        recipients = db.query(models.User).filter(models.User.id.in_(emailed_ids)).all()
+        invites = [
+            {"email": u.email, "name": u.name, "roles": sorted(people.get(u.id, set()) & EMAIL_ROLES)}
+            for u in recipients if u.email
+        ]
+        if invites:
+            background_tasks.add_task(_send_meeting_invites, invites, {
+                "meeting_id": meeting.id,
+                "title": meeting.title,
+                "meeting_type": meeting.meeting_type,
+                "meeting_date": payload.meeting_date,
+                "meeting_time": time,
+                "purpose": purpose,
+                "location": details["location"],
+                "project_label": f"{project.code} - {project.name}",
+                "organizer_name": current_user.name,
+            })
+
     return _to_out(meeting, details, current_user)
 
 

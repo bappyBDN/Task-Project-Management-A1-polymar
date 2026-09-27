@@ -19,8 +19,11 @@ credentials from app.config.settings, so swapping accounts is just an
 import html
 import logging
 import smtplib
+from datetime import date, datetime, timedelta
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email import encoders
 from email.utils import formataddr
 from typing import Optional
 
@@ -41,8 +44,14 @@ def _filter_allowed(to_addrs: list[str]) -> list[str]:
     return kept
 
 
-def _send(to_addrs: list[str], subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
-    """Low-level sender. Returns True only if the SMTP call actually succeeded."""
+def _send(to_addrs: list[str], subject: str, html_body: str, text_body: Optional[str] = None,
+          attachments: Optional[list] = None) -> bool:
+    """Low-level sender. Returns True only if the SMTP call actually succeeded.
+
+    attachments (optional): list of (filename, mime_type, content_str), e.g.
+    ("invite.ics", "text/calendar", "..."). Existing callers don't pass it, so
+    their emails are built exactly as before.
+    """
     to_addrs = [a for a in dict.fromkeys(a.strip() for a in to_addrs if a)]
     to_addrs = _filter_allowed(to_addrs)
     if not to_addrs:
@@ -56,12 +65,25 @@ def _send(to_addrs: list[str], subject: str, html_body: str, text_body: Optional
         logger.warning("Gmail credentials missing (GMAIL_USER / GMAIL_APP_PASSWORD) — skipping '%s'.", subject)
         return False
 
-    msg = MIMEMultipart("alternative")
+    body = MIMEMultipart("alternative")
+    body.attach(MIMEText(text_body or "Please view this email in an HTML-capable client.", "plain", "utf-8"))
+    body.attach(MIMEText(html_body, "html", "utf-8"))
+    if attachments:
+        # mixed = the text/HTML body plus file attachments
+        msg = MIMEMultipart("mixed")
+        msg.attach(body)
+        for filename, mime_type, content in attachments:
+            maintype, subtype = mime_type.split("/", 1)
+            part = MIMEBase(maintype, subtype, name=filename)
+            part.set_payload(content.encode("utf-8"))
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=filename)
+            msg.attach(part)
+    else:
+        msg = body  # unchanged behaviour for every existing email
     msg["Subject"] = subject
     msg["From"] = formataddr(("Anwar Task Manager", settings.gmail_user))
     msg["To"] = ", ".join(to_addrs)
-    msg.attach(MIMEText(text_body or "Please view this email in an HTML-capable client.", "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
         if settings.smtp_port == 465:
@@ -283,3 +305,171 @@ def send_welcome_set_password_email(
     )
 
     return _send([to_email], subject, html_body, text_body=text_body)
+
+
+# ---------------------------------------------------------------- Meeting invitation
+MEETING_TZ_OFFSET_HOURS = 6       # Bangladesh Standard Time (UTC+6, no daylight saving)
+MEETING_TZ_LABEL = "Bangladesh Time"
+MEETING_DEFAULT_MINUTES = 60      # meetings have a start time only; calendars get a 1-hour slot
+
+
+def _ics_escape(v: str) -> str:
+    return (v or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n")
+
+
+def _ics_fold(line: str) -> str:
+    """Calendar files must wrap lines longer than 75 bytes."""
+    out, cur = [], ""
+    for ch in line:
+        if len((cur + ch).encode("utf-8")) > 73:
+            out.append(cur)
+            cur = " " + ch
+        else:
+            cur += ch
+    out.append(cur)
+    return "\r\n".join(out)
+
+
+def build_meeting_ics(meeting_id: int, title: str, meeting_date: date, meeting_time: str,
+                      purpose: str, location: Optional[str], project_label: str,
+                      organizer_name: str) -> str:
+    """A standard .ics calendar entry (opens in Outlook, Google Calendar, Apple Calendar)."""
+    h, m = (int(x) for x in meeting_time.split(":"))
+    start_local = datetime(meeting_date.year, meeting_date.month, meeting_date.day, h, m)
+    start_utc = start_local - timedelta(hours=MEETING_TZ_OFFSET_HOURS)
+    end_utc = start_utc + timedelta(minutes=MEETING_DEFAULT_MINUTES)
+    fmt = "%Y%m%dT%H%M%SZ"
+    description = f"Project: {project_label}\nOrganised by: {organizer_name}\n\nPurpose / Agenda:\n{purpose}"
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Anwar Group//Task Manager//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:meeting-{meeting_id}@anwar-task-manager",
+        f"DTSTAMP:{datetime.utcnow().strftime(fmt)}",
+        f"DTSTART:{start_utc.strftime(fmt)}",
+        f"DTEND:{end_utc.strftime(fmt)}",
+        f"SUMMARY:{_ics_escape(title)}",
+        f"DESCRIPTION:{_ics_escape(description)}",
+    ]
+    if location:
+        lines.append(f"LOCATION:{_ics_escape(location)}")
+    lines += [
+        "BEGIN:VALARM",
+        "TRIGGER:-PT30M",
+        "ACTION:DISPLAY",
+        "DESCRIPTION:Meeting reminder",
+        "END:VALARM",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    return "\r\n".join(_ics_fold(l) for l in lines) + "\r\n"
+
+
+def send_meeting_invite_email(
+    to_email: str,
+    recipient_name: str,
+    roles: list[str],
+    meeting_id: int,
+    title: str,
+    meeting_type: str,
+    meeting_date: date,
+    meeting_time: str,
+    purpose: str,
+    location: Optional[str],
+    project_label: str,
+    organizer_name: str,
+) -> bool:
+    """Formal meeting invitation to one project member, with a calendar (.ics) attachment."""
+    h, m = (int(x) for x in meeting_time.split(":"))
+    time_12h = datetime(2000, 1, 1, h, m).strftime("%I:%M %p").lstrip("0")
+    date_long = meeting_date.strftime("%A, %d %B %Y")
+    date_short = meeting_date.strftime("%a, %d %b %Y")
+    type_label = (meeting_type or "meeting").replace("_", " ").title()
+    role_text = ", ".join(roles) if roles else "Project Member"
+    link = f"{settings.frontend_url.rstrip('/')}/governance"
+    e = html.escape
+
+    subject = f"Meeting Invitation: {title} - {date_short}, {time_12h}"
+
+    rows = [
+        ("Meeting", title),
+        ("Project", project_label),
+        ("Date", date_long),
+        ("Time", f"{time_12h} ({MEETING_TZ_LABEL})"),
+        ("Location / Link", location or ""),
+        ("Meeting Type", type_label),
+        ("Organised by", organizer_name),
+        ("Your Role", role_text),
+    ]
+    row_html = "".join(
+        f'<tr><td style="padding:8px 14px;color:#5b6472;font-size:13px;white-space:nowrap;'
+        f'border-bottom:1px solid #eef1f5;width:130px;">{e(k)}</td>'
+        f'<td style="padding:8px 14px;font-size:13px;font-weight:600;color:#1a2333;'
+        f'border-bottom:1px solid #eef1f5;">{e(v)}</td></tr>'
+        for k, v in rows if v
+    )
+
+    html_body = f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:auto;color:#1a2333;">
+      <div style="background:#0b1f3a;padding:18px 22px;border-radius:8px 8px 0 0;">
+        <div style="color:#c8a24b;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Anwar Group &middot; Meeting Invitation</div>
+        <h2 style="color:#ffffff;margin:6px 0 0;font-size:20px;">{e(title)}</h2>
+      </div>
+      <div style="border:1px solid #e3e8f0;border-top:none;padding:22px;border-radius:0 0 8px 8px;">
+        <p style="margin:0 0 12px;">Dear {e(recipient_name)},</p>
+        <p style="margin:0 0 18px;line-height:1.5;">
+          You are cordially invited to attend the following meeting for the project
+          <b>{e(project_label)}</b>, in which you are listed as <b>{e(role_text)}</b>.
+          Your presence and input are important for the discussion.
+        </p>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #eef1f5;border-radius:6px;">{row_html}</table>
+        <div style="margin:18px 0 0;padding:14px 16px;background:#f4f6fa;border-left:4px solid #c8a24b;border-radius:4px;">
+          <div style="font-size:12px;color:#5b6472;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purpose / Agenda</div>
+          <div style="font-size:14px;line-height:1.55;white-space:pre-wrap;">{e(purpose)}</div>
+        </div>
+        <p style="margin:18px 0 0;line-height:1.5;">
+          Kindly plan to join on time and come prepared with any updates relevant to your role.
+          A calendar invitation (<b>invite.ics</b>) is attached &mdash; open it to add this meeting to
+          Outlook, Google Calendar or your phone's calendar.
+        </p>
+        <p style="text-align:center;margin:22px 0 6px;">
+          <a href="{e(link)}" style="background:#0b1f3a;color:#ffffff;padding:11px 22px;border-radius:6px;
+             text-decoration:none;font-weight:600;display:inline-block;">View in Task Manager</a>
+        </p>
+        <p style="margin:18px 0 0;">Best regards,<br><b>{e(organizer_name)}</b><br>
+          <span style="color:#5b6472;font-size:13px;">Anwar Group Task &amp; Project Management System</span></p>
+        <hr style="border:none;border-top:1px solid #eee;margin:20px 0 10px;">
+        <p style="color:#888;font-size:11px;margin:0;">
+          You received this invitation because you are Responsible, Accountable or Reviewer on a task in this project.
+          This is an automated message; please contact the organiser directly with any questions.
+        </p>
+      </div>
+    </div>
+    """
+
+    text_lines = [
+        f"Dear {recipient_name},",
+        "",
+        f"You are invited to the following meeting for the project {project_label}, "
+        f"in which you are listed as {role_text}.",
+        "",
+    ] + [f"{k}: {v}" for k, v in rows if v] + [
+        "",
+        "Purpose / Agenda:",
+        purpose,
+        "",
+        "A calendar invitation (invite.ics) is attached.",
+        f"View in Task Manager: {link}",
+        "",
+        "Best regards,",
+        organizer_name,
+        "Anwar Group Task & Project Management System",
+    ]
+
+    ics = build_meeting_ics(meeting_id, title, meeting_date, meeting_time, purpose, location,
+                            project_label, organizer_name)
+    return _send([to_email], subject, html_body, text_body="\n".join(text_lines),
+                 attachments=[("invite.ics", "text/calendar", ics)])
