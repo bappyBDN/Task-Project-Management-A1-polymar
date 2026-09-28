@@ -28,6 +28,7 @@ const EMPTY_FORM = {
 const REQUIRED: { key: keyof typeof EMPTY_FORM; label: string }[] = [
   { key: 'name', label: 'Project Name' },
   { key: 'company_id', label: 'Company (SBU)' },
+  { key: 'manager_id', label: 'Project Manager' },
   { key: 'start_date', label: 'Start Date' },
   { key: 'baseline_due_date', label: 'Due Date' },
 ]
@@ -299,7 +300,7 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
             <SearchableSelect value={form.company_id} items={companies.map((c) => ({ value: String(c.id), label: c.name }))} onChange={(v) => set('company_id', v)} placeholder="Search company…" />
           </div>
           <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
-            <label>Project Manager</label>
+            <label>Project Manager *</label>
             <SearchableSelect value={form.manager_id} items={users.map((u) => ({ value: String(u.id), label: u.name }))} onChange={(v) => set('manager_id', v)} placeholder="Search person…" />
           </fieldset>
         </div>
