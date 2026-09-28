@@ -1,7 +1,7 @@
 """Who may edit which task / project fields.
 
-Uses only existing columns (tasks.responsible_id / accountable_id / reviewer_id,
-projects.manager_id / owner_id) and the existing privileged-role list stored in
+Uses only existing columns (tasks.responsible_id / accountable_id / reviewer_id /
+project_id / is_deleted) and the existing privileged-role list stored in
 list_options (kind='privileged_role'). Read-only: nothing here writes to the DB.
 
 Tasks
@@ -15,11 +15,12 @@ Tasks
   that goes through "Submit for Completion" -> approval.
 
 Projects
-  admin / privileged role -> every field
-  Manager / Owner         -> project details (not manager / owner / sponsor or dates)
-  anyone else             -> no edits
+  admin / privileged role                               -> every field
+  Responsible / Accountable on a (live) task of project -> every field
+  anyone else                                           -> no edits
 """
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app import models
@@ -41,13 +42,6 @@ TASK_ACCOUNTABLE_FIELDS = TASK_PROGRESS_FIELDS | {
     "project_id", "milestone_id", "parent_id", "company_id", "function_id", "department_id",
 }
 TASK_RESPONSIBLE_FIELDS = TASK_ACCOUNTABLE_FIELDS - {"responsible_id"}
-
-PROJECT_MANAGER_FIELDS = {
-    "name", "company_id", "function_id", "program_id", "strategic_objective", "objective",
-    "expected_outcome", "project_type", "priority", "methodology", "status",
-    "completion_pct", "forecast_due_date", "budget", "criticality",
-}
-
 
 def is_privileged(db: Session, user: models.User) -> bool:
     if user.role == ADMIN_ROLE:
@@ -123,17 +117,20 @@ def check_task_delete(db: Session, user: models.User, task: models.Task):
     raise HTTPException(403, "Only the task's Accountable person (or an admin / PMO) can delete this task.")
 
 
+def is_project_ra(db: Session, user: models.User, project: models.Project) -> bool:
+    """True if `user` is Responsible or Accountable on any non-deleted task of this project."""
+    return db.query(models.Task.id).filter(
+        models.Task.project_id == project.id,
+        models.Task.is_deleted.is_(False),
+        or_(models.Task.responsible_id == user.id, models.Task.accountable_id == user.id),
+    ).first() is not None
+
+
 def can_edit_project(db: Session, user: models.User, project: models.Project) -> bool:
-    return is_privileged(db, user) or user.id in (project.manager_id, project.owner_id)
+    return is_privileged(db, user) or is_project_ra(db, user, project)
 
 
 def check_project_edit(db: Session, user: models.User, project: models.Project, data: dict) -> dict:
-    if is_privileged(db, user):
-        return data
-    data = {k: v for k, v in data.items() if k not in _ALWAYS_IGNORED}
-    if user.id not in (project.manager_id, project.owner_id):
-        raise HTTPException(403, "Only the project's Manager or Owner (or an admin / PMO) can edit this project.")
-    blocked = _changed(project, data) - PROJECT_MANAGER_FIELDS
-    if blocked:
-        _deny(blocked, "Project Manager / Owner")
+    if not can_edit_project(db, user, project):
+        raise HTTPException(403, "Only an admin / PMO or a Responsible / Accountable person on this project's tasks can edit this project.")
     return data

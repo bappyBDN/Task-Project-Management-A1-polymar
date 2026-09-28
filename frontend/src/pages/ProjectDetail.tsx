@@ -74,9 +74,10 @@ export default function ProjectDetail() {
   }
 
   const companyName = companies.find((c) => c.id === project.company_id)?.name ?? '—'
-  // Admin / PMO edit everything; the project's Manager or Owner edits the details (limited).
-  const isProjectLead = !!user && (user.id === project.manager_id || user.id === project.owner_id)
-  const canEdit = isPrivileged || isProjectLead
+  // Admin / PMO, or anyone Responsible / Accountable on one of this project's tasks, can edit
+  // the whole project (same rule as app/permissions.py on the server).
+  const isProjectRA = !!user && tasks.some((t) => t.responsible_id === user.id || t.accountable_id === user.id)
+  const canEdit = isPrivileged || isProjectRA
 
   return (
     <div>
@@ -97,7 +98,6 @@ export default function ProjectDetail() {
       {showEdit && (
         <ProjectForm
           project={project}
-          limited={!isPrivileged}
           companies={companies}
           users={users}
           types={[project.project_type]}

@@ -82,7 +82,7 @@ def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session 
         if db.query(models.Project).filter(models.Project.code == new_code, models.Project.id != project.id).first():
             raise HTTPException(409, f"Project code {new_code} already exists")
         data["code"] = new_code
-    # Manager / Owner may edit project details (see app/permissions.py).
+    # Admin / PMO or task Responsible / Accountable on this project (see app/permissions.py).
     data = permissions.check_project_edit(db, current_user, project, data)
     for k, v in data.items():
         setattr(project, k, v)
@@ -104,7 +104,7 @@ def create_milestone(project_id: int, payload: schemas.MilestoneBase, db: Sessio
     if not project:
         raise HTTPException(404, "Project not found")
     if not permissions.can_edit_project(db, current_user, project):
-        raise HTTPException(403, "Only the project's Manager or Owner (or an admin / PMO) can add milestones.")
+        raise HTTPException(403, "Only an admin / PMO or a Responsible / Accountable person on this project's tasks can add milestones.")
     ms = models.Milestone(**{**payload.model_dump(), "project_id": project_id})
     db.add(ms)
     db.commit()
