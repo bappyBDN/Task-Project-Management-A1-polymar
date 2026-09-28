@@ -4,6 +4,7 @@ import { useAuth } from './auth'
 import { STORAGE_MODE } from './api'
 import { store } from './store'
 import Login from './pages/Login'
+import Signup from './pages/Signup'
 import Dashboard from './pages/Dashboard'
 import Tasks from './pages/Tasks'
 import TaskDetail from './pages/TaskDetail'
@@ -83,7 +84,8 @@ export default function App() {
   if (location.pathname === '/forgot-password') return <ForgotPassword />
   if (location.pathname === '/reset-password') return <ResetPassword />
 
-  // ---- Not logged in → show Login ----
+  // ---- Not logged in → show Sign Up or Login ----
+  if (!user && location.pathname === '/signup') return <Signup />
   if (!user) return <Login />
 
   // ---- Logged in → main layout ----

@@ -71,6 +71,12 @@ export default function Login() {
             Forgot Password?
           </a>
         </div>
+        <div style={{ marginTop: '10px', textAlign: 'center', fontSize: '14px' }}>
+          Don't have an account?{' '}
+          <a href="/signup" style={{ color: '#0056b3', textDecoration: 'none' }}>
+            Sign Up
+          </a>
+        </div>
       </form>
     </div>
   )

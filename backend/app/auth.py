@@ -5,11 +5,14 @@ import time
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app import email_service
 from app.config import settings
 
-from app import models
+from app import models, services
 from app.database import get_db
 from app.models import User
 from app.schemas import (
@@ -131,6 +134,100 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             "role": user.role,
         },
     }
+
+# ---------------------------------------------------------------- new user / sign-up
+def send_set_password_link(db: Session, user: models.User):
+    """New accounts start with no password. Generate a 24-hour "set password" link
+    and email it, reusing the same /reset-password page as Forgot Password.
+    Used by admin "New User" and by self sign-up."""
+    token = secrets.token_urlsafe(32)
+    user.reset_token = token
+    user.reset_token_expires = datetime.utcnow() + timedelta(hours=24)
+    db.commit()
+
+    set_link = f"{settings.frontend_url}/reset-password?token={token}"
+    sent = email_service.send_welcome_set_password_email(
+        user_name=user.name,
+        to_email=user.email,
+        set_link=set_link,
+        expires_hours=24,
+    )
+    # The link is a password key: only print it when the email failed.
+    if not sent:
+        print(f"[users] Welcome email NOT sent. Set-password link for {user.email}: {set_link}")
+
+
+class SignupRequest(BaseModel):
+    """Sign-up form body (API input check only, not a database table).
+    Same fields as admin "New User", except `role`: self sign-ups are always 'employee'."""
+    employee_id: str
+    name: str
+    email: EmailStr
+    designation: str | None = None
+    company_id: int | None = None
+    function_id: int | None = None
+    department_id: int | None = None
+    reports_to_id: int | None = None
+
+
+@router.get("/signup-options")
+def signup_options(db: Session = Depends(get_db)):
+    """Dropdown lists for the public sign-up form (names only)."""
+    return {
+        "companies": [{"id": c.id, "name": c.name} for c in db.query(models.Company).order_by(models.Company.name)],
+        "functions": [{"id": f.id, "name": f.name} for f in db.query(models.Function).order_by(models.Function.name)],
+        "departments": [{"id": d.id, "name": d.name, "function_id": d.function_id}
+                        for d in db.query(models.Department).order_by(models.Department.name)],
+        "users": [{"id": u.id, "name": u.name}
+                  for u in db.query(User).filter(User.is_active.is_(True)).order_by(User.name)],
+    }
+
+
+@router.post("/signup", status_code=201)
+def signup(request: SignupRequest, db: Session = Depends(get_db)):
+    employee_id = request.employee_id.strip()
+    name = request.name.strip()
+    email = str(request.email).strip()
+    if not employee_id or not name:
+        raise HTTPException(400, "Name, email and employee id are required")
+    if db.query(User.id).filter(func.lower(User.email) == email.lower()).first():
+        raise HTTPException(409, "An account with this email already exists. Please log in or use Forgot Password.")
+    if db.query(User.id).filter(func.lower(User.employee_id) == employee_id.lower()).first():
+        raise HTTPException(409, "An account with this Employee ID already exists. Please log in or use Forgot Password.")
+
+    # Only link to rows that really exist (the database would reject a bad id).
+    for model, value, label in (
+        (models.Company, request.company_id, "Company"),
+        (models.Function, request.function_id, "Function"),
+        (models.Department, request.department_id, "Department"),
+        (models.User, request.reports_to_id, "Reports To person"),
+    ):
+        if value is not None and db.get(model, value) is None:
+            raise HTTPException(400, f"Selected {label} no longer exists. Please pick again.")
+
+    user = User(
+        employee_id=employee_id,
+        name=name,
+        email=email,
+        designation=(request.designation or "").strip() or None,
+        company_id=request.company_id,
+        function_id=request.function_id,
+        department_id=request.department_id,
+        reports_to_id=request.reports_to_id,
+        role="employee",
+    )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()  # e.g. the same email signed up twice at the same moment
+        raise HTTPException(409, "An account with this email or Employee ID already exists.")
+    services.audit(db, name, "user", user.id, "signed_up", new_value=f"{name} <{email}>")
+    db.commit()
+    db.refresh(user)
+    send_set_password_link(db, user)
+    return {"message": "Account created. Check your email for a link to set your password."}
+
 
 @router.post("/forgot-password")
 def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):

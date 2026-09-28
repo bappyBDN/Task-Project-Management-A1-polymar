@@ -1,13 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-import secrets
-from datetime import datetime, timedelta
-
-from app import email_service
-from app.config import settings
 from app import models, schemas, services
-from app.auth import get_admin_user, get_current_user
+from app.auth import get_admin_user, get_current_user, send_set_password_link
 from app.database import get_db
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -62,24 +57,9 @@ def create_user(
     db.commit()
     db.refresh(user)
 
-    # New accounts start with no password. Generate a 24-hour "set password" link
-    # and email it, reusing the same /reset-password page as Forgot Password.
+    # New accounts start with no password: email a 24-hour "set password" link.
     if not user.hashed_password:
-        token = secrets.token_urlsafe(32)
-        user.reset_token = token
-        user.reset_token_expires = datetime.utcnow() + timedelta(hours=24)
-        db.commit()
-
-        set_link = f"{settings.frontend_url}/reset-password?token={token}"
-        sent = email_service.send_welcome_set_password_email(
-            user_name=user.name,
-            to_email=user.email,
-            set_link=set_link,
-            expires_hours=24,
-        )
-        # The link is a password key: only print it when the email failed.
-        if not sent:
-            print(f"[users] Welcome email NOT sent. Set-password link for {user.email}: {set_link}")
+        send_set_password_link(db, user)
 
     return user
 
