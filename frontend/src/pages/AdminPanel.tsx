@@ -3,6 +3,7 @@ import { api } from '../api'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
+import SbuSelect from '../components/SbuSelect'
 import { clearPrivilegedCache } from '../usePrivileged'
 
 const ROLES = ['group_executive', 'business_head', 'functional_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
@@ -193,7 +194,6 @@ export default function AdminPanel() {
   })
 
   // ---------------------------------------------------------------- Company / Function / Department
-  const companyItems = companies.map((c) => ({ value: String(c.id), label: c.name }))
   const functionItems = functions.map((f) => ({ value: String(f.id), label: f.name }))
   const departmentItems = departments.map((dp) => ({ value: String(dp.id), label: dp.name }))
 
@@ -466,9 +466,9 @@ export default function AdminPanel() {
             <div className="form-row">
               <div>
                 <label>Company (SBU)</label>
-                <SearchableSelect
+                <SbuSelect
                   value={form.company_id != null ? String(form.company_id) : ''}
-                  items={companyItems}
+                  companies={companies}
                   onChange={(v) => set('company_id', v ? Number(v) : null)}
                   placeholder="Search SBU…"
                   onAddNew={() => setShowOrgModal('company')}

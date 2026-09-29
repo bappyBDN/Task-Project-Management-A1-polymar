@@ -16,6 +16,8 @@ interface Props {
   addLabel?: string
   onRemove?: (value: string) => void
   removeLabel?: string
+  /** which items get the remove button (default: all, when onRemove is set) */
+  removable?: (value: string) => boolean
 }
 
 const addRowStyle: React.CSSProperties = {
@@ -40,6 +42,7 @@ export default function SearchableSelect({
   addLabel = 'Add new',
   onRemove,
   removeLabel = 'Remove',
+  removable,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -105,7 +108,7 @@ export default function SearchableSelect({
               }}
             >
               <span>{o.label}</span>
-              {onRemove && (
+              {onRemove && (!removable || removable(o.value)) && (
                 <span
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(e) => { e.stopPropagation(); onRemove(o.value) }}

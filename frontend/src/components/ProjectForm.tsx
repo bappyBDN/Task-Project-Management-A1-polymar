@@ -3,6 +3,7 @@ import { api } from '../api'
 import { Company, Department, Function, Project, User } from '../types'
 import { METHODOLOGIES, PROJECT_STATUSES, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import SbuSelect from './SbuSelect'
 
 /**
  * "New Project" form, shared by the Projects page (+ Add Project) and the Task
@@ -297,7 +298,7 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
         <div className="form-row">
           <div>
             <label>Company (SBU) *</label>
-            <SearchableSelect value={form.company_id} items={companies.map((c) => ({ value: String(c.id), label: c.name }))} onChange={(v) => set('company_id', v)} placeholder="Search company…" />
+            <SbuSelect value={form.company_id} companies={companies} onChange={(v) => set('company_id', v)} />
           </div>
           <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
             <label>Project Manager *</label>

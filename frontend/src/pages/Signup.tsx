@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import SearchableSelect from '../components/SearchableSelect'
+import SbuSelect, { isPendingSbu } from '../components/SbuSelect'
 
 // Same fields as the admin "New User" form. Role is not shown: self sign-ups are
 // always an employee (an admin can change it). No password here - like a user the
@@ -23,12 +24,15 @@ export default function Signup() {
 
   const set = (k: keyof typeof EMPTY, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const items = (list: Option[]) => list.map((o) => ({ value: String(o.id), label: o.name }))
+  // typed in with "+ Add" rather than picked from the list
+  const isNew = (v: string) => v !== '' && !/^\d+$/.test(v)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     if (!form.name.trim() || !form.email.trim() || !form.employee_id.trim()) { setError('Name, email and employee id are required'); return }
-    const num = (v: string) => (v ? Number(v) : null)
+    // a typed-in new function/department name isn't an id - an admin sets those later
+    const num = (v: string) => (/^\d+$/.test(v) ? Number(v) : null)
     setBusy(true)
     try {
       const res = await api.post<{ message: string }>('/auth/signup', {
@@ -36,7 +40,8 @@ export default function Signup() {
         name: form.name.trim(),
         email: form.email.trim(),
         designation: form.designation.trim() || null,
-        company_id: num(form.company_id),
+        // an SBU not in the database yet can't be linked from here - an admin sets it later
+        company_id: isPendingSbu(form.company_id) ? null : num(form.company_id),
         function_id: num(form.function_id),
         department_id: num(form.department_id),
         reports_to_id: num(form.reports_to_id),
@@ -68,17 +73,22 @@ export default function Signup() {
         <div className="form-row">
           <div>
             <label>Company (SBU)</label>
-            <SearchableSelect value={form.company_id} items={items(opts.companies)} onChange={(v) => set('company_id', v)} placeholder="Search SBU…" />
+            <SbuSelect value={form.company_id} companies={opts.companies} onChange={(v) => set('company_id', v)} canCreate={false} />
+            {isPendingSbu(form.company_id) && (
+              <div className="small muted" style={{ marginTop: 4 }}>This SBU isn't set up yet - your admin will assign it to your account.</div>
+            )}
           </div>
           <div>
             <label>Function</label>
-            <SearchableSelect value={form.function_id} items={items(opts.functions)} onChange={(v) => set('function_id', v)} placeholder="Search function…" />
+            <SearchableSelect value={form.function_id} items={items(opts.functions)} onChange={(v) => set('function_id', v)} placeholder="Search or type a new function…" allowCustom />
+            {isNew(form.function_id) && <div className="small muted" style={{ marginTop: 4 }}>New function - your admin will add it and assign it to your account.</div>}
           </div>
         </div>
         <div className="form-row">
           <div>
             <label>Department</label>
-            <SearchableSelect value={form.department_id} items={items(opts.departments)} onChange={(v) => set('department_id', v)} placeholder="Search department…" />
+            <SearchableSelect value={form.department_id} items={items(opts.departments)} onChange={(v) => set('department_id', v)} placeholder="Search or type a new department…" allowCustom />
+            {isNew(form.department_id) && <div className="small muted" style={{ marginTop: 4 }}>New department - your admin will add it and assign it to your account.</div>}
           </div>
           <div>
             <label>Reports To (manager)</label>

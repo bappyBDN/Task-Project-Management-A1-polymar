@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import SbuSelect from './SbuSelect'
 import ProjectForm from './ProjectForm'
 
 interface Props {
@@ -232,7 +233,6 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
   const projectItems = projects.map((p) => ({ value: String(p.id), label: `${p.code} — ${p.name}` }))
   const userItems = users.map((u) => ({ value: String(u.id), label: u.name }))
-  const companyItems = companies.map((c) => ({ value: String(c.id), label: c.name }))
   const functionItems = functions.map((f) => ({ value: String(f.id), label: f.name }))
   const departmentItems = departments.map((dp) => ({ value: String(dp.id), label: dp.name }))
 
@@ -341,9 +341,9 @@ export default function TaskForm({ projects, users, companies = [], functions = 
         <div className="form-row three">
           <div>
             <label>SBU (Company) *</label>
-            <SearchableSelect
+            <SbuSelect
               value={str(form.company_id)}
-              items={companyItems}
+              companies={companies}
               onChange={(v) => set('company_id', v)}
               placeholder="Search SBU…"
               onAddNew={() => setShowOrgModal('company')}

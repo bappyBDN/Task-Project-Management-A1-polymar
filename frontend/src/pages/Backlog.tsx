@@ -3,6 +3,7 @@ import { api } from '../api'
 import { BacklogItem, Company, Department, Function, Project } from '../types'
 import { label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
+import SbuSelect from '../components/SbuSelect'
 
 interface Props {
   onConverted?: () => void
@@ -222,7 +223,7 @@ export default function Backlog({ onConverted }: Props) {
             <div className="form-row three">
               <div>
                 <label>SBU</label>
-                <SearchableSelect value={form.company_id} items={companyItems.slice(1)} onChange={(v) => set('company_id', v)} placeholder="Select SBU…" />
+                <SbuSelect value={form.company_id} companies={companies} onChange={(v) => set('company_id', v)} placeholder="Select SBU…" />
               </div>
               <div>
                 <label>Function</label>
