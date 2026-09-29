@@ -168,6 +168,11 @@ class SignupRequest(BaseModel):
     function_id: int | None = None
     department_id: int | None = None
     reports_to_id: int | None = None
+    # Not in the lists: a new function / department to add, and the manager's
+    # Employee ID when the manager isn't listed (maybe has no account yet).
+    new_function: str | None = None
+    new_department: str | None = None
+    reports_to_employee_id: str | None = None
 
 
 @router.get("/signup-options")
@@ -205,15 +210,46 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
         if value is not None and db.get(model, value) is None:
             raise HTTPException(400, f"Selected {label} no longer exists. Please pick again.")
 
+    new_function = " ".join((request.new_function or "").split())
+    new_department = " ".join((request.new_department or "").split())
+    manager_emp = (request.reports_to_employee_id or "").strip()
+    for text, label in ((new_function, "Function"), (new_department, "Department")):
+        if len(text) > 100:
+            raise HTTPException(400, f"{label} name is too long (100 characters at most).")
+    if len(manager_emp) > 32:
+        raise HTTPException(400, "Manager Employee ID is too long (32 characters at most).")
+
+    # A typed-in function / department is added (or the existing one with that name reused).
+    function_id = request.function_id
+    if function_id is None and new_function:
+        function_id = services.function_for_name(db, new_function).id
+    department_id = request.department_id
+    if department_id is None and new_department:
+        department_id = services.department_for_name(db, new_department, function_id).id
+
+    # Manager given by Employee ID: link now if they have an account, else remember
+    # the ID and link when they join (see services.link_waiting_reports).
+    reports_to_id = request.reports_to_id
+    pending_manager = None
+    if reports_to_id is None and manager_emp:
+        if manager_emp.lower() == employee_id.lower():
+            raise HTTPException(400, "Your manager's Employee ID can't be your own.")
+        manager = db.query(User).filter(func.lower(User.employee_id) == manager_emp.lower()).first()
+        if manager:
+            reports_to_id = manager.id
+        else:
+            pending_manager = manager_emp
+
     user = User(
         employee_id=employee_id,
         name=name,
         email=email,
         designation=(request.designation or "").strip() or None,
         company_id=request.company_id,
-        function_id=request.function_id,
-        department_id=request.department_id,
-        reports_to_id=request.reports_to_id,
+        function_id=function_id,
+        department_id=department_id,
+        reports_to_id=reports_to_id,
+        pending_manager_employee_id=pending_manager,
         role="employee",
     )
     db.add(user)
@@ -222,11 +258,16 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     except IntegrityError:
         db.rollback()  # e.g. the same email signed up twice at the same moment
         raise HTTPException(409, "An account with this email or Employee ID already exists.")
+    # anyone who named this new user's Employee ID as their manager now reports to them
+    services.link_waiting_reports(db, user)
     services.audit(db, name, "user", user.id, "signed_up", new_value=f"{name} <{email}>")
     db.commit()
     db.refresh(user)
     send_set_password_link(db, user)
-    return {"message": "Account created. Check your email for a link to set your password."}
+    message = "Account created. Check your email for a link to set your password."
+    if pending_manager:
+        message += f" Your manager ({pending_manager}) has no account yet - you'll be linked to them when they join."
+    return {"message": message}
 
 
 @router.post("/forgot-password")

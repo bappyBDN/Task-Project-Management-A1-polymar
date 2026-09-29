@@ -411,7 +411,14 @@ export default function AdminPanel() {
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td className="muted small">{u.employee_id}</td>
-                    <td>{u.name}</td>
+                    <td>
+                      {u.name}
+                      {u.pending_manager_employee_id && (
+                        <div className="small muted" title="Linked automatically when a user with this Employee ID joins">
+                          Waiting for manager {u.pending_manager_employee_id}
+                        </div>
+                      )}
+                    </td>
                     <td className="small">{u.email}</td>
                     <td className="small">{u.designation ?? '—'}</td>
                     <td><span className={`badge ${u.role === 'admin' ? 'gold' : 'gray'}`}>{label(u.role)}</span></td>

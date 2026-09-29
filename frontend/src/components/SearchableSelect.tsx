@@ -18,6 +18,8 @@ interface Props {
   removeLabel?: string
   /** which items get the remove button (default: all, when onRemove is set) */
   removable?: (value: string) => boolean
+  /** how a typed-in (allowCustom) value is shown; default: label() formatting */
+  customLabel?: (value: string) => string
 }
 
 const addRowStyle: React.CSSProperties = {
@@ -43,6 +45,7 @@ export default function SearchableSelect({
   onRemove,
   removeLabel = 'Remove',
   removable,
+  customLabel = label,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -71,7 +74,7 @@ export default function SearchableSelect({
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <input
-        value={open ? query : isCustom ? label(value) : (selected?.label ?? '')}
+        value={open ? query : isCustom ? customLabel(value) : (selected?.label ?? '')}
         placeholder={placeholder}
         onFocus={() => { setOpen(true); setQuery('') }}
         onChange={(e) => { setQuery(e.target.value); setOpen(true) }}

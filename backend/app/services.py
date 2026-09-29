@@ -271,3 +271,59 @@ def create_hierarchical_approval(
     db.commit()
 
     return approval
+
+# ---------------------------------------------------------------- sign-up helpers
+
+def _same(a: str | None, b: str | None) -> bool:
+    """Names match ignoring case and extra spaces ("IT  support" == "it support")."""
+    return " ".join((a or "").split()).lower() == " ".join((b or "").split()).lower()
+
+
+def function_for_name(db: Session, name: str) -> models.Function:
+    """The function with this name, created if there is none yet (never a second copy)."""
+    name = " ".join(name.split())
+    existing = db.query(models.Function).order_by(models.Function.id).all()
+    for f in existing:
+        if _same(f.name, name):
+            return f
+    base = "".join(w[0] for w in name.replace("-", " ").split() if w[0].isalnum()).upper()[:10] or "FN"
+    taken = {(f.code or "").upper() for f in existing}
+    code, n = base, 2
+    while code in taken:
+        code, n = f"{base}{n}", n + 1
+    fn = models.Function(name=name, code=code)
+    db.add(fn)
+    db.flush()
+    return fn
+
+
+def department_for_name(db: Session, name: str, function_id: Optional[int]) -> models.Department:
+    """The department with this name, created (under `function_id`) if there is none yet."""
+    name = " ".join(name.split())
+    for d in db.query(models.Department).order_by(models.Department.id).all():
+        if _same(d.name, name):
+            return d
+    dep = models.Department(name=name, function_id=function_id)
+    db.add(dep)
+    db.flush()
+    return dep
+
+
+def link_waiting_reports(db: Session, manager: models.User) -> int:
+    """People who named this Employee ID as their manager before the manager had an
+    account now report to `manager`. Someone whose manager an admin has meanwhile
+    set is left as is (only the waiting note is cleared). Returns how many were linked."""
+    emp = (manager.employee_id or "").strip().lower()
+    if not emp:
+        return 0
+    linked = 0
+    waiting = db.query(models.User).filter(
+        models.User.pending_manager_employee_id.isnot(None), models.User.id != manager.id).all()
+    for u in waiting:
+        if (u.pending_manager_employee_id or "").strip().lower() != emp:
+            continue
+        if u.reports_to_id is None:
+            u.reports_to_id = manager.id
+            linked += 1
+        u.pending_manager_employee_id = None
+    return linked

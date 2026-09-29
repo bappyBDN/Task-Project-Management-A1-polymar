@@ -54,6 +54,9 @@ def create_user(
 ):
     user = models.User(**payload.model_dump())
     db.add(user)
+    db.flush()
+    # anyone who signed up naming this Employee ID as their manager now reports to them
+    services.link_waiting_reports(db, user)
     db.commit()
     db.refresh(user)
 
@@ -73,6 +76,10 @@ def update_user(user_id: int, payload: schemas.UserUpdate, admin: models.User = 
         if v is None and k in {"employee_id", "name", "email", "role"}:
             continue  # required column: an explicit null must not wipe it
         setattr(user, k, v)
+    if "employee_id" in payload.model_fields_set:
+        services.link_waiting_reports(db, user)  # the Employee ID someone was waiting for may be this one now
+    if payload.reports_to_id is not None:
+        user.pending_manager_employee_id = None  # the admin set the manager - nothing left to wait for
     db.commit()
     db.refresh(user)
     return user

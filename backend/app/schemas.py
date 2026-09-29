@@ -53,6 +53,8 @@ class UserBase(BaseModel):
 class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    # set when they named a manager (by Employee ID) who has no account yet
+    pending_manager_employee_id: Optional[str] = None
 
 
 class UserUpdate(BaseModel):

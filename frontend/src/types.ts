@@ -28,6 +28,8 @@ export interface User {
   department_id?: number
   role: string
   reports_to_id?: number | null
+  /** named a manager by Employee ID at sign-up who has no account yet */
+  pending_manager_employee_id?: string | null
   is_active: boolean
 }
 

@@ -67,6 +67,9 @@ class User(Base, TimestampMixin):
     # level of the hierarchy (employee -> team lead -> manager -> ... -> CEO)
     # with no extra tables — future levels just chain through more rows.
     reports_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Sign-up: the manager's Employee ID when that manager has no account yet.
+    # Cleared (and reports_to_id set) once a user with that Employee ID is created.
+    pending_manager_employee_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
 
 # ---------------------------------------------------------------- Program/Project
