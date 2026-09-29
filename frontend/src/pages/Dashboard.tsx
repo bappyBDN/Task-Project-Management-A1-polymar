@@ -60,6 +60,16 @@ table.ad-t{width:100%;border-collapse:collapse}
 .ad-mini th{font-size:12px;padding:14px 12px;letter-spacing:.05em}
 .ad-mini td{font-size:15px;padding:16px 12px}
 .ad-mini td:first-child{font-weight:600;color:var(--navy)}
+.ad-bk .num{text-align:right;white-space:nowrap}
+.ad-bk th.bk-s{cursor:pointer;user-select:none;white-space:nowrap}.ad-bk th.bk-s:hover{color:var(--navy)}
+.ad-bk tbody tr{cursor:default}
+.ad-bk tfoot td{border-top:2px solid var(--line);font-weight:700;color:var(--navy);font-size:15px;padding:14px 12px}
+.bk-bar{display:inline-block;vertical-align:middle;width:80px;height:6px;border-radius:9px;background:#e8edf4;margin-right:10px;overflow:hidden}.bk-bar span{display:block;height:100%;background:#1d6bff;border-radius:9px}
+.bk-overlay{position:fixed;inset:0;z-index:1000;background:rgba(16,30,54,.45);padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex}
+.bk-overlay>div{flex:1;min-width:0;display:flex}
+.ad-bk.full{flex:1;display:flex;flex-direction:column;min-height:0}
+.ad-bk.full .bk-body{flex:1;overflow:auto}
+.ad-bk.full thead th{position:sticky;top:0;background:#fff;z-index:1}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;row-gap:2px}
 .cal .w{font-size:11px;color:var(--mut);padding:8px 0}
 .cal button{border:0;background:none;height:39px;font-size:13px;position:relative;cursor:pointer;color:var(--ink);border-radius:50%;width:39px;margin:auto}
@@ -211,6 +221,97 @@ function Calendar({ onPick, picked, dots, today }: { onPick: (d: string | null) 
 }
 
 
+// ---------------------------------------------------------------- Team & Portfolio Breakdown
+type OrgTab = 'bySbu' | 'byFunction' | 'byDepartment'
+type SortKey = 'name' | 'projects' | 'total' | 'open' | 'completed' | 'overdue' | 'pct'
+const BK_TABS: [OrgTab, string, string][] = [['bySbu', 'By SBU', 'SBU'], ['byFunction', 'By Function', 'FUNCTION'], ['byDepartment', 'By Department', 'DEPARTMENT']]
+const BK_COLS: [SortKey, string][] = [['projects', 'PROJECTS'], ['total', 'TASKS'], ['open', 'OPEN'], ['completed', 'COMPLETED'], ['overdue', 'OVERDUE'], ['pct', 'COMPLETION']]
+const BK_SORT_NAME: Record<SortKey, string> = { name: 'name', projects: 'projects', total: 'tasks', open: 'open tasks', completed: 'completed tasks', overdue: 'overdue tasks', pct: 'completion' }
+const pctOf = (r: OrgRow) => (r.total ? Math.round((r.completed / r.total) * 100) : 0)
+
+function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
+  const [tab, setTab] = useState<OrgTab>('bySbu')
+  // default: most projects first, then most tasks
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'projects', desc: true })
+  const [full, setFull] = useState(false)
+
+  useEffect(() => {
+    if (!full) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFull(false) }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden' // the page behind must not scroll
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [full])
+
+  const rows = useMemo(() => {
+    const val = (r: OrgRow, k: Exclude<SortKey, 'name'>) => (k === 'pct' ? pctOf(r) : r[k])
+    return [...(data?.[tab] ?? [])].sort((a, b) => {
+      // "Unassigned" always last; then the chosen column, then projects, tasks and name
+      const ua = a.name === 'Unassigned', ub = b.name === 'Unassigned'
+      if (ua !== ub) return ua ? 1 : -1
+      const dir = sort.desc ? -1 : 1
+      if (sort.key === 'name') return dir * a.name.localeCompare(b.name)
+      return dir * (val(a, sort.key) - val(b, sort.key)) || b.projects - a.projects || b.total - a.total || a.name.localeCompare(b.name)
+    })
+  }, [data, tab, sort])
+
+  const sum = rows.reduce((s, r) => ({ projects: s.projects + r.projects, total: s.total + r.total, open: s.open + r.open, completed: s.completed + r.completed, overdue: s.overdue + r.overdue }),
+    { projects: 0, total: 0, open: 0, completed: 0, overdue: 0 })
+  const sumPct = sum.total ? Math.round((sum.completed / sum.total) * 100) : 0
+  const maxTasks = Math.max(1, ...rows.map((r) => r.total))
+  const clickSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== 'name' }))
+  const arrow = (key: SortKey) => (sort.key === key ? (sort.desc ? ' ▼' : ' ▲') : '')
+  const nameHead = BK_TABS.find(([k]) => k === tab)![2]
+
+  const card = (
+    <div className={`ad-card ad-bk${full ? ' full' : ''}`}>
+      <div className="ad-head" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+        <h3 style={{ margin: 0 }}><Ic n="users" s={17} />Team &amp; Portfolio Breakdown</h3>
+        <button className="ad-btn" onClick={() => setFull((f) => !f)}>{full ? '✕ Close full screen' : '⛶ Full screen'}</button>
+      </div>
+      <div className="ad-head" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
+        <div className="ad-tabs" style={{ marginBottom: 0 }}>{BK_TABS.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+        <span style={{ fontSize: 12, color: 'var(--mut)' }}>
+          Sorted by {BK_SORT_NAME[sort.key]}{{ name: '', projects: ', then tasks', total: ', then projects' }[sort.key as string] ?? ', then projects and tasks'} · click a column heading to sort
+        </span>
+      </div>
+      {data === null ? <div style={{ color: 'var(--mut)', padding: 10 }}>Loading…</div> : !rows.length ? <div style={{ color: 'var(--mut)', padding: 10 }}>No data yet.</div> : (
+        <div className="ad-scroll bk-body"><table className="ad-t ad-mini">
+          <thead><tr>
+            <th className="bk-s" onClick={() => clickSort('name')}>{nameHead}{arrow('name')}</th>
+            {BK_COLS.map(([k, l]) => <th key={k} className="bk-s num" onClick={() => clickSort(k)}>{l}{arrow(k)}</th>)}
+          </tr></thead>
+          <tbody>{rows.map((r) => {
+            const p = pctOf(r)
+            return (
+              <tr key={r.name} style={{ opacity: !r.total && !r.projects ? 0.5 : 1 }}>
+                <td>{r.name}</td>
+                <td className="num"><b>{r.projects}</b></td>
+                <td className="num"><span className="bk-bar"><span style={{ width: `${(r.total / maxTasks) * 100}%` }} /></span><b>{r.total}</b></td>
+                <td className="num">{r.open}</td>
+                <td className="num">{r.completed}</td>
+                <td className="num" style={{ color: r.overdue ? '#ef4444' : undefined, fontWeight: r.overdue ? 700 : undefined }}>{r.overdue}</td>
+                <td className="num"><span className="pb" style={{ width: 70, marginRight: 8 }}><span style={{ width: `${p}%`, background: p >= 50 ? '#12a150' : '#1d6bff' }} /></span>{r.total ? `${p}%` : '—'}</td>
+              </tr>
+            )
+          })}</tbody>
+          <tfoot><tr>
+            <td>Total</td><td className="num">{sum.projects}</td><td className="num">{sum.total}</td><td className="num">{sum.open}</td>
+            <td className="num">{sum.completed}</td><td className="num" style={{ color: sum.overdue ? '#ef4444' : undefined }}>{sum.overdue}</td><td className="num">{sum.total ? `${sumPct}%` : '—'}</td>
+          </tr></tfoot>
+        </table></div>
+      )}
+    </div>
+  )
+  if (!full) return <div style={{ marginTop: 16 }}>{card}</div>
+  return (
+    <>
+      <div className="ad-card" style={{ marginTop: 16, color: 'var(--mut)' }}>Team &amp; Portfolio Breakdown is open in full screen.</div>
+      <div className="bk-overlay" onClick={() => setFull(false)}><div onClick={(e) => e.stopPropagation()}>{card}</div></div>
+    </>
+  )
+}
+
 // ---------------------------------------------------------------- page
 export default function Dashboard() {
   const { user } = useAuth()
@@ -222,7 +323,6 @@ export default function Dashboard() {
   const [delayCauses, setDelayCauses] = useState<{ category: string; count: number }[]>([])
   const [orgIntel, setOrgIntel] = useState<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] } | null>(null)
   const [trends, setTrends] = useState<Trends | null>(null)
-  const [tab, setTab] = useState<'bySbu' | 'byFunction' | 'byDepartment'>('bySbu')
   const [picked, setPicked] = useState<string | null>(null)
 
   // "Live": bump `tick` every minute (and when the user comes back to the tab)
@@ -400,16 +500,6 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
-              <div className="ad-card">
-                <h3><Ic n="users" s={17} />Team &amp; Portfolio Breakdown</h3>
-                <div className="ad-tabs">{([['bySbu', 'By SBU'], ['byFunction', 'By Function'], ['byDepartment', 'By Department']] as const).map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
-                {orgIntel === null ? <div style={{ color: 'var(--mut)', padding: 10 }}>Loading…</div> : (
-                  <div className="ad-scroll"><table className="ad-t ad-mini">
-                    <thead><tr>{['NAME', 'TOTAL', 'OPEN', 'COMPLETED', 'OVERDUE', 'PROJECTS'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
-                    <tbody>{(orgIntel[tab] ?? []).map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.total}</td><td>{r.open}</td><td>{r.completed}</td><td style={{ color: r.overdue ? '#ef4444' : undefined }}>{r.overdue}</td><td>{r.projects}</td></tr>)}</tbody>
-                  </table></div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -438,6 +528,8 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        <Breakdown data={orgIntel} />
       </div>
     </div>
   )

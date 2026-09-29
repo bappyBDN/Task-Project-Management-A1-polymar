@@ -244,8 +244,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return local<T>(path, { method: options?.method, body }) as T
 }
 
+// Junk functions still in the database (unused; the server has no delete for
+// functions), kept out of every dropdown, filter and list in the app.
+const HIDDEN_FUNCTIONS = new Set(['b'])
+const shownFunction = (f: { name?: string }) => !HIDDEN_FUNCTIONS.has((f.name ?? '').trim().toLowerCase())
+
+async function get<T>(path: string): Promise<T> {
+  const data: any = await request<T>(path)
+  const sp = path.split('?')[0]
+  if (sp === '/organizations/functions' && Array.isArray(data)) return data.filter(shownFunction) as T
+  if (sp === '/auth/signup-options' && Array.isArray(data?.functions)) return { ...data, functions: data.functions.filter(shownFunction) } as T
+  return data as T
+}
+
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get,
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body?: unknown) =>
