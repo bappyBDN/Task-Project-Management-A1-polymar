@@ -6,6 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import { Approval, Company, DelayRca, Department, Function, ProgressUpdate, Project, Task, User } from '../types'
 import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import TaskForm from '../components/TaskForm'
+import { sbuName } from '../org'
 
 export default function TaskDetail() {
   const { id } = useParams()
@@ -151,7 +152,7 @@ export default function TaskDetail() {
               <div><label>Priority</label><span className={`badge ${PRIORITY_COLORS[task.priority]}`}>{label(task.priority)}</span></div>
             </div>
             <div className="form-row three" style={{ marginTop: 12 }}>
-              <div><label>SBU</label><div className="small">{companies.find((c) => c.id === task.company_id)?.name ?? '—'}</div></div>
+              <div><label>SBU</label><div className="small">{sbuName(companies, task.company_id) ?? '—'}</div></div>
               <div><label>Function</label><div className="small">{functions.find((f) => f.id === task.function_id)?.name ?? '—'}</div></div>
               <div><label>Department</label><div className="small">{departments.find((d) => d.id === task.department_id)?.name ?? '—'}</div></div>
             </div>

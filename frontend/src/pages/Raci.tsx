@@ -3,6 +3,7 @@ import { api } from '../api'
 import { Company, Department, Function, Project, RaciMatrix } from '../types'
 import { label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
+import { nameFilterItems, nameIdFor, sbuFilterItems, sbuIdFor } from '../org'
 
 const RACI_COLORS: Record<string, string> = {
   R: 'var(--navy)', A: 'var(--gold)', C: 'var(--green)', I: 'var(--muted)',
@@ -28,9 +29,11 @@ export default function Raci() {
 
   useEffect(() => {
     const params = new URLSearchParams()
-    if (filter.company_id) params.set('company_id', filter.company_id)
-    if (filter.function_id) params.set('function_id', filter.function_id)
-    if (filter.department_id) params.set('department_id', filter.department_id)
+    // the server filters by one id: send the copy the forms use (the filters list each name once);
+    // an SBU with no company yet matches nothing
+    if (filter.company_id) params.set('company_id', String(sbuIdFor(companies, filter.company_id) ?? 0))
+    if (filter.function_id) params.set('function_id', String(nameIdFor(functions, filter.function_id) ?? 0))
+    if (filter.department_id) params.set('department_id', String(nameIdFor(departments, filter.department_id) ?? 0))
     const q = params.toString()
     // Empty project = "All projects" (tasks of every project); otherwise one project.
     const path = projectId ? `/raci/matrix/${projectId}` : '/raci/matrix'
@@ -42,12 +45,12 @@ export default function Raci() {
       .catch((e: any) => { if (!cancelled) { setMatrix(null); setError(e?.message || 'Could not load the RACI matrix.') } })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [projectId, filter])
+  }, [projectId, filter, companies, functions, departments])
 
   const projectItems = [{ value: '', label: 'All projects' }, ...projects.map((p) => ({ value: String(p.id), label: `${p.code} — ${p.name}` }))]
-  const companyItems = [{ value: '', label: 'All SBUs' }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))]
-  const functionItems = [{ value: '', label: 'All functions' }, ...functions.map((f) => ({ value: String(f.id), label: f.name }))]
-  const departmentItems = [{ value: '', label: 'All departments' }, ...departments.map((d) => ({ value: String(d.id), label: d.name }))]
+  const companyItems = sbuFilterItems(companies)
+  const functionItems = nameFilterItems(functions, 'All functions')
+  const departmentItems = nameFilterItems(departments, 'All departments')
 
   const isFiltered = projectId || filter.company_id || filter.function_id || filter.department_id
   const projectName = (id?: number) => projects.find((p) => p.id === id)?.name

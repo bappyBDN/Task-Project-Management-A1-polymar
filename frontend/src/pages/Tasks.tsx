@@ -7,6 +7,7 @@ import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import TaskForm from '../components/TaskForm'
 import SearchableSelect from '../components/SearchableSelect'
+import { inName, inSbu, nameFilterItems, sbuFilterItems, sbuName } from '../org'
 
 // Turn whatever the API threw into a readable sentence (FastAPI sends {"detail": "..."}).
 function errText(e: any): string {
@@ -79,9 +80,9 @@ export default function Tasks() {
   const filtered = useMemo(() => {
     return visibleTasks.filter((t) => {
       if (filter.project_id && String(t.project_id) !== String(filter.project_id)) return false
-      if (filter.company_id && String(t.company_id) !== String(filter.company_id)) return false
-      if (filter.function_id && String(t.function_id) !== String(filter.function_id)) return false
-      if (filter.department_id && String(t.department_id) !== String(filter.department_id)) return false
+      if (filter.company_id && !inSbu(companies, t.company_id, filter.company_id)) return false
+      if (filter.function_id && !inName(functions, t.function_id, filter.function_id)) return false
+      if (filter.department_id && !inName(departments, t.department_id, filter.department_id)) return false
       if (filter.status && t.status !== filter.status) return false
       if (filter.priority && t.priority !== filter.priority) return false
       if (filter.responsible_id && String(t.responsible_id) !== String(filter.responsible_id)) return false
@@ -92,20 +93,20 @@ export default function Tasks() {
       }
       return true
     })
-  }, [visibleTasks, filter])
+  }, [visibleTasks, filter, companies, functions, departments])
 
   const isFiltered = filter.project_id || filter.company_id || filter.function_id || filter.department_id || filter.status || filter.priority || filter.overdue || filter.responsible_id
 
   const projectItems = [{ value: '', label: 'All projects' }, ...projects.map((p) => ({ value: String(p.id), label: `${p.code} — ${p.name}` }))]
-  const companyItems = [{ value: '', label: 'All SBUs' }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))]
-  const functionItems = [{ value: '', label: 'All functions' }, ...functions.map((f) => ({ value: String(f.id), label: f.name }))]
-  const departmentItems = [{ value: '', label: 'All departments' }, ...departments.map((dp) => ({ value: String(dp.id), label: dp.name }))]
+  const companyItems = sbuFilterItems(companies)
+  const functionItems = nameFilterItems(functions, 'All functions')
+  const departmentItems = nameFilterItems(departments, 'All departments')
   const userItems = [{ value: '', label: 'All' }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]
   const statusItems = [{ value: '', label: 'All' }, ...Object.keys(STATUS_COLORS).map((s) => ({ value: s, label: label(s) }))]
   const priorityItems = [{ value: '', label: 'All' }, ...Object.keys(PRIORITY_COLORS).map((s) => ({ value: s, label: label(s) }))]
   const timingItems = [{ value: '', label: 'All' }, { value: 'true', label: 'Overdue' }]
 
-  const companyName = (id?: number) => companies.find((c) => c.id === id)?.name
+  const companyName = (id?: number) => sbuName(companies, id)
   const functionName = (id?: number) => functions.find((f) => f.id === id)?.name
 
   return (
@@ -121,15 +122,15 @@ export default function Tasks() {
       <div className="filters">
         <div className="field" style={{ minWidth: 200 }}>
           <label>SBU</label>
-          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Type to search SBU…" />
+          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Search SBU…" />
         </div>
         <div className="field" style={{ minWidth: 180 }}>
           <label>Function</label>
-          <SearchableSelect value={filter.function_id} items={functionItems} onChange={(v) => setFilter({ ...filter, function_id: v })} placeholder="Type to search…" />
+          <SearchableSelect value={filter.function_id} items={functionItems} onChange={(v) => setFilter({ ...filter, function_id: v })} placeholder="Search function…" />
         </div>
         <div className="field" style={{ minWidth: 180 }}>
           <label>Department</label>
-          <SearchableSelect value={filter.department_id} items={departmentItems} onChange={(v) => setFilter({ ...filter, department_id: v })} placeholder="Type to search…" />
+          <SearchableSelect value={filter.department_id} items={departmentItems} onChange={(v) => setFilter({ ...filter, department_id: v })} placeholder="Search department…" />
         </div>
         <div className="field" style={{ minWidth: 200 }}>
           <label>Project</label>

@@ -6,6 +6,7 @@ import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, METHODOLOGIES, PROJECT_STATUSES, fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import ProjectForm, { errText } from '../components/ProjectForm'
+import { inSbu, sbuFilterItems, sbuName } from '../org'
 
 
 export default function Projects() {
@@ -76,11 +77,10 @@ export default function Projects() {
 
   /** The project's tasks that match the Company / Employee filters. */
   const matchingTasks = (p: Project) => {
-    const cid = filter.company_id ? Number(filter.company_id) : null
     const uid = filter.manager_id ? Number(filter.manager_id) : null
     const leadsProject = uid !== null && [p.manager_id, p.sponsor_id, p.owner_id].includes(uid)
     return (tasksByProject.get(p.id) ?? []).filter((t) => {
-      if (cid !== null && (t.company_id ?? p.company_id) !== cid) return false
+      if (filter.company_id && !inSbu(companies, t.company_id ?? p.company_id, filter.company_id)) return false
       // a PM / Sponsor / Owner sees all the project's tasks; others only the ones they are on
       if (uid !== null && !leadsProject && ![t.responsible_id, t.accountable_id, t.reviewer_id].includes(uid)) return false
       return true
@@ -89,7 +89,7 @@ export default function Projects() {
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
-      if (filter.company_id && !projectCompanyIds(p).has(Number(filter.company_id))) return false
+      if (filter.company_id && ![...projectCompanyIds(p)].some((id) => inSbu(companies, id, filter.company_id))) return false
       if (filter.status && p.status !== filter.status) return false
       if (filter.health && p.health !== filter.health) return false
       if (filter.type && p.project_type !== filter.type) return false
@@ -97,13 +97,13 @@ export default function Projects() {
       if (filter.manager_id && !projectPeopleIds(p).has(Number(filter.manager_id))) return false
       return true
     })
-  }, [projects, filter, tasksByProject])
+  }, [projects, filter, tasksByProject, companies])
 
   const isFiltered = filter.company_id || filter.status || filter.health || filter.type || filter.methodology || filter.manager_id
   const personOrCompany = Boolean(filter.company_id || filter.manager_id)
   const shownTasks = useMemo(
     () => (personOrCompany ? filtered.flatMap((p) => matchingTasks(p).map((t) => ({ t, p }))) : []),
-    [filtered, personOrCompany, filter, tasksByProject],
+    [filtered, personOrCompany, filter, tasksByProject, companies],
   )
 
   // Full option lists: every company, status, health colour, methodology and
@@ -113,16 +113,16 @@ export default function Projects() {
     const extra = [...new Set(vals.filter(Boolean) as string[])].filter((v) => !standard.includes(v))
     return [...standard, ...extra]
   }
-  const companyItems = [{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))]
+  const companyItems = sbuFilterItems(companies)
   const statusItems = [{ value: '', label: 'All' }, ...fullList(PROJECT_STATUSES, projects.map((p) => p.status)).map((s) => ({ value: s, label: label(s) }))]
   const healthItems = [{ value: '', label: 'All' }, ...fullList(Object.keys(HEALTH_COLORS), projects.map((p) => p.health)).map((h) => ({ value: h, label: label(h) }))]
   const typeItems = [{ value: '', label: 'All' }, ...Array.from(new Set(projects.map((p) => p.project_type))).map((t) => ({ value: t, label: label(t) }))]
   const methodologyItems = [{ value: '', label: 'All' }, ...fullList(METHODOLOGIES, projects.map((p) => p.methodology)).map((m) => ({ value: m, label: label(m) }))]
   const managerItems = [{ value: '', label: 'All' }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]
 
-  // Company column: the project's own company, otherwise the companies of its tasks.
+  // SBU column: the project's own SBU, otherwise the SBUs of its tasks.
   const companyName = (p: Project) => {
-    const names = [...projectCompanyIds(p)].map((id) => companies.find((c) => c.id === id)?.name).filter(Boolean)
+    const names = [...new Set([...projectCompanyIds(p)].map((id) => sbuName(companies, id)).filter(Boolean))]
     return names.length ? names.join(', ') : '—'
   }
 
@@ -138,8 +138,8 @@ export default function Projects() {
 
       <div className="filters">
         <div className="field" style={{ minWidth: 190 }}>
-          <label>Company</label>
-          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Type to search…" />
+          <label>SBU</label>
+          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Search SBU…" />
         </div>
         <div className="field" style={{ minWidth: 150 }}>
           <label>Status</label>
@@ -176,7 +176,7 @@ export default function Projects() {
         <table>
           <thead>
             <tr>
-              <th>Code</th><th>Project</th><th>Company</th><th>PM</th><th>Tasks</th><th>Type</th><th>Status</th><th>Health</th>
+              <th>Code</th><th>Project</th><th>SBU</th><th>PM</th><th>Tasks</th><th>Type</th><th>Status</th><th>Health</th>
               <th>Completion</th><th>Baseline</th><th>Forecast</th>{isAdmin && <th></th>}
             </tr>
           </thead>
@@ -232,7 +232,7 @@ export default function Projects() {
           <div className="section-title">
             Matching Tasks ({shownTasks.length})
             <span className="small muted" style={{ fontWeight: 400, marginLeft: 8 }}>
-              {[filter.company_id && companies.find((c) => String(c.id) === filter.company_id)?.name,
+              {[filter.company_id && companyItems.find((c) => c.value === filter.company_id)?.label,
                 filter.manager_id && users.find((u) => String(u.id) === filter.manager_id)?.name].filter(Boolean).join(' · ')}
             </span>
           </div>

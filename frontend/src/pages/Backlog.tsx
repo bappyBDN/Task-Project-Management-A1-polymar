@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
-import { BacklogItem, Company, Department, Function, Project } from '../types'
+import { BacklogItem, Company, Function, Project } from '../types'
 import { label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
-import SbuSelect from '../components/SbuSelect'
+import { inName, inSbu, nameFilterItems, sbuFilterItems, sbuName } from '../org'
 
 interface Props {
   onConverted?: () => void
@@ -14,10 +14,9 @@ export default function Backlog({ onConverted }: Props) {
   const [projects, setProjects] = useState<Project[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [functions, setFunctions] = useState<Function[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [filter, setFilter] = useState({ project_id: '', company_id: '', function_id: '', department_id: '', status: '', priority: '' })
+  const [filter, setFilter] = useState({ project_id: '', company_id: '', function_id: '', status: '', priority: '' })
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<any>({ priority: 'medium', status: 'new', project_id: '', company_id: '', function_id: '', department_id: '' })
+  const [form, setForm] = useState<any>({ priority: 'medium', status: 'new', project_id: '' })
   const [err, setErr] = useState('')
   const [pageErr, setPageErr] = useState('')
   const [pageMsg, setPageMsg] = useState('')
@@ -35,10 +34,14 @@ export default function Backlog({ onConverted }: Props) {
     api.get<Project[]>('/projects').then(setProjects).catch(() => {})
     api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
     api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
-    api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
   }, [])
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
+
+  // The server keeps no SBU / Function on a backlog item: they come from its project.
+  const projectOf = (i: { project_id?: number | null }) => projects.find((p) => p.id === i.project_id)
+  const itemCompanyId = (i: BacklogItem) => i.company_id ?? projectOf(i)?.company_id
+  const itemFunctionId = (i: BacklogItem) => i.function_id ?? projectOf(i)?.function_id
 
   const create = async () => {
     if (!form.requirement?.trim()) { setErr('Requirement is mandatory'); return }
@@ -49,15 +52,12 @@ export default function Backlog({ onConverted }: Props) {
     await api.post('/backlogs', {
       ...form,
       project_id: form.project_id ? Number(form.project_id) : null,
-      company_id: form.company_id ? Number(form.company_id) : null,
-      function_id: form.function_id ? Number(form.function_id) : null,
-      department_id: form.department_id ? Number(form.department_id) : null,
       requested_by_id: form.requested_by_id ? Number(form.requested_by_id) : null,
       estimated_effort: form.estimated_effort ? Number(form.estimated_effort) : null,
     })
     setShowForm(false)
     setErr('')
-    setForm({ priority: 'medium', status: 'new', project_id: '', company_id: '', function_id: '', department_id: '' })
+    setForm({ priority: 'medium', status: 'new', project_id: '' })
     setPageMsg('Backlog item added.')
     reload()
     } catch (e: any) {
@@ -81,9 +81,9 @@ export default function Backlog({ onConverted }: Props) {
         const t = await api.post<{ code: string }>('/tasks', {
       code: null,
       project_id: item.project_id,
-      company_id: item.company_id,
-      function_id: item.function_id,
-      department_id: item.department_id,
+      company_id: itemCompanyId(item) ?? null,
+      function_id: itemFunctionId(item) ?? null,
+      department_id: item.department_id ?? null,
       title: item.requirement,
       description: item.description,
       expected_deliverable: item.acceptance_criteria,
@@ -113,27 +113,24 @@ export default function Backlog({ onConverted }: Props) {
   const filtered = useMemo(() => {
     return items.filter((i) => {
       if (filter.project_id && String(i.project_id) !== String(filter.project_id)) return false
-      if (filter.company_id && String(i.company_id) !== String(filter.company_id)) return false
-      if (filter.function_id && String(i.function_id) !== String(filter.function_id)) return false
-      if (filter.department_id && String(i.department_id) !== String(filter.department_id)) return false
+      if (filter.company_id && !inSbu(companies, itemCompanyId(i), filter.company_id)) return false
+      if (filter.function_id && !inName(functions, itemFunctionId(i), filter.function_id)) return false
       if (filter.status && i.status !== filter.status) return false
       if (filter.priority && i.priority !== filter.priority) return false
       return true
     })
-  }, [items, filter])
+  }, [items, filter, projects, companies, functions])
 
-  const isFiltered = filter.project_id || filter.company_id || filter.function_id || filter.department_id || filter.status || filter.priority
+  const isFiltered = filter.project_id || filter.company_id || filter.function_id || filter.status || filter.priority
 
   const projectItems = [{ value: '', label: 'All projects' }, ...projects.map((p) => ({ value: String(p.id), label: `${p.code} — ${p.name}` }))]
-  const companyItems = [{ value: '', label: 'All SBUs' }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))]
-  const functionItems = [{ value: '', label: 'All functions' }, ...functions.map((f) => ({ value: String(f.id), label: f.name }))]
-  const departmentItems = [{ value: '', label: 'All departments' }, ...departments.map((d) => ({ value: String(d.id), label: d.name }))]
+  const companyItems = sbuFilterItems(companies)
+  const functionItems = nameFilterItems(functions, 'All functions')
   const statusItems = [{ value: '', label: 'All' }, ...['new', 'review', 'grooming', 'prioritized', 'ready', 'planned', 'converted'].map((s) => ({ value: s, label: label(s) }))]
   const priorityItems = [{ value: '', label: 'All' }, ...['low', 'medium', 'high', 'critical'].map((p) => ({ value: p, label: label(p) }))]
 
-  const companyName = (id?: number) => companies.find((c) => c.id === id)?.name
   const functionName = (id?: number) => functions.find((f) => f.id === id)?.name
-  const departmentName = (id?: number) => departments.find((d) => d.id === id)?.name
+  const formProject = projectOf({ project_id: form.project_id ? Number(form.project_id) : null })
 
   return (
     <div>
@@ -151,15 +148,11 @@ export default function Backlog({ onConverted }: Props) {
       <div className="filters">
         <div className="field" style={{ minWidth: 190 }}>
           <label>SBU</label>
-          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Type to search SBU…" />
+          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Search SBU…" />
         </div>
         <div className="field" style={{ minWidth: 170 }}>
           <label>Function</label>
-          <SearchableSelect value={filter.function_id} items={functionItems} onChange={(v) => setFilter({ ...filter, function_id: v })} placeholder="Type to search…" />
-        </div>
-        <div className="field" style={{ minWidth: 170 }}>
-          <label>Department</label>
-          <SearchableSelect value={filter.department_id} items={departmentItems} onChange={(v) => setFilter({ ...filter, department_id: v })} placeholder="Type to search…" />
+          <SearchableSelect value={filter.function_id} items={functionItems} onChange={(v) => setFilter({ ...filter, function_id: v })} placeholder="Search function…" />
         </div>
         <div className="field" style={{ minWidth: 210 }}>
           <label>Project</label>
@@ -174,7 +167,7 @@ export default function Backlog({ onConverted }: Props) {
           <SearchableSelect value={filter.priority} items={priorityItems} onChange={(v) => setFilter({ ...filter, priority: v })} placeholder="Type to search…" />
         </div>
         {isFiltered && (
-          <button className="btn sm" onClick={() => setFilter({ project_id: '', company_id: '', function_id: '', department_id: '', status: '', priority: '' })}>
+          <button className="btn sm" onClick={() => setFilter({ project_id: '', company_id: '', function_id: '', status: '', priority: '' })}>
             Clear
           </button>
         )}
@@ -192,7 +185,7 @@ export default function Backlog({ onConverted }: Props) {
               <tr key={i.id}>
                 <td className="muted small">{i.code}</td>
                 <td>{i.requirement}</td>
-                <td className="small">{companyName(i.company_id) ?? '—'}</td>
+                <td className="small">{sbuName(companies, itemCompanyId(i)) ?? '—'}</td>
                 <td className="small">{projects.find((p) => p.id === i.project_id)?.name ?? '—'}</td>
                 <td><span className="badge gold">{label(i.priority)}</span></td>
                 <td><span className="badge gray">{label(i.status)}</span></td>
@@ -222,22 +215,13 @@ export default function Backlog({ onConverted }: Props) {
             <textarea rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
             <div className="form-row three">
               <div>
-                <label>SBU</label>
-                <SbuSelect value={form.company_id} companies={companies} onChange={(v) => set('company_id', v)} placeholder="Select SBU…" />
-              </div>
-              <div>
-                <label>Function</label>
-                <SearchableSelect value={form.function_id} items={functionItems.slice(1)} onChange={(v) => set('function_id', v)} placeholder="Select function…" />
-              </div>
-              <div>
-                <label>Department</label>
-                <SearchableSelect value={form.department_id} items={departmentItems.slice(1)} onChange={(v) => set('department_id', v)} placeholder="Select department…" />
-              </div>
-            </div>
-            <div className="form-row three">
-              <div>
                 <label>Project</label>
-                <SearchableSelect value={form.project_id} items={projectItems.slice(1)} onChange={(v) => set('project_id', v)} placeholder="Select project…" />
+                <SearchableSelect value={form.project_id} items={projectItems.slice(1)} onChange={(v) => set('project_id', v)} placeholder="Search project…" />
+                <div className="small muted" style={{ marginTop: 4 }}>
+                  {formProject
+                    ? `SBU: ${sbuName(companies, formProject.company_id) ?? '—'} · Function: ${functionName(formProject.function_id) ?? '—'} (from the project)`
+                    : 'The SBU and Function come from the project.'}
+                </div>
               </div>
               <div>
                 <label>Priority</label>

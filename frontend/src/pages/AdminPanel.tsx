@@ -474,7 +474,7 @@ export default function AdminPanel() {
             </div>
             <div className="form-row">
               <div>
-                <label>Company (SBU)</label>
+                <label>SBU</label>
                 <SbuSelect
                   value={form.company_id != null ? String(form.company_id) : ''}
                   companies={companies}
@@ -551,7 +551,7 @@ function OrgModal({ kind, onClose, onCreated }: { kind: 'company' | 'function' |
   const [code, setCode] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const titles = { company: 'New SBU (Company)', function: 'New Function', department: 'New Department' }
+  const titles = { company: 'New SBU', function: 'New Function', department: 'New Department' }
 
   const submit = async () => {
     if (!name.trim()) { setErr(`${titles[kind]} name is required`); return }

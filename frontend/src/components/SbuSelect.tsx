@@ -81,8 +81,8 @@ export default function SbuSelect({ value, companies, onChange, placeholder = 'S
   const defaults = DEFAULT_SBUS.flatMap((name) => {
     const same = groups.get(norm(name)) ?? []
     const c = same.find((x) => String(x.id) === value) ?? pickSbu(same)
-    if (c) return [{ value: String(c.id), label: c.name }]
-    return [{ value: PENDING + name, label: name }]
+    // always the official name, whatever spelling the copy has
+    return [{ value: c ? String(c.id) : PENDING + name, label: name }]
   })
   const officialKeys = new Set(DEFAULT_SBUS.map(norm))
   const others = all

@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { ProjectKpi, Task, TaskKpi } from '../types'
 import { label } from '../constants'
+import { mergeSbuRows } from '../org'
 
 /* Dashboard wired to the FastAPI backend (app/routers/dashboards.py + /tasks).
    Renders page content only — sidebar/topbar come from the app Layout. Scoped under .ad-root. */
@@ -250,7 +251,8 @@ export default function Dashboard() {
     api.get<Record<string, number>>('/dashboards/health-distribution').then(ok(setHealthDist)).catch(fail)
     api.get<{ category: string; count: number }[]>('/dashboards/delay-causes').then(ok(setDelayCauses)).catch(fail)
     api.get<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] }>('/dashboards/org-intelligence')
-      .then(ok(setOrgIntel))
+      // copies of one SBU (e.g. "A1 Polymar" / "A-One Polymer Ltd") count as one row, named as in the forms
+      .then(ok((o: { bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] }) => setOrgIntel({ ...o, bySbu: mergeSbuRows(o.bySbu ?? []) })))
       .catch(() => { if (!cancelled) setOrgIntel((prev) => prev ?? { bySbu: [], byFunction: [], byDepartment: [] }); fail() })
     return () => { cancelled = true }
   }, [tick])

@@ -153,7 +153,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
     { key: 'title', label: 'Task Title' },
     { key: 'project_id', label: 'Project' },
     { key: 'category', label: 'Category' },
-    { key: 'company_id', label: 'SBU (Company)' },
+    { key: 'company_id', label: 'SBU' },
     { key: 'function_id', label: 'Function' },
     { key: 'department_id', label: 'Department' },
     { key: 'task_type', label: 'Task Type' },
@@ -340,7 +340,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
         <div className="form-row three">
           <div>
-            <label>SBU (Company) *</label>
+            <label>SBU *</label>
             <SbuSelect
               value={str(form.company_id)}
               companies={companies}
@@ -505,7 +505,7 @@ function OrgModal({ kind, onClose, onCreated }: { kind: 'company' | 'function' |
   const [code, setCode] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const titles = { company: 'New SBU (Company)', function: 'New Function', department: 'New Department' }
+  const titles = { company: 'New SBU', function: 'New Function', department: 'New Department' }
 
   const submit = async () => {
     if (!name.trim()) { setErr(`${titles[kind]} name is required`); return }

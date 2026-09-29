@@ -6,6 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import ProjectForm from '../components/ProjectForm'
 import { Company, Milestone, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
+import { sbuName } from '../org'
 
 export default function ProjectDetail() {
   const { id } = useParams()
@@ -73,7 +74,7 @@ export default function ProjectDetail() {
     return <div className="empty">Loading…</div>
   }
 
-  const companyName = companies.find((c) => c.id === project.company_id)?.name ?? '—'
+  const companyName = sbuName(companies, project.company_id) ?? '—'
   // Admin / PMO, or anyone Responsible / Accountable on one of this project's tasks, can edit
   // the whole project (same rule as app/permissions.py on the server).
   const isProjectRA = !!user && tasks.some((t) => t.responsible_id === user.id || t.accountable_id === user.id)

@@ -6,6 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
+import { inName, inSbu, nameFilterItems, sbuFilterItems, sbuName } from '../org'
 
 const COLUMNS = [
   { key: 'backlog', label: 'Backlog' },
@@ -49,7 +50,7 @@ export default function Kanban() {
   }, [])
 
   const name = (id?: number) => users.find((u) => u.id === id)?.name
-  const companyName = (id?: number) => companies.find((c) => c.id === id)?.name
+  const companyName = (id?: number) => sbuName(companies, id)
   const functionName = (id?: number) => functions.find((f) => f.id === id)?.name
   const departmentName = (id?: number) => departments.find((d) => d.id === id)?.name
 
@@ -58,13 +59,13 @@ export default function Kanban() {
       ? tasks.filter((t) => t.responsible_id === user.id || t.accountable_id === user.id)
       : tasks
     if (filter.project_id) list = list.filter((t) => String(t.project_id) === String(filter.project_id))
-    if (filter.company_id) list = list.filter((t) => String(t.company_id) === String(filter.company_id))
-    if (filter.function_id) list = list.filter((t) => String(t.function_id) === String(filter.function_id))
-    if (filter.department_id) list = list.filter((t) => String(t.department_id) === String(filter.department_id))
+    if (filter.company_id) list = list.filter((t) => inSbu(companies, t.company_id, filter.company_id))
+    if (filter.function_id) list = list.filter((t) => inName(functions, t.function_id, filter.function_id))
+    if (filter.department_id) list = list.filter((t) => inName(departments, t.department_id, filter.department_id))
     if (filter.responsible_id) list = list.filter((t) => String(t.responsible_id) === String(filter.responsible_id))
     if (filter.priority) list = list.filter((t) => t.priority === filter.priority)
     return list
-  }, [tasks, user, canSeeAll, filter])
+  }, [tasks, user, canSeeAll, filter, companies, functions, departments])
 
   // Responsible / Accountable move their own cards; only admin / PMO can drop into Completed
   // (everyone else finishes a task with "Submit for Completion" on the task page).
@@ -94,9 +95,9 @@ export default function Kanban() {
   const isFiltered = filter.project_id || filter.company_id || filter.function_id || filter.department_id || filter.responsible_id || filter.priority
 
   const projectItems = [{ value: '', label: 'All projects' }, ...projects.map((p) => ({ value: String(p.id), label: `${p.code} — ${p.name}` }))]
-  const companyItems = [{ value: '', label: 'All SBUs' }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))]
-  const functionItems = [{ value: '', label: 'All functions' }, ...functions.map((f) => ({ value: String(f.id), label: f.name }))]
-  const departmentItems = [{ value: '', label: 'All departments' }, ...departments.map((d) => ({ value: String(d.id), label: d.name }))]
+  const companyItems = sbuFilterItems(companies)
+  const functionItems = nameFilterItems(functions, 'All functions')
+  const departmentItems = nameFilterItems(departments, 'All departments')
   const userItems = [{ value: '', label: 'All' }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]
   const priorityItems = [{ value: '', label: 'All' }, ...Object.keys(PRIORITY_COLORS).map((p) => ({ value: p, label: label(p) }))]
 
@@ -113,15 +114,15 @@ export default function Kanban() {
       <div className="filters">
         <div className="field" style={{ minWidth: 190 }}>
           <label>SBU</label>
-          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Type to search SBU…" />
+          <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Search SBU…" />
         </div>
         <div className="field" style={{ minWidth: 170 }}>
           <label>Function</label>
-          <SearchableSelect value={filter.function_id} items={functionItems} onChange={(v) => setFilter({ ...filter, function_id: v })} placeholder="Type to search…" />
+          <SearchableSelect value={filter.function_id} items={functionItems} onChange={(v) => setFilter({ ...filter, function_id: v })} placeholder="Search function…" />
         </div>
         <div className="field" style={{ minWidth: 170 }}>
           <label>Department</label>
-          <SearchableSelect value={filter.department_id} items={departmentItems} onChange={(v) => setFilter({ ...filter, department_id: v })} placeholder="Type to search…" />
+          <SearchableSelect value={filter.department_id} items={departmentItems} onChange={(v) => setFilter({ ...filter, department_id: v })} placeholder="Search department…" />
         </div>
         <div className="field" style={{ minWidth: 200 }}>
           <label>Project</label>

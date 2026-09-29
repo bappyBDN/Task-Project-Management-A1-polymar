@@ -72,7 +72,7 @@ export default function Signup() {
         </div>
         <div className="form-row">
           <div>
-            <label>Company (SBU)</label>
+            <label>SBU</label>
             <SbuSelect value={form.company_id} companies={opts.companies} onChange={(v) => set('company_id', v)} canCreate={false} />
             {isPendingSbu(form.company_id) && (
               <div className="small muted" style={{ marginTop: 4 }}>This SBU isn't set up yet - your admin will assign it to your account.</div>

@@ -8,7 +8,7 @@ import SbuSelect from './SbuSelect'
 /**
  * "New Project" form, shared by the Projects page (+ Add Project) and the Task
  * form (+ new project), so both always ask for the same fields.
- * Required: Project Name, Company (SBU), Start Date, Due Date. The rest is optional.
+ * Required: Project Name, SBU, Start Date, Due Date. The rest is optional.
  *
  * withTasks (Projects page only): the user can also add any number of tasks in the
  * same step. The project is created first, then each task through the normal
@@ -28,7 +28,7 @@ const EMPTY_FORM = {
 // Only these are mandatory; everything else is optional.
 const REQUIRED: { key: keyof typeof EMPTY_FORM; label: string }[] = [
   { key: 'name', label: 'Project Name' },
-  { key: 'company_id', label: 'Company (SBU)' },
+  { key: 'company_id', label: 'SBU' },
   { key: 'manager_id', label: 'Project Manager' },
   { key: 'start_date', label: 'Start Date' },
   { key: 'baseline_due_date', label: 'Due Date' },
@@ -297,7 +297,7 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
 
         <div className="form-row">
           <div>
-            <label>Company (SBU) *</label>
+            <label>SBU *</label>
             <SbuSelect value={form.company_id} companies={companies} onChange={(v) => set('company_id', v)} />
           </div>
           <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
