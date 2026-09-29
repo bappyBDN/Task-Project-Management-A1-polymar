@@ -3,6 +3,7 @@ import { api } from '../api'
 import type { Project, ProjectAssociate, Task, User } from '../types'
 import { label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import SignupForm from './SignupForm'
 
 // Who contributes to a project, and how much.
 // Task work is counted from the tasks: each person's share is the part of the
@@ -28,9 +29,11 @@ interface Props {
   tasks: Task[]
   users: User[]
   canManage: boolean
+  /** reload the employee list (after adding a new employee); resolves to the new list */
+  reloadUsers: () => Promise<User[]>
 }
 
-export default function ProjectContribution({ project, tasks, users, canManage }: Props) {
+export default function ProjectContribution({ project, tasks, users, canManage, reloadUsers }: Props) {
   const [associates, setAssociates] = useState<ProjectAssociate[]>([])
   const [loadErr, setLoadErr] = useState('')
   const [editing, setEditing] = useState<ProjectAssociate | 'new' | null>(null)
@@ -167,6 +170,7 @@ export default function ProjectContribution({ project, tasks, users, canManage }
           projectId={project.id}
           existing={editing === 'new' ? null : editing}
           users={users.filter((u) => u.is_active !== false && (editing !== 'new' || !associates.some((a) => a.user_id === u.id)))}
+          reloadUsers={reloadUsers}
           onClose={() => setEditing(null)}
           onSaved={(text) => { setEditing(null); setMsg(text); load() }}
         />
@@ -175,18 +179,38 @@ export default function ProjectContribution({ project, tasks, users, canManage }
   )
 }
 
-function AssociateModal({ projectId, existing, users, onClose, onSaved }: {
+function AssociateModal({ projectId, existing, users, reloadUsers, onClose, onSaved }: {
   projectId: number
   existing: ProjectAssociate | null
   users: User[]
+  reloadUsers: () => Promise<User[]>
   onClose: () => void
   onSaved: (message: string) => void
 }) {
   const [userId, setUserId] = useState(existing ? String(existing.user_id) : '')
   const [contribution, setContribution] = useState(existing?.contribution ?? '')
   const [err, setErr] = useState('')
+  const [info, setInfo] = useState('')
   const [saving, setSaving] = useState(false)
-  const person = users.find((u) => String(u.id) === userId)
+  const [addingEmployee, setAddingEmployee] = useState(false)
+  // someone just added may not be in `users` until the parent re-renders
+  const [added, setAdded] = useState<User | null>(null)
+  const person = users.find((u) => String(u.id) === userId) ?? (added && String(added.id) === userId ? added : undefined)
+  const choices = added && !users.some((u) => u.id === added.id) ? [...users, added] : users
+
+  // new employee created with the sign-up form: pick them here right away
+  const employeeAdded = async (message: string, employeeId: string) => {
+    setAddingEmployee(false)
+    setErr('')
+    try {
+      const list = await reloadUsers()
+      const u = list.find((x) => x.employee_id.trim().toLowerCase() === employeeId.toLowerCase())
+      if (u) { setAdded(u); setUserId(String(u.id)) }
+      setInfo(`${message}${u ? ` ${u.name} is selected below - now describe their contribution.` : ''}`)
+    } catch {
+      setInfo(`${message} Pick them from the list.`)
+    }
+  }
 
   const save = async () => {
     if (!userId) { setErr('Choose the employee'); return }
@@ -208,10 +232,19 @@ function AssociateModal({ projectId, existing, users, onClose, onSaved }: {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>{existing ? `Contribution - ${person?.name ?? ''}` : 'Add Associated Person'}</h2>
         {err && <div className="alert error" role="alert">{err}</div>}
+        {info && <div className="alert success" role="status">{info}</div>}
         <label>Employee *</label>
         {existing
           ? <input value={person?.name ?? ''} disabled />
-          : <SearchableSelect value={userId} items={users.map((u) => ({ value: String(u.id), label: u.designation ? `${u.name} - ${u.designation}` : u.name }))} onChange={setUserId} placeholder="Search employee…" />}
+          : <SearchableSelect
+              value={userId}
+              items={choices.map((u) => ({ value: String(u.id), label: u.designation ? `${u.name} - ${u.designation}` : u.name }))}
+              onChange={setUserId}
+              placeholder="Search employee…"
+              onAddNew={() => { setInfo(''); setAddingEmployee(true) }}
+              addLabel="Add new employee (not in the system)"
+            />}
+        {!existing && <div className="small muted" style={{ marginTop: 4 }}>Not in the list? Choose "+ Add new employee" at the top of the list.</div>}
         <label>Contribution *</label>
         <textarea rows={4} maxLength={1000} value={contribution} onChange={(e) => setContribution(e.target.value)}
           placeholder="e.g. Provided vendor quotations and negotiated the supply contract" />
@@ -221,6 +254,18 @@ function AssociateModal({ projectId, existing, users, onClose, onSaved }: {
           <button className="btn primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
+
+      {addingEmployee && (
+        <div className="modal-backdrop" onClick={(e) => { e.stopPropagation(); setAddingEmployee(false) }}>
+          <div className="modal" style={{ maxWidth: 620, maxHeight: '92vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <h2>Add New Employee</h2>
+            <div className="small muted mb">
+              Same as the Sign Up form: they get an email with a link to set their password, as an Employee (an admin can change the role).
+            </div>
+            <SignupForm forOther submitLabel="Create Employee" onSuccess={employeeAdded} onCancel={() => setAddingEmployee(false)} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

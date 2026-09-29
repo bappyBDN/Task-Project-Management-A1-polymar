@@ -23,8 +23,10 @@ export default function ProjectDetail() {
   const { user } = useAuth()
   const isPrivileged = useIsPrivileged(user?.role)
 
+  const reloadUsers = () => api.get<User[]>('/organizations/users').then((u) => { setUsers(u); return u })
+
   useEffect(() => {
-    api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
+    reloadUsers().catch(() => {})
     api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
   }, [])
 
@@ -141,7 +143,7 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} />
+      <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} reloadUsers={reloadUsers} />
 
           <div className="card mt">
             <div className="section-title" style={{ marginTop: 0 }}>Tasks ({tasks.length})</div>
