@@ -130,6 +130,12 @@ def can_edit_project(db: Session, user: models.User, project: models.Project) ->
     return is_privileged(db, user) or is_project_ra(db, user, project)
 
 
+def can_manage_associates(db: Session, user: models.User, project: models.Project) -> bool:
+    """Who may add / edit / remove a project's associated people: whoever can edit the
+    project, plus its Manager, Owner and Sponsor."""
+    return user.id in (project.manager_id, project.owner_id, project.sponsor_id) or can_edit_project(db, user, project)
+
+
 def check_project_edit(db: Session, user: models.User, project: models.Project, data: dict) -> dict:
     if not can_edit_project(db, user, project):
         raise HTTPException(403, "Only an admin / PMO or a Responsible / Accountable person on this project's tasks can edit this project.")

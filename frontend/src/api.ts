@@ -155,6 +155,7 @@ function local<T>(path: string, options?: { method?: string; body?: unknown }): 
     // parameterized GETs
     let m
     if ((m = sp.match(/^\/projects\/(\d+)\/milestones$/))) return store.milestones(Number(m[1])) as unknown as T
+    if ((m = sp.match(/^\/projects\/(\d+)\/associates$/))) return store.associates(Number(m[1])) as unknown as T
     if ((m = sp.match(/^\/projects\/(\d+)$/))) return store.projectById(Number(m[1])) as unknown as T
     if ((m = sp.match(/^\/tasks\/(\d+)\/progress$/))) return store.progressList(Number(m[1])) as unknown as T
     if ((m = sp.match(/^\/tasks\/(\d+)$/))) return store.taskById(Number(m[1])) as unknown as T
@@ -192,6 +193,7 @@ function local<T>(path: string, options?: { method?: string; body?: unknown }): 
     let m
     if ((m = sp.match(/^\/tasks\/(\d+)\/progress$/))) return store.addProgress(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/projects\/(\d+)\/milestones$/))) return store.createMilestone(Number(m[1]), body) as unknown as T
+    if ((m = sp.match(/^\/projects\/(\d+)\/associates$/))) return store.addAssociate(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/approvals\/(\d+)\/decision$/))) return store.decideApproval(Number(m[1]), body.status, body.reason) as unknown as T
     if ((m = sp.match(/^\/actions\/(\d+)\/convert-to-task$/))) return store.convertAction(Number(m[1]), body?.responsible_id) as unknown as T
     if ((m = sp.match(/^\/audit\/notifications\/(\d+)\/read$/))) return store.markRead(Number(m[1])) as unknown as T
@@ -201,6 +203,7 @@ function local<T>(path: string, options?: { method?: string; body?: unknown }): 
   // PATCH
   if (m === 'PATCH') {
     let m
+    if ((m = sp.match(/^\/projects\/\d+\/associates\/(\d+)$/))) return store.updateAssociate(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/tasks\/(\d+)$/))) return store.updateTask(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/projects\/(\d+)$/))) return store.updateProject(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/organizations\/users\/(\d+)$/))) return store.updateUser(Number(m[1]), body) as unknown as T
@@ -213,6 +216,7 @@ function local<T>(path: string, options?: { method?: string; body?: unknown }): 
   // DELETE
   if (m === 'DELETE') {
     let mm
+    if ((mm = sp.match(/^\/projects\/\d+\/associates\/(\d+)$/))) { store.removeAssociate(Number(mm[1])); return undefined as T }
     if ((mm = sp.match(/^\/tasks\/(\d+)\/permanent$/))) { store.permanentDeleteTask(Number(mm[1])); return undefined as T }
     if ((mm = sp.match(/^\/tasks\/(\d+)$/))) { store.deleteTask(Number(mm[1])); return undefined as T }
     if ((mm = sp.match(/^\/projects\/(\d+)$/))) { store.deleteProject(Number(mm[1])); return undefined as T }

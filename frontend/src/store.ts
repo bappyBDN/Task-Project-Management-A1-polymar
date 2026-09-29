@@ -3,7 +3,7 @@
 
 import type {
   Approval, AuditEntry, BacklogItem, Company, Decision, DelayRca, Department, Function, Issue,
-  ManagementAction, Meeting, Milestone, Notification, ProgressUpdate, Project, ProjectKpi,
+  ManagementAction, Meeting, Milestone, Notification, ProgressUpdate, Project, ProjectAssociate, ProjectKpi,
   RaciEntry, Risk, Task, TaskKpi, User,
 } from './types'
 
@@ -20,6 +20,7 @@ interface DB {
   users: User[]
   projects: Project[]
   milestones: Milestone[]
+  associates?: ProjectAssociate[] // optional: data saved before this existed has none
   tasks: Task[]
   progress: ProgressUpdate[]
   delays: DelayRca[]
@@ -394,6 +395,23 @@ export const store = {
     persist()
   },
   milestones: (projectId: number) => db.milestones.filter((m) => m.project_id === projectId),
+
+  // people associated with a project beyond its tasks
+  associates: (projectId: number) => (db.associates ?? []).filter((a) => a.project_id === projectId),
+  addAssociate: (projectId: number, a: { user_id: number; contribution: string }): ProjectAssociate => {
+    const list = (db.associates ??= [])
+    if (list.some((x) => x.project_id === projectId && x.user_id === a.user_id)) throw new Error('This employee is already associated with this project.')
+    if (!a.contribution?.trim()) throw new Error('Describe their contribution to the project')
+    const row = { id: nextId(db), project_id: projectId, user_id: a.user_id, contribution: a.contribution.trim(), created_at: new Date().toISOString() }
+    list.push(row); persist(); return row
+  },
+  updateAssociate: (id: number, a: { contribution: string }): ProjectAssociate => {
+    const row = (db.associates ?? []).find((x) => x.id === id)
+    if (!row) throw new Error('Associated person not found')
+    if (!a.contribution?.trim()) throw new Error('Describe their contribution to the project')
+    row.contribution = a.contribution.trim(); persist(); return row
+  },
+  removeAssociate: (id: number) => { db.associates = (db.associates ?? []).filter((x) => x.id !== id); persist() },
   createMilestone: (projectId: number, m: any): Milestone => {
     const ms = { ...m, id: nextId(db), project_id: projectId }
     db.milestones.push(ms); persist(); return ms

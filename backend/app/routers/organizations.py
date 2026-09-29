@@ -120,6 +120,9 @@ def permanent_delete_user(user_id: int, admin: models.User = Depends(get_admin_u
             db.query(model).filter(getattr(model, col) == user_id).update({col: None}, synchronize_session=False)
 
     db.query(models.RaciEntry).filter(models.RaciEntry.user_id == user_id).delete(synchronize_session=False)
+    db.query(models.ProjectAssociate).filter(models.ProjectAssociate.user_id == user_id).delete(synchronize_session=False)
+    db.query(models.ProjectAssociate).filter(models.ProjectAssociate.added_by_id == user_id).update(
+        {"added_by_id": None}, synchronize_session=False)
     db.query(models.Notification).filter(models.Notification.user_id == user_id).delete(synchronize_session=False)
 
     db.delete(user)

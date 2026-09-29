@@ -147,6 +147,25 @@ class ProjectOut(ProjectBase):
     id: int
 
 
+class ProjectAssociateIn(BaseModel):
+    user_id: int
+    contribution: str
+
+
+class ProjectAssociateUpdate(BaseModel):
+    contribution: str
+
+
+class ProjectAssociateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+    user_id: int
+    contribution: str
+    added_by_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+
 class MilestoneBase(BaseModel):
     project_id: int
     name: str

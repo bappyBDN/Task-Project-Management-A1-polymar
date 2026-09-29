@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { useIsPrivileged } from '../usePrivileged'
 import ProjectForm from '../components/ProjectForm'
+import ProjectContribution from '../components/ProjectContribution'
 import { Company, Milestone, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { sbuName } from '../org'
@@ -37,30 +38,6 @@ export default function ProjectDetail() {
 
   const userName = (uid?: number) => users.find((u) => u.id === uid)?.name
 
-  // ---------------------------------------------------------------- Team: everyone touching this project
-  const team = useMemo(() => {
-    const roles = new Map<number, Set<string>>()
-    const add = (uid: number | undefined | null, role: string) => {
-      if (!uid) return
-      if (!roles.has(uid)) roles.set(uid, new Set())
-      roles.get(uid)!.add(role)
-    }
-    if (project) {
-      add(project.manager_id, 'Manager')
-      add(project.sponsor_id, 'Sponsor')
-      add(project.owner_id, 'Owner')
-    }
-    tasks.forEach((t) => {
-      add(t.responsible_id, 'Responsible')
-      add(t.accountable_id, 'Accountable')
-      add(t.reviewer_id, 'Reviewer')
-    })
-    return Array.from(roles.entries())
-      .map(([uid, roleSet]) => ({ user: users.find((u) => u.id === uid), roles: Array.from(roleSet) }))
-      .filter((r) => r.user)
-      .sort((a, b) => (a.user!.name > b.user!.name ? 1 : -1))
-  }, [project, tasks, users])
-
   if (!project) {
     if (loadErr) {
       return (
@@ -79,6 +56,8 @@ export default function ProjectDetail() {
   // the whole project (same rule as app/permissions.py on the server).
   const isProjectRA = !!user && tasks.some((t) => t.responsible_id === user.id || t.accountable_id === user.id)
   const canEdit = isPrivileged || isProjectRA
+  // associated people: also the project's Manager / Owner / Sponsor (same rule as the server)
+  const canManageAssociates = canEdit || (!!user && [project.manager_id, project.owner_id, project.sponsor_id].includes(user.id))
 
   return (
     <div>
@@ -126,7 +105,10 @@ export default function ProjectDetail() {
             </div>
           </div>
 
-          <div className="card mt">
+        </div>
+
+        <div>
+          <div className="card">
             <div className="section-title" style={{ marginTop: 0 }}>Deadline Governance</div>
             <table>
               <tbody>
@@ -156,9 +138,14 @@ export default function ProjectDetail() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} />
 
           <div className="card mt">
             <div className="section-title" style={{ marginTop: 0 }}>Tasks ({tasks.length})</div>
+            <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
                 <tr>
@@ -185,33 +172,8 @@ export default function ProjectDetail() {
                 {tasks.length === 0 && <tr><td colSpan={8} className="muted small">No tasks under this project</td></tr>}
               </tbody>
             </table>
+            </div>
           </div>
-        </div>
-
-        <div>
-          <div className="card">
-            <div className="section-title" style={{ marginTop: 0 }}>Project Team ({team.length})</div>
-            {team.length === 0 && <div className="small muted">No one assigned yet.</div>}
-            {team.map(({ user, roles }) => (
-              <div
-                key={user!.id}
-                className="row spread"
-                style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}
-              >
-                <div>
-                  <div className="small" style={{ fontWeight: 600 }}>{user!.name}</div>
-                  <div className="muted" style={{ fontSize: 11 }}>{user!.designation || label(user!.role)}</div>
-                </div>
-                <div className="row" style={{ gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {roles.map((r) => (
-                    <span key={r} className="badge gray" style={{ fontSize: 10 }}>{r}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

@@ -61,6 +61,16 @@ export interface Project {
   criticality: string
 }
 
+/** Someone contributing to a project beyond its tasks (see ProjectContribution). */
+export interface ProjectAssociate {
+  id: number
+  project_id: number
+  user_id: number
+  contribution: string
+  added_by_id?: number | null
+  created_at?: string
+}
+
 export interface Milestone {
   id: number
   project_id: number

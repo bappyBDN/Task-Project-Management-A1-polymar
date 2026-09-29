@@ -109,6 +109,20 @@ class Project(Base, TimestampMixin):
     criticality: Mapped[str] = mapped_column(String(16), default="medium")
 
 
+class ProjectAssociate(Base, TimestampMixin):
+    """Someone who contributes to a project without (necessarily) being on its tasks,
+    with a short description of their contribution. People on the tasks are counted
+    from the tasks themselves; this adds everyone else."""
+    __tablename__ = "project_associates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    contribution: Mapped[str] = mapped_column(Text)
+    added_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_project_associate"),)
+
+
 class Milestone(Base, TimestampMixin):
     __tablename__ = "milestones"
     id: Mapped[int] = mapped_column(primary_key=True)

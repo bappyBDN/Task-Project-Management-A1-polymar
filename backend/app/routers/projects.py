@@ -92,6 +92,95 @@ def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session 
     return project
 
 
+# ---------------------------------------------------------------- associated people
+# People who contribute to the project beyond (or without) its tasks, each with a
+# short description of the contribution. Anyone can see them; the project's
+# Manager / Owner / Sponsor, task Responsible / Accountable and admin / PMO manage them.
+
+def _project_or_404(db: Session, project_id: int) -> models.Project:
+    project = db.get(models.Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    return project
+
+
+def _contribution(text: str) -> str:
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(400, "Describe their contribution to the project")
+    if len(text) > 1000:
+        raise HTTPException(400, "Contribution is too long (1000 characters at most)")
+    return text
+
+
+def _require_manage(db: Session, user: models.User, project: models.Project):
+    if not permissions.can_manage_associates(db, user, project):
+        raise HTTPException(403, "Only the project's Manager / Owner / Sponsor, a Responsible / Accountable person on its tasks, or an admin / PMO can change associated people.")
+
+
+@router.get("/{project_id}/associates", response_model=list[schemas.ProjectAssociateOut])
+def list_associates(project_id: int, db: Session = Depends(get_db)):
+    _project_or_404(db, project_id)
+    return db.query(models.ProjectAssociate).filter(
+        models.ProjectAssociate.project_id == project_id).order_by(models.ProjectAssociate.id).all()
+
+
+@router.post("/{project_id}/associates", response_model=schemas.ProjectAssociateOut, status_code=201)
+def add_associate(project_id: int, payload: schemas.ProjectAssociateIn, db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)):
+    project = _project_or_404(db, project_id)
+    _require_manage(db, current_user, project)
+    person = db.get(models.User, payload.user_id)
+    if not person:
+        raise HTTPException(400, "Selected employee does not exist")
+    if db.query(models.ProjectAssociate.id).filter_by(project_id=project_id, user_id=payload.user_id).first():
+        raise HTTPException(409, f"{person.name} is already associated with this project - edit their contribution instead.")
+    row = models.ProjectAssociate(project_id=project_id, user_id=person.id,
+                                  contribution=_contribution(payload.contribution),
+                                  added_by_id=current_user.id, created_by=current_user.name)
+    db.add(row)
+    services.audit(db, current_user.name, "project", project_id, "associate_added", new_value=f"{person.name}: {row.contribution}")
+    try:
+        db.commit()
+    except IntegrityError:  # the same person added twice at the same moment
+        db.rollback()
+        raise HTTPException(409, f"{person.name} is already associated with this project.")
+    db.refresh(row)
+    return row
+
+
+@router.patch("/{project_id}/associates/{associate_id}", response_model=schemas.ProjectAssociateOut)
+def update_associate(project_id: int, associate_id: int, payload: schemas.ProjectAssociateUpdate,
+                     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    project = _project_or_404(db, project_id)
+    _require_manage(db, current_user, project)
+    row = db.get(models.ProjectAssociate, associate_id)
+    if not row or row.project_id != project_id:
+        raise HTTPException(404, "Associated person not found")
+    previous = row.contribution
+    row.contribution = _contribution(payload.contribution)
+    services.audit(db, current_user.name, "project", project_id, "associate_updated",
+                   previous_value=previous, new_value=row.contribution)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/{project_id}/associates/{associate_id}", status_code=204)
+def remove_associate(project_id: int, associate_id: int, db: Session = Depends(get_db),
+                     current_user: models.User = Depends(get_current_user)):
+    project = _project_or_404(db, project_id)
+    _require_manage(db, current_user, project)
+    row = db.get(models.ProjectAssociate, associate_id)
+    if not row or row.project_id != project_id:
+        return  # already gone
+    person = db.get(models.User, row.user_id)
+    services.audit(db, current_user.name, "project", project_id, "associate_removed",
+                   previous_value=f"{person.name if person else row.user_id}: {row.contribution}")
+    db.delete(row)
+    db.commit()
+
+
 @router.get("/{project_id}/milestones", response_model=list[schemas.MilestoneOut])
 def list_milestones(project_id: int, db: Session = Depends(get_db)):
     return db.query(models.Milestone).filter(models.Milestone.project_id == project_id).order_by(models.Milestone.due_date).all()
@@ -134,6 +223,7 @@ def delete_project(project_id: int, admin: models.User = Depends(get_admin_user)
     for model in (models.BacklogItem, models.Risk, models.Issue, models.Decision):
         db.query(model).filter(model.project_id == project_id).update({"project_id": None}, synchronize_session=False)
     db.query(models.RaciEntry).filter(models.RaciEntry.project_id == project_id).delete(synchronize_session=False)
+    db.query(models.ProjectAssociate).filter(models.ProjectAssociate.project_id == project_id).delete(synchronize_session=False)
     services.audit(db, admin.name, "project", project_id, "deleted", previous_value=name,
                    reason=f"Deleted by admin {admin.name}")
     db.delete(project)
