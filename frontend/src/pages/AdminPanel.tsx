@@ -4,6 +4,7 @@ import { Company, Department, Function, Project, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import SbuSelect from '../components/SbuSelect'
+import DuplicatesPanel from '../components/DuplicatesPanel'
 import { clearPrivilegedCache } from '../usePrivileged'
 
 const ROLES = ['group_executive', 'business_head', 'functional_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
@@ -83,7 +84,7 @@ function OrgTreeNode({
 
 export default function AdminPanel() {
   // Added 'emails' to tab state
-  const [tab, setTab] = useState<'users' | 'tasks' | 'roles' | 'hierarchy' | 'emails'>('users')
+  const [tab, setTab] = useState<'users' | 'tasks' | 'roles' | 'hierarchy' | 'emails' | 'duplicates'>('users')
   const [users, setUsers] = useState<User[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -266,7 +267,15 @@ export default function AdminPanel() {
         <button className={`btn ${tab === 'roles' ? 'primary' : ''}`} onClick={() => setTab('roles')}>Privileged Roles</button>
         <button className={`btn ${tab === 'hierarchy' ? 'primary' : ''}`} onClick={() => setTab('hierarchy')}>Hierarchy Mapping</button>
         <button className={`btn ${tab === 'emails' ? 'primary' : ''}`} onClick={() => setTab('emails')}>System Emails</button>
+        <button className={`btn ${tab === 'duplicates' ? 'primary' : ''}`} onClick={() => setTab('duplicates')}>Duplicates</button>
       </div>
+
+      {tab === 'duplicates' && (
+        <DuplicatesPanel
+          companies={companies} functions={functions} departments={departments}
+          tasks={tasks} projects={projects} users={users} onDone={load}
+        />
+      )}
 
       {tab === 'emails' && (
         <div className="card" style={{ padding: 0 }}>

@@ -25,7 +25,25 @@ const PENDING = 'sbu:'
 export const isPendingSbu = (v: string) => v.startsWith(PENDING)
 
 // "Anwar Cement", "Anwar Cement Ltd." and "anwar cement limited" are the same SBU.
-const norm = (s: string) => s.toLowerCase().replace(/\b(ltd|limited)\b/g, '').replace(/[^a-z0-9]/g, '')
+export const norm = (s: string) => s.toLowerCase().replace(/\b(ltd|limited)\b/g, '').replace(/[^a-z0-9]/g, '')
+
+// Other spellings already used in the company list for the same SBU.
+const ALIASES: Record<string, string[]> = {
+  'A-One Polymer Ltd': ['A1 Polymar', 'A1 Polymer', 'A-One Polymar'],
+}
+const KEY_OF = new Map<string, string>()
+for (const name of DEFAULT_SBUS) {
+  for (const n of [name, ...(ALIASES[name] ?? [])]) KEY_OF.set(norm(n), norm(name))
+}
+
+/** Companies with the same key are the same SBU (a spelling of one of DEFAULT_SBUS, or the same name). */
+export const sbuKey = (name: string) => KEY_OF.get(norm(name)) ?? norm(name)
+
+/** Of several companies that are the same SBU, the one the dropdowns use: the official name, else the oldest. */
+export function pickSbu<T extends { id: number; name: string }>(list: T[]): T | undefined {
+  const official = DEFAULT_SBUS.find((n) => list.some((c) => norm(c.name) === norm(n)))
+  return list.find((c) => official !== undefined && norm(c.name) === norm(official)) ?? [...list].sort((x, y) => x.id - y.id)[0]
+}
 
 // Initials, e.g. "Anwar Cement Sheet Ltd" -> "ACSL", made unique against the known codes.
 function makeCode(name: string, taken: Set<string>) {
@@ -57,14 +75,18 @@ export default function SbuSelect({ value, companies, onChange, placeholder = 'S
   const [error, setError] = useState('')
 
   const all = [...companies, ...created.filter((c) => !companies.some((x) => x.id === c.id))]
-  const byName = new Map(all.map((c) => [norm(c.name), c]))
+  // duplicates of one SBU show once; a record still on another copy keeps showing its own
+  const groups = new Map<string, Option[]>()
+  for (const c of all) groups.set(sbuKey(c.name), [...(groups.get(sbuKey(c.name)) ?? []), c])
   const defaults = DEFAULT_SBUS.flatMap((name) => {
-    const c = byName.get(norm(name))
+    const same = groups.get(norm(name)) ?? []
+    const c = same.find((x) => String(x.id) === value) ?? pickSbu(same)
     if (c) return [{ value: String(c.id), label: c.name }]
     return [{ value: PENDING + name, label: name }]
   })
+  const officialKeys = new Set(DEFAULT_SBUS.map(norm))
   const others = all
-    .filter((c) => !DEFAULT_SBUS.some((n) => norm(n) === norm(c.name)))
+    .filter((c) => !officialKeys.has(sbuKey(c.name)))
     .map((c) => ({ value: String(c.id), label: c.name }))
 
   const pick = async (v: string) => {
