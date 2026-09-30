@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth'
-import { STORAGE_MODE } from './api'
+import { api, STORAGE_MODE } from './api'
 import { store } from './store'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -81,6 +81,28 @@ function buildSections(isAdmin: boolean): NavSection[] {
   return sections
 }
 
+// Live counts on the menu: unread notifications and approvals waiting for me.
+// Reloads on every page change and once a minute; a failed call just hides the badge.
+function useNavBadges(userId: number | undefined, pathname: string): Record<string, number> {
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') setTick((n) => n + 1) }, 60000)
+    return () => window.clearInterval(t)
+  }, [])
+  useEffect(() => {
+    if (!userId || STORAGE_MODE === 'local') return
+    let cancelled = false
+    const put = (to: string) => (n: number) => { if (!cancelled) setCounts((c) => ({ ...c, [to]: n })) }
+    api.get<{ is_read: boolean }[]>(`/audit/notifications?user_id=${userId}`)
+      .then((l) => put('/notifications')(l.filter((n) => !n.is_read).length)).catch(() => {})
+    api.get<unknown[]>(`/approvals?approver_id=${userId}&status=pending`)
+      .then((l) => put('/approvals')(l.length)).catch(() => {})
+    return () => { cancelled = true }
+  }, [userId, pathname, tick])
+  return counts
+}
+
 const initialsOf = (name?: string) =>
   (name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?'
 
@@ -100,6 +122,7 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   // close the phone menu after navigating
   useEffect(() => { setNavOpen(false) }, [location.pathname])
+  const badges = useNavBadges(user?.id, location.pathname)
 
   if (loading) {
     return (
@@ -146,7 +169,8 @@ export default function App() {
                   className={({ isActive }) => (isActive ? 'active' : '')}
                 >
                   <NavIcon name={i.icon} />
-                  <span>{i.label}</span>
+                  <span className="nav-label">{i.label}</span>
+                  {!!badges[i.to] && <span className="nav-badge" aria-label={`${badges[i.to]} new`}>{badges[i.to] > 99 ? '99+' : badges[i.to]}</span>}
                 </NavLink>
               ))}
             </div>
@@ -154,17 +178,17 @@ export default function App() {
         </nav>
         <div className="side-user">
           <div className="who">
-            <span className="avatar" aria-hidden>{initialsOf(user.name)}</span>
-            <div style={{ minWidth: 0 }}>
+            <span className="avatar" aria-hidden>
+              {initialsOf(user.name)}
+              <i className={STORAGE_MODE === 'local' ? 'off' : ''}
+                title={STORAGE_MODE === 'local' ? 'Data stored in browser (localStorage)' : 'Connected to database'} />
+            </span>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div className="name" title={user.name}>{user.name}</div>
               <div className="role">{label(user.role)}</div>
             </div>
+            <button className="signout" onClick={logout} title="Sign out" aria-label="Sign out"><NavIcon name="signout" /></button>
           </div>
-          <div className="conn">
-            <i className={STORAGE_MODE === 'local' ? 'off' : ''} />
-            {STORAGE_MODE === 'local' ? 'Data stored in browser (localStorage)' : 'Connected to database'}
-          </div>
-          <button className="signout" onClick={logout}><NavIcon name="signout" />Sign Out</button>
           {/* Only meaningful for the browser-only demo mode: it never touches the real database,
               so showing it to everyone in database mode was just alarming. */}
           {STORAGE_MODE === 'local' && (
