@@ -273,3 +273,9 @@ tr.clickable, .clickable { cursor: pointer; }
 }
 .subhead { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 18px 0 10px; }
 .raci-scroll.compact { max-height: 420px; min-height: 0; }
+.raci-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; max-height: 280px; overflow-y: auto; padding-right: 4px; }
+.raci-bar-row { display: grid; grid-template-columns: minmax(70px, 120px) minmax(40px, 1fr) auto; gap: 8px; align-items: center; }
+.raci-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.raci-bar-track { min-width: 0; }
+.raci-bar-counts { display: flex; gap: 3px; }
+.raci-bar-counts .raci-chip { min-width: 0; height: 18px; padding: 0 5px; font-size: 10px; }

@@ -22,7 +22,7 @@ const UNASSIGNED = '#d5dbe5'
 
 interface Row {
   user: User
-  roles: string[] // Manager / Owner / Sponsor
+  roles: string[] // Project Manager
   resp: Task[]
   acc: number
   rev: number
@@ -79,8 +79,7 @@ export default function ProjectContribution({ project, tasks, users, canManage, 
       if (!map.has(uid)) map.set(uid, { user, roles: [], resp: [], acc: 0, rev: 0 })
       return map.get(uid)!
     }
-    ;([[project.manager_id, 'Project Manager'], [project.owner_id, 'Owner'], [project.sponsor_id, 'Sponsor']] as const)
-      .forEach(([uid, r]) => { const x = row(uid); if (x && !x.roles.includes(r)) x.roles.push(r) })
+    row(project.manager_id)?.roles.push('Project Manager')
     tasks.forEach((t) => {
       row(t.responsible_id)?.resp.push(t)
       const a = row(t.accountable_id); if (a) a.acc++
@@ -119,8 +118,8 @@ export default function ProjectContribution({ project, tasks, users, canManage, 
     return segs
   }, [contributors, colorOf, tasks, withResp])
 
-  const keyRoles = ([['Project Manager', project.manager_id], ['Owner', project.owner_id], ['Sponsor', project.sponsor_id]] as const)
-    .map(([role, uid]) => ({ role, user: users.find((u) => u.id === uid) }))
+  const manager = users.find((u) => u.id === project.manager_id)
+  const managerRow = rows.find((r) => r.user.id === project.manager_id)
 
   const remove = async (a: ProjectAssociate) => {
     if (confirmRemove !== a.id) { setConfirmRemove(a.id); return }
@@ -161,24 +160,25 @@ export default function ProjectContribution({ project, tasks, users, canManage, 
       {msg && <div className="alert success mt" role="status">{msg}</div>}
       {loadErr && <div className="alert error mt" role="alert">{loadErr}</div>}
 
-      {/* ---- key roles ---- */}
-      <div className="subhead">Key Roles</div>
-      <div className="people-grid">
-        {keyRoles.map(({ role, user }) => (
-          <div key={role} className="person-card key">
-            {user ? (
-              <PersonHead user={user} color={contributors.some((r) => r.user.id === user.id) ? colorOf(user.id) : undefined}>
-                <span className="badge gold" style={{ fontSize: 10 }}>{role}</span>
-              </PersonHead>
-            ) : (
-              <div className="person-head">
-                <div className="avatar empty">?</div>
-                <div className="who" style={{ flex: 1 }}><div className="name muted">Not set</div></div>
-                <span className="badge gray" style={{ fontSize: 10 }}>{role}</span>
+      {/* ---- project manager ---- */}
+      <div className="subhead">Project Manager</div>
+      <div className="person-card key" style={{ maxWidth: 420 }}>
+        {manager ? (
+          <PersonHead user={manager} color={contributors.some((r) => r.user.id === manager.id) ? colorOf(manager.id) : undefined}>
+            {managerRow && (managerRow.resp.length > 0 || managerRow.acc > 0 || managerRow.rev > 0) && (
+              <div className="row" style={{ gap: 4 }}>
+                <span className="raci-chip R" title="Responsible">R {managerRow.resp.length}</span>
+                <span className="raci-chip A" title="Accountable">A {managerRow.acc}</span>
+                <span className="raci-chip C" title="Consulted (Reviewer)">C {managerRow.rev}</span>
               </div>
             )}
+          </PersonHead>
+        ) : (
+          <div className="person-head">
+            <div className="avatar empty">?</div>
+            <div className="who" style={{ flex: 1 }}><div className="name muted">Not set</div></div>
           </div>
-        ))}
+        )}
       </div>
 
       {/* ---- task share across contributors ---- */}

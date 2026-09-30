@@ -6,7 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import ProjectForm from '../components/ProjectForm'
 import ProjectContribution from '../components/ProjectContribution'
 import ProjectRaci from '../components/ProjectRaci'
-import { Company, Milestone, Project, Task, User } from '../types'
+import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { sbuName } from '../org'
 
@@ -15,7 +15,6 @@ export default function ProjectDetail() {
   const navigate = useNavigate()
   const [project, setProject] = useState<Project | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
-  const [milestones, setMilestones] = useState<Milestone[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loadErr, setLoadErr] = useState('')
@@ -36,7 +35,6 @@ export default function ProjectDetail() {
     setLoadErr('')
     api.get<Project>(`/projects/${id}`).then(setProject).catch((e) => setLoadErr(e.message || 'Could not load this project.'))
     api.get<Task[]>(`/tasks?project_id=${id}`).then(setTasks).catch(() => {})
-    api.get<Milestone[]>(`/projects/${id}/milestones`).then(setMilestones).catch(() => {})
   }, [id])
 
   const userName = (uid?: number) => users.find((u) => u.id === uid)?.name
@@ -71,7 +69,7 @@ export default function ProjectDetail() {
     return !isClosed(t) && !!due && due < todayStr
   }).length
   const openCount = tasks.filter((t) => !isClosed(t)).length
-  const people = new Set([project.manager_id, project.owner_id, project.sponsor_id,
+  const people = new Set([project.manager_id,
     ...tasks.flatMap((t) => [t.responsible_id, t.accountable_id, t.reviewer_id])].filter(Boolean)).size
   const dueDate = project.approved_due_date || project.baseline_due_date
   const daysLeft = dueDate && !project.actual_due_date
@@ -175,27 +173,9 @@ export default function ProjectDetail() {
             </table>
           </div>
 
-          <div className="card mt">
-            <div className="section-title" style={{ marginTop: 0 }}>Milestones</div>
-            <table>
-              <thead><tr><th>Milestone</th><th>Due</th><th>Status</th><th>Completion</th></tr></thead>
-              <tbody>
-                {milestones.map((m) => (
-                  <tr key={m.id}>
-                    <td>{m.name}</td>
-                    <td className="small">{fmtDate(m.due_date)}</td>
-                    <td><span className="badge gray">{label(m.status)}</span></td>
-                    <td className="small">{m.completion_pct}%</td>
-                  </tr>
-                ))}
-                {milestones.length === 0 && <tr><td colSpan={4} className="muted small">No milestones</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          <ProjectRaci projectId={project.id} tasks={tasks} />
         </div>
       </div>
-
-      <ProjectRaci projectId={project.id} tasks={tasks} />
 
       <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} reloadUsers={reloadUsers} />
 
