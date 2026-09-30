@@ -8,6 +8,8 @@ interface AuthState {
   // লগিন ফাংশনে এখন credentials (অবজেক্ট) অথবা userId (নাম্বার) পাস করা যাবে
   login: (payload: any) => Promise<void> 
   logout: () => void
+  /** replace the signed-in user's details (after they edit their profile) */
+  setMe: (u: User) => void
 }
 
 const AuthContext = createContext<AuthState>({
@@ -15,6 +17,7 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   login: async () => {},
   logout: () => {},
+  setMe: () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -81,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, setMe: setUser }}>
       {children}
     </AuthContext.Provider>
   )

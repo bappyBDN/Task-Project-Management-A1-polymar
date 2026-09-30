@@ -6,6 +6,7 @@ import { Company, Department, Function, Project, ProjectKpi, Task, TaskKpi, User
 import { HEALTH_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { mergeSbuRows } from '../org'
 import { sbuKey } from '../components/SbuSelect'
+import ProfileForm from '../components/ProfileForm'
 
 /* Dashboard wired to the FastAPI backend (app/routers/dashboards.py + /tasks).
    Renders page content only — sidebar/topbar come from the app Layout. Scoped under .ad-root. */
@@ -18,6 +19,14 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .ad-err{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff5f5;border:1px solid #fbd2d2;color:#b42318;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px}
 .ad-hello h1{margin:0;font-size:25px;color:var(--navy);display:flex;gap:10px;align-items:center}
 .ad-hello p{margin:2px 0 0 44px;color:var(--mut);font-size:14px}
+.ad-me{display:flex;align-items:center;gap:14px;min-width:0}
+.ad-me .ad-me-pic{position:relative;width:56px;height:56px;border-radius:50%;border:0;padding:0;flex:none;cursor:pointer;background:linear-gradient(135deg,#1d6bff,#0b1f3a);color:#fff;font-size:20px;font-weight:700;display:grid;place-items:center;box-shadow:0 2px 8px rgba(11,31,58,.18)}
+.ad-me .ad-me-pic:hover{box-shadow:0 0 0 3px #cfe0ff,0 2px 8px rgba(11,31,58,.18)}
+.ad-me .ad-me-pic b{position:absolute;right:-2px;bottom:-2px;width:22px;height:22px;border-radius:50%;background:#fff;color:#1d6bff;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:400;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.ad-me .ad-me-edit{border:0;background:none;padding:0;margin-top:4px;color:#1d6bff;font-size:12.5px;cursor:pointer}
+.ad-me .ad-me-edit:hover{text-decoration:underline}
+.ad-me p{margin-left:0!important}
+.ad-okmsg{background:#effaf3;border:1px solid #bfe8cf;color:#12a150;border-radius:10px;padding:8px 14px;margin-bottom:14px;font-size:13px}
 .ad-date{flex-wrap:wrap}
 .ad-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 .ad-row .ad-leg{flex:1;min-width:140px}
@@ -407,6 +416,8 @@ export default function Dashboard() {
   const [healthDist, setHealthDist] = useState<Record<string, number>>({})
   const [delayCauses, setDelayCauses] = useState<{ category: string; count: number }[]>([])
   const [orgIntel, setOrgIntel] = useState<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] } | null>(null)
+  const [editProfile, setEditProfile] = useState(false)
+  const [profileMsg, setProfileMsg] = useState('')
   const [trends, setTrends] = useState<Trends | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
 
@@ -499,15 +510,28 @@ export default function Dashboard() {
   const hEntries = (['green', 'amber', 'red', 'black'] as const).filter((h) => healthDist[h] > 0)
   const maxDelay = Math.max(1, ...delayCauses.map((d) => d.count))
   const first = (user?.name ?? '').split(' ')[0]
+  const initials = (user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?'
 
   return (
     <div className="ad-root">
       <style>{CSS}</style>
       <div className="ad-body">
         <div className="ad-hello">
-          <div><h1><Ic n="hand" s={34} c="#f5b31b" w={1.6} />Welcome back, {first}!</h1><p>Here's what's happening with your tasks and projects today.</p></div>
+          <div className="ad-me">
+            <button className="ad-me-pic" onClick={() => { setProfileMsg(''); setEditProfile(true) }} title="Edit my profile" aria-label="Edit my profile">
+              {initials}<b aria-hidden>✎</b>
+            </button>
+            <div style={{ minWidth: 0 }}>
+              <h1><Ic n="hand" s={34} c="#f5b31b" w={1.6} />Welcome back, {first}!</h1>
+              <p>{[user?.designation, user?.role && label(user.role)].filter(Boolean).join(' · ') || "Here's what's happening with your tasks and projects today."}</p>
+              <button className="ad-me-edit" onClick={() => { setProfileMsg(''); setEditProfile(true) }}>✎ Edit my profile</button>
+            </div>
+          </div>
           <div className="ad-date"><Ic n="cal" s={18} c="#1d6bff" />{now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}<span className="ad-live" title={`Refreshes every minute${updatedAt ? ` · last updated ${updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}`}><i />Live</span></div>
         </div>
+
+        {profileMsg && <div className="ad-okmsg" role="status">{profileMsg}</div>}
+        {editProfile && <ProfileForm onClose={() => setEditProfile(false)} onSaved={(m) => { setEditProfile(false); setProfileMsg(m) }} />}
 
         {(orgFailed || userFailed) && (
           <div className="ad-err" role="alert">

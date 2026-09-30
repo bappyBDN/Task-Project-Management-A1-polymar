@@ -70,6 +70,17 @@ class UserUpdate(BaseModel):
     reports_to_id: Optional[int] = None
 
 
+class UserSelfUpdate(BaseModel):
+    """PATCH /organizations/users/me: what anyone may change about themselves.
+    Employee ID, email (the login) and role stay with an admin."""
+    name: Optional[str] = None
+    designation: Optional[str] = None
+    company_id: Optional[int] = None
+    function_id: Optional[int] = None
+    department_id: Optional[int] = None
+    reports_to_id: Optional[int] = None
+
+
 class UserMappingOut(BaseModel):
     """One row of the simple User Mapping master-data table.
     Flat by design — each row shows only the immediate manager (reports_to_name).

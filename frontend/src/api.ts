@@ -206,6 +206,7 @@ function local<T>(path: string, options?: { method?: string; body?: unknown }): 
     if ((m = sp.match(/^\/projects\/\d+\/associates\/(\d+)$/))) return store.updateAssociate(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/tasks\/(\d+)$/))) return store.updateTask(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/projects\/(\d+)$/))) return store.updateProject(Number(m[1]), body) as unknown as T
+    if (sp === '/organizations/users/me') return store.updateUser(currentUserId!, body) as unknown as T
     if ((m = sp.match(/^\/organizations\/users\/(\d+)$/))) return store.updateUser(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/backlogs\/(\d+)$/))) return store.updateBacklog(Number(m[1]), body) as unknown as T
     if ((m = sp.match(/^\/decisions\/(\d+)$/))) return store.updateDecision(Number(m[1]), body) as unknown as T

@@ -46,6 +46,32 @@ def me(user: models.User = Depends(get_current_user)):
     return user
 
 
+@router.patch("/users/me", response_model=schemas.UserOut)
+def update_me(payload: schemas.UserSelfUpdate, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Edit My Profile: the signed-in user updates their own details (not role / email / Employee ID).
+    Declared before /users/{user_id} so "me" is not read as an id."""
+    data = payload.model_dump(exclude_unset=True)
+    if "name" in data:
+        if not (data["name"] or "").strip():
+            raise HTTPException(400, "Name is required")
+        data["name"] = data["name"].strip()
+    if data.get("reports_to_id") is not None:
+        if data["reports_to_id"] == user.id:
+            raise HTTPException(400, "You cannot report to yourself")
+        if not db.get(models.User, data["reports_to_id"]):
+            raise HTTPException(400, "Manager not found")
+    for fk, model in (("company_id", models.Company), ("function_id", models.Function), ("department_id", models.Department)):
+        if data.get(fk) is not None and not db.get(model, data[fk]):
+            raise HTTPException(400, f"{fk.replace('_id', '').title()} not found")
+    for k, v in data.items():
+        setattr(user, k, v)
+    if data.get("reports_to_id") is not None:
+        user.pending_manager_employee_id = None  # manager chosen - nothing left to wait for
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.post("/users", response_model=schemas.UserOut, status_code=201)
 def create_user(
     payload: schemas.UserBase,
