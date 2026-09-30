@@ -45,6 +45,14 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .ad-kpi svg.sp{display:block;flex:0 1 100px;min-width:40px;max-width:100px;height:40px}
 .ad-cols{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:16px;align-items:start}
 .ad-stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ad-cmts{max-height:420px;overflow-y:auto;margin:0 -4px}
+.ad-cmt{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:10px 4px;cursor:pointer;font:inherit;color:inherit}
+.ad-cmt:hover{background:#f7f9fd}
+.ad-cmt .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ad-cmt .when{font-size:11px;color:var(--mut);white-space:nowrap}
+.ad-cmt .ref{font-size:12px;color:#334;margin-top:5px;overflow-wrap:anywhere}
+.ad-cmt .txt{font-size:12.5px;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}
+.ad-cmt .by{font-size:11.5px;color:var(--mut);margin-top:5px;overflow-wrap:anywhere}
 .ad-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px}
 .ad-scroll{overflow-x:auto}
 .ad-card{min-width:0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 16px;box-shadow:0 1px 2px rgba(16,30,54,.03)}
@@ -434,32 +442,29 @@ function CommentInbox({ tick }: { tick: number }) {
 
   return (
     <div className="ad-card">
-      <div className="ad-head">
-        <h3 style={{ margin: 0 }}><Ic n="chat" s={17} />Comments<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({data.comments.length})</span></h3>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['all', 'project', 'task'] as const).map((f) => (
-            <button key={f} className="ad-btn" onClick={() => setFilter(f)}
-              style={filter === f ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' } : undefined}>
-              {f === 'all' ? 'All' : f === 'project' ? 'My Projects' : 'My Tasks'}
-            </button>
-          ))}
-        </div>
+      <h3 style={{ marginBottom: 8 }}><Ic n="chat" s={17} />Comments<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({data.comments.length})</span></h3>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        {(['all', 'project', 'task'] as const).map((f) => (
+          <button key={f} className="ad-btn" onClick={() => setFilter(f)}
+            style={{ flex: 1, padding: '5px 6px', ...(filter === f ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' } : {}) }}>
+            {f === 'all' ? 'All' : f === 'project' ? 'My Projects' : 'My Tasks'}
+          </button>
+        ))}
       </div>
-      <div className="ad-scroll" style={{ maxHeight: 380, overflowY: 'auto' }}><table className="ad-t">
-        <thead><tr>{['ON', 'PROJECT', 'TASK', 'COMMENT', 'BY', 'SENT'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
-        <tbody>
-          {list.map((c) => (
-            <tr key={c.id} onClick={() => open(c)} title="Open">
-              <td><span className="pill" style={c.entity_type === 'task' ? { background: '#e8f0ff', color: '#1d6bff' } : { background: '#fdf3d7', color: '#8a6d1f' }}>{label(c.entity_type)}</span></td>
-              <td style={{ minWidth: 120 }}>{ref(c.project_code, c.project_name)}</td>
-              <td style={{ minWidth: 120 }}>{c.entity_type === 'task' ? ref(c.task_code, c.task_name) : '—'}</td>
-              <td style={{ minWidth: 200, maxWidth: 360, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{c.comment.length > 240 ? `${c.comment.slice(0, 240)}…` : c.comment}</td>
-              <td style={{ whiteSpace: 'nowrap' }}>{commenterLabel(c)}</td>
-              <td>{fmtDateTime(c.created_at)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table></div>
+      <div className="ad-cmts">
+        {list.map((c) => (
+          <button key={c.id} className="ad-cmt" onClick={() => open(c)} title="Open">
+            <div className="top">
+              <span className="pill" style={c.entity_type === 'task' ? { background: '#e8f0ff', color: '#1d6bff' } : { background: '#fdf3d7', color: '#8a6d1f' }}>{label(c.entity_type)}</span>
+              <span className="when">{fmtDateTime(c.created_at)}</span>
+            </div>
+            <div className="ref">Project: {ref(c.project_code, c.project_name)}</div>
+            {c.entity_type === 'task' && <div className="ref">Task: {ref(c.task_code, c.task_name)}</div>}
+            <div className="txt">{c.comment.length > 240 ? `${c.comment.slice(0, 240)}…` : c.comment}</div>
+            <div className="by">— {commenterLabel(c)}</div>
+          </button>
+        ))}
+      </div>
       {!list.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>No comments on your {filter === 'project' ? 'projects' : filter === 'task' ? 'tasks' : 'projects or tasks'} yet.</div>}
     </div>
   )
@@ -659,7 +664,6 @@ export default function Dashboard() {
               {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked ? 'No tasks due on this date.' : 'No tasks assigned to you.'}</div>}
             </div>
 
-            <CommentInbox tick={tick} />
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,360px),1fr))', gap: 16 }}>
               <div className="ad-card">
@@ -674,6 +678,7 @@ export default function Dashboard() {
           </div>
 
           <div className="ad-stack">
+            <CommentInbox tick={tick} />
             <Calendar picked={picked} onPick={setPicked} dots={dots} today={now} />
             <div className="ad-card">
               <h3><Ic n="pulse" s={17} />Project Health Distribution</h3>
