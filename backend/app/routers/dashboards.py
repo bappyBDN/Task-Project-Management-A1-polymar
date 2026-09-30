@@ -145,6 +145,17 @@ def org_intelligence(db: Session = Depends(get_db)):
         row(by_sbu, companies.get(p.company_id, "Unassigned"))["projects"] += 1
         row(by_function, functions.get(p.function_id, "Unassigned"))["projects"] += 1
 
+    # Projects have no department of their own: a department's projects are the
+    # projects that have at least one of its tasks.
+    dept_projects = {}
+    for t in tasks:
+        if t.project_id:
+            key = (departments.get(t.department_id) or "Unassigned").strip().lower()
+            dept_projects.setdefault(key, set()).add(t.project_id)
+    for key, ids in dept_projects.items():
+        if key in by_department:
+            by_department[key]["projects"] = len(ids)
+
     def fmt(bucket):
         result = []
         for v in bucket.values():

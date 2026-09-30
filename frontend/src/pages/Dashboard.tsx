@@ -1,10 +1,11 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { ProjectKpi, Task, TaskKpi } from '../types'
-import { label } from '../constants'
+import { Company, Department, Function, Project, ProjectKpi, Task, TaskKpi, User } from '../types'
+import { HEALTH_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { mergeSbuRows } from '../org'
+import { sbuKey } from '../components/SbuSelect'
 
 /* Dashboard wired to the FastAPI backend (app/routers/dashboards.py + /tasks).
    Renders page content only — sidebar/topbar come from the app Layout. Scoped under .ad-root. */
@@ -63,6 +64,14 @@ table.ad-t{width:100%;border-collapse:collapse}
 .ad-bk .num{text-align:right;white-space:nowrap}
 .ad-bk th.bk-s{cursor:pointer;user-select:none;white-space:nowrap}.ad-bk th.bk-s:hover{color:var(--navy)}
 .ad-bk tbody tr{cursor:default}
+.bk-name{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--navy);cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-align:left}
+.bk-name:hover span{text-decoration:underline}.bk-name i{font-style:normal;font-size:11px;color:var(--blue);width:12px}
+.ad-bk tr.bk-open td{background:#f4f8ff}
+.ad-bk tr.bk-drill>td{padding:0 12px 14px;background:#f4f8ff;font-weight:400;white-space:normal}
+.bk-proj{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.bk-proj th{font-size:11px;color:var(--mut);font-weight:600;text-align:left;padding:8px 10px;background:#fafcff;letter-spacing:.03em;white-space:nowrap}
+.bk-proj td{font-size:12.5px!important;padding:8px 10px!important;border-top:1px solid var(--line);color:var(--ink)!important;font-weight:400!important;white-space:nowrap;background:#fff!important}
+.bk-proj td.t{white-space:normal;min-width:180px}.bk-proj a{color:var(--navy);font-weight:600;text-decoration:none}.bk-proj a:hover{text-decoration:underline}
 .ad-bk tfoot td{border-top:2px solid var(--line);font-weight:700;color:var(--navy);font-size:15px;padding:14px 12px}
 .bk-bar{display:inline-block;vertical-align:middle;width:80px;height:6px;border-radius:9px;background:#e8edf4;margin-right:10px;overflow:hidden}.bk-bar span{display:block;height:100%;background:#1d6bff;border-radius:9px}
 .bk-overlay{position:fixed;inset:0;z-index:1000;background:rgba(16,30,54,.45);padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex}
@@ -229,8 +238,49 @@ const BK_COLS: [SortKey, string][] = [['projects', 'PROJECTS'], ['total', 'TASKS
 const BK_SORT_NAME: Record<SortKey, string> = { name: 'name', projects: 'projects', total: 'tasks', open: 'open tasks', completed: 'completed tasks', overdue: 'overdue tasks', pct: 'completion' }
 const pctOf = (r: OrgRow) => (r.total ? Math.round((r.completed / r.total) * 100) : 0)
 
+type OrgLists = { companies: Company[]; functions: Function[]; departments: Department[]; tasks: Task[] }
+
+// which projects a Breakdown row counts: grouped the same way as the server (name, case ignored;
+// "Unassigned" = no SBU / function / department) and SBU copies merged like mergeSbuRows.
+// Projects have no department: a department's projects are those with at least one of its tasks.
+function projectsOf(tab: OrgTab, rowName: string, projects: Project[], org: OrgLists): Project[] {
+  const key = (n: string) => (tab === 'bySbu' ? sbuKey(n) : n.trim().toLowerCase())
+  const matches = (list: { id: number; name: string }[], id?: number | null) => {
+    const name = list.find((x) => x.id === id)?.name?.trim()
+    return rowName === 'Unassigned' ? !name : !!name && key(name) === key(rowName)
+  }
+  let keep: (p: Project) => boolean
+  if (tab === 'bySbu') keep = (p) => matches(org.companies, p.company_id)
+  else if (tab === 'byFunction') keep = (p) => matches(org.functions, p.function_id)
+  else {
+    const ids = new Set(org.tasks.filter((t) => t.project_id && matches(org.departments, t.department_id)).map((t) => t.project_id))
+    keep = (p) => ids.has(p.id)
+  }
+  return projects.filter(keep).sort((a, b) => a.name.localeCompare(b.name))
+}
+
 function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
   const [tab, setTab] = useState<OrgTab>('bySbu')
+  const [openRow, setOpenRow] = useState<string | null>(null) // row whose projects are listed
+  const [projects, setProjects] = useState<Project[] | null>(null)
+  const [org, setOrg] = useState<OrgLists>({ companies: [], functions: [], departments: [], tasks: [] })
+  const [people, setPeople] = useState<User[]>([])
+  const [drillErr, setDrillErr] = useState('')
+
+  // project list for the drill-down, loaded the first time a row is opened
+  useEffect(() => {
+    if (!openRow || projects) return
+    Promise.all([
+      api.get<Project[]>('/projects'),
+      api.get<Company[]>('/organizations/companies'),
+      api.get<Function[]>('/organizations/functions'),
+      api.get<Department[]>('/organizations/departments'),
+      api.get<Task[]>('/tasks'),
+    ]).then(([p, companies, functions, departments, tasks]) => { setOrg({ companies, functions, departments, tasks }); setProjects(p); setDrillErr('') })
+      .catch((e: any) => setDrillErr(e?.message || 'Could not load the projects.'))
+    api.get<User[]>('/organizations/users').then(setPeople).catch(() => {})
+  }, [openRow, projects])
+  useEffect(() => { setOpenRow(null) }, [tab])
   // default: most projects first, then most tasks
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'projects', desc: true })
   const [full, setFull] = useState(false)
@@ -284,8 +334,14 @@ function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
           <tbody>{rows.map((r) => {
             const p = pctOf(r)
             return (
-              <tr key={r.name} style={{ opacity: !r.total && !r.projects ? 0.5 : 1 }}>
-                <td>{r.name}</td>
+              <Fragment key={r.name}>
+              <tr className={openRow === r.name ? 'bk-open' : undefined} style={{ opacity: !r.total && !r.projects ? 0.5 : 1 }}>
+                <td>
+                  <button className="bk-name" onClick={() => setOpenRow(openRow === r.name ? null : r.name)} aria-expanded={openRow === r.name}
+                    title={openRow === r.name ? 'Hide projects' : `Show the projects of ${r.name}`}>
+                    <i>{openRow === r.name ? '▾' : '▸'}</i><span>{r.name}</span>
+                  </button>
+                </td>
                 <td className="num"><b>{r.projects}</b></td>
                 <td className="num"><span className="bk-bar"><span style={{ width: `${(r.total / maxTasks) * 100}%` }} /></span><b>{r.total}</b></td>
                 <td className="num">{r.open}</td>
@@ -293,6 +349,35 @@ function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
                 <td className="num" style={{ color: r.overdue ? '#ef4444' : undefined, fontWeight: r.overdue ? 700 : undefined }}>{r.overdue}</td>
                 <td className="num"><span className="pb" style={{ width: 70, marginRight: 8 }}><span style={{ width: `${p}%`, background: p >= 50 ? '#12a150' : '#1d6bff' }} /></span>{r.total ? `${p}%` : '—'}</td>
               </tr>
+              {openRow === r.name && (
+                <tr className="bk-drill"><td colSpan={7}>
+                  {drillErr ? <div style={{ color: '#b42318', padding: '8px 0' }}>{drillErr}</div>
+                    : !projects ? <div style={{ color: 'var(--mut)', padding: '8px 0' }}>Loading projects…</div>
+                    : (() => {
+                      const list = projectsOf(tab, r.name, projects, org)
+                      if (!list.length) return <div style={{ color: 'var(--mut)', padding: '8px 0' }}>No projects under {r.name}.</div>
+                      return (
+                        <div className="ad-scroll">
+                          <table className="bk-proj">
+                            <thead><tr><th>CODE</th><th>PROJECT</th><th>STATUS</th><th>HEALTH</th><th>COMPLETION</th><th>DUE</th><th>PROJECT MANAGER</th></tr></thead>
+                            <tbody>{list.map((pr) => (
+                              <tr key={pr.id}>
+                                <td style={{ color: 'var(--mut)' }}>{pr.code}</td>
+                                <td className="t"><Link to={`/projects/${pr.id}`}>{pr.name}</Link></td>
+                                <td><span className={`badge ${STATUS_COLORS[pr.status] ?? 'gray'}`}>{label(pr.status)}</span></td>
+                                <td><span className={`health-dot ${HEALTH_COLORS[pr.health] ?? 'gray'}`} /> {label(pr.health)}</td>
+                                <td><span className="pb" style={{ width: 60, marginRight: 8 }}><span style={{ width: `${pr.completion_pct ?? 0}%`, background: (pr.completion_pct ?? 0) >= 50 ? '#12a150' : '#1d6bff' }} /></span>{pr.completion_pct ?? 0}%</td>
+                                <td>{fmtDate(pr.approved_due_date || pr.baseline_due_date)}</td>
+                                <td>{people.find((u) => u.id === pr.manager_id)?.name ?? '—'}</td>
+                              </tr>
+                            ))}</tbody>
+                          </table>
+                        </div>
+                      )
+                    })()}
+                </td></tr>
+              )}
+              </Fragment>
             )
           })}</tbody>
           <tfoot><tr>

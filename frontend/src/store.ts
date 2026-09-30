@@ -735,6 +735,10 @@ export const store = {
       byFunction[fnKey] = byFunction[fnKey] || { total: 0, open: 0, completed: 0, overdue: 0, projects: 0 }
       byFunction[fnKey].projects++
     })
+    // a department's projects = projects with at least one of its tasks (projects have no department)
+    const deptProjects: Record<string, Set<number>> = {}
+    tasks.forEach((t) => { if (t.project_id) (deptProjects[departmentName(t.department_id)] ||= new Set()).add(t.project_id) })
+    Object.entries(deptProjects).forEach(([k, ids]) => { if (byDepartment[k]) byDepartment[k].projects = ids.size })
 
     const fmt = (m: Record<string, any>) => Object.entries(m).map(([name, v]) => ({ name, ...v }))
     return { bySbu: fmt(bySbu), byFunction: fmt(byFunction), byDepartment: fmt(byDepartment) }
