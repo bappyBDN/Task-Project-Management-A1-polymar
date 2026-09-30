@@ -13,6 +13,10 @@
   --red: #d64545;
   --black: #1a1a1a;
   --warn: #b9770e;
+  /* brand red, sampled from the Anwars logo */
+  --brand: #d13836;
+  --brand-ink: #b3261e;
+  --brand-soft: #fdeeee;
 }
 
 * { box-sizing: border-box; }
@@ -27,10 +31,14 @@ body {
 
 .app { display: flex; min-height: 100vh; }
 
+/* ---------------------------------------------------------------- sidebar
+   White, with the Anwars logo on top and the logo's red as the accent. */
 .sidebar {
   width: 240px;
-  background: linear-gradient(180deg, var(--navy) 0%, var(--navy-2) 100%);
-  color: #e9eef7;
+  background: #fff;
+  color: var(--ink);
+  border-right: 1px solid var(--line);
+  box-shadow: 1px 0 3px rgba(16,30,54,0.04);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -39,22 +47,58 @@ body {
 }
 
 .brand {
-  padding: 20px 18px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: block; text-decoration: none; text-align: center;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--line);
 }
-.brand .title { font-size: 15px; font-weight: 700; letter-spacing: 0.3px; }
-.brand .sub { font-size: 11px; color: var(--gold); margin-top: 3px; letter-spacing: 0.4px; }
+.brand-logo { display: block; width: 128px; max-width: 100%; height: auto; margin: 0 auto; }
+.brand .sub {
+  font-size: 10.5px; font-weight: 600; color: var(--navy); margin-top: 10px;
+  letter-spacing: 0.9px; text-transform: uppercase;
+}
 
-.nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+.nav { flex: 1; padding: 6px 10px 12px; overflow-y: auto; }
 .nav a {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 18px; color: #cdd7e8; text-decoration: none; font-size: 13px;
-  border-left: 3px solid transparent;
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 12px; margin: 2px 0; border-radius: 8px;
+  color: #3d4a5c; text-decoration: none; font-size: 13.5px; font-weight: 500;
+  position: relative; transition: background .12s, color .12s;
 }
-.nav a:hover { background: rgba(255,255,255,0.05); color: #fff; }
-.nav a.active { background: rgba(200,162,75,0.22); color: #fff; border-left-color: var(--gold); font-weight: 700; }
-.nav a.active span { color: #fff; }
-.nav .section { padding: 16px 18px 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #7e8aa0; }
+.nav a .nav-icon { flex: none; color: #8591a3; transition: color .12s; }
+.nav a:hover { background: #f3f5f9; color: var(--navy); }
+.nav a:hover .nav-icon { color: var(--navy); }
+.nav a.active { background: var(--brand-soft); color: var(--brand-ink); font-weight: 600; }
+.nav a.active .nav-icon { color: var(--brand); }
+.nav a.active::before {
+  content: ''; position: absolute; left: -10px; top: 7px; bottom: 7px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--brand);
+}
+.nav a:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.nav .section {
+  padding: 16px 12px 6px; font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px; color: #98a2b3;
+}
+
+.side-user { padding: 14px 16px 16px; border-top: 1px solid var(--line); background: #fafbfd; }
+.side-user .who { display: flex; align-items: center; gap: 10px; }
+.side-user .avatar {
+  flex: none; width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--navy); color: #fff;
+  font-size: 13px; font-weight: 700;
+}
+.side-user .name { font-size: 13px; font-weight: 600; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-user .role { font-size: 11.5px; color: var(--brand-ink); font-weight: 500; }
+.side-user .conn { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted); margin-top: 10px; }
+.side-user .conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
+.side-user .conn i.off { background: var(--amber); }
+.side-user .signout {
+  margin-top: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff;
+  color: #3d4a5c; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.side-user .signout .nav-icon { color: currentColor; }
+.side-user .signout:hover { background: var(--brand-soft); color: var(--brand-ink); border-color: #f1c9c8; }
 
 .main { margin-left: 240px; flex: 1; padding: 24px 28px; min-width: 0; } /* min-width: wide tables scroll inside their box instead of stretching the page */
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -189,9 +233,11 @@ tr.clickable, .clickable { cursor: pointer; }
   .mobile-bar {
     display: flex; align-items: center; gap: 12px;
     position: sticky; top: 0; z-index: 15;
-    background: var(--navy); color: #fff; padding: 10px 14px;
+    background: #fff; color: var(--navy); padding: 8px 14px;
+    border-bottom: 1px solid var(--line); box-shadow: 0 1px 3px rgba(16,30,54,0.05);
   }
-  .mobile-bar .mobile-title { font-weight: 700; font-size: 15px; }
+  .mobile-bar .mobile-logo { height: 30px; width: auto; display: block; }
+  .mobile-bar .mobile-title { font-weight: 600; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--navy); }
   .app { flex-direction: column; }
   .sidebar { transform: translateX(-100%); transition: transform .2s ease; width: 260px; max-width: 85vw; z-index: 40; }
   .sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.35); }
