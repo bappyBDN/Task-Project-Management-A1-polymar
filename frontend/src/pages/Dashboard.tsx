@@ -196,9 +196,10 @@ function Progress({ data }: { data: Trends['chart'] }) {
   const g = data.map((d, i) => [X(i), Y(d.completed)] as [number, number])
   const b = data.map((d, i) => [X(i), Y(d.in_progress)] as [number, number])
   const hi = data.reduce((m, d, i) => (d.completed > data[m].completed ? i : m), 0)
+  const [hov, setHov] = useState<number | null>(null) // day under the mouse (or tapped)
   if (data.length < 2) return <div style={{ color: 'var(--mut)', padding: 30, textAlign: 'center' }}>No activity yet</div>
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} onMouseLeave={() => setHov(null)}>
       <defs>
         <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#12a150" stopOpacity=".18" /><stop offset="1" stopColor="#12a150" stopOpacity="0" /></linearGradient>
         <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1d6bff" stopOpacity=".15" /><stop offset="1" stopColor="#1d6bff" stopOpacity="0" /></linearGradient>
@@ -206,10 +207,30 @@ function Progress({ data }: { data: Trends['chart'] }) {
       {[0, 1, 2, 3, 4].map((q) => { const v = (mx / 4) * q; return <g key={q}><line x1={L} x2={W} y1={Y(v)} y2={Y(v)} stroke="#edf1f6" strokeDasharray="3 3" /><text x={L - 8} y={Y(v) + 3} fontSize="9" fill="#6b7a90" textAnchor="end">{v}</text></g> })}
       <path d={`${smooth(g)} L${X(n - 1)},${B} L${X(0)},${B}Z`} fill="url(#gg)" /><path d={`${smooth(b)} L${X(n - 1)},${B} L${X(0)},${B}Z`} fill="url(#gb)" />
       <path d={smooth(g)} fill="none" stroke="#12a150" strokeWidth="1.8" /><path d={smooth(b)} fill="none" stroke="#1d6bff" strokeWidth="1.6" />
-      {g.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3" fill="#fff" stroke="#12a150" strokeWidth="1.5" />)}
-      {b.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3" fill="#fff" stroke="#1d6bff" strokeWidth="1.5" />)}
-      {data[hi].completed > 0 && <g transform={`translate(${Math.min(Math.max(X(hi) - 33, L), W - 66)},${Math.max(Y(data[hi].completed) - 46, 0)})`}><rect width="66" height="34" rx="5" fill="#0b1f3a" /><text x="33" y="14" textAnchor="middle" fontSize="10" fill="#fff">{data[hi].completed} task{data[hi].completed > 1 ? 's' : ''}</text><text x="33" y="27" textAnchor="middle" fontSize="10" fill="#fff">Completed</text></g>}
-      {data.map((d, i) => <text key={d.date} x={X(i)} y={B + 16} fontSize="9" fill="#6b7a90" textAnchor="middle">{fmt(d.date).slice(0, 6)}</text>)}
+      {hov !== null && <line x1={X(hov)} x2={X(hov)} y1={T} y2={B} stroke="#9fb0c8" strokeDasharray="3 3" />}
+      {g.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={hov === i ? 4.5 : 3} fill={hov === i ? '#12a150' : '#fff'} stroke="#12a150" strokeWidth="1.5" />)}
+      {b.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={hov === i ? 4.5 : 3} fill={hov === i ? '#1d6bff' : '#fff'} stroke="#1d6bff" strokeWidth="1.5" />)}
+      {hov === null && data[hi].completed > 0 && <g transform={`translate(${Math.min(Math.max(X(hi) - 33, L), W - 66)},${Math.max(Y(data[hi].completed) - 46, 0)})`}><rect width="66" height="34" rx="5" fill="#0b1f3a" /><text x="33" y="14" textAnchor="middle" fontSize="10" fill="#fff">{data[hi].completed} task{data[hi].completed > 1 ? 's' : ''}</text><text x="33" y="27" textAnchor="middle" fontSize="10" fill="#fff">Completed</text></g>}
+      {data.map((d, i) => <text key={d.date} x={X(i)} y={B + 16} fontSize="9" fill={hov === i ? '#0b1f3a' : '#6b7a90'} fontWeight={hov === i ? 700 : 400} textAnchor="middle">{fmt(d.date).slice(0, 6)}</text>)}
+      {hov !== null && (() => {
+        const d = data[hov], w = 104, h = 50
+        const x = Math.min(Math.max(X(hov) - w / 2, 0), W - w)
+        const y = Math.max(Math.min(Y(d.completed), Y(d.in_progress)) - h - 10, 0)
+        return (
+          <g transform={`translate(${x},${y})`} pointerEvents="none">
+            <rect width={w} height={h} rx="6" fill="#0b1f3a" />
+            <text x="10" y="15" fontSize="10" fontWeight="700" fill="#fff">{fmt(d.date)}</text>
+            <circle cx="13" cy="27" r="3.5" fill="#12a150" /><text x="21" y="30" fontSize="10" fill="#fff">Completed: {d.completed}</text>
+            <circle cx="13" cy="40" r="3.5" fill="#1d6bff" /><text x="21" y="43" fontSize="10" fill="#fff">In Progress: {d.in_progress}</text>
+          </g>
+        )
+      })()}
+      {/* invisible hover / tap columns, one per day */}
+      {data.map((d, i) => {
+        const half = (W - L - 40) / (n - 1) / 2
+        return <rect key={`h${d.date}`} x={X(i) - half} y={0} width={half * 2} height={H} fill="transparent" style={{ cursor: 'pointer' }}
+          onMouseEnter={() => setHov(i)} onClick={() => setHov((v) => (v === i ? null : i))} />
+      })}
     </svg>
   )
 }
