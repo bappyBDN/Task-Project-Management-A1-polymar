@@ -3,6 +3,7 @@ import { api } from '../api'
 import { Company, Department, Function, Project, User } from '../types'
 import { METHODOLOGIES, PROJECT_STATUSES, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import { RichTextEditor } from './RichText'
 import SbuSelect from './SbuSelect'
 
 /**
@@ -280,7 +281,7 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
   const lock = !!created // project fields can't change after the project is saved
 
   return (
-    <div className="modal-backdrop" onClick={close}>
+    <div className="modal-backdrop">
       <div className="modal" style={withTasks ? { maxHeight: '92vh', overflowY: 'auto' } : undefined} onClick={(e) => e.stopPropagation()}>
         <h2>{editing ? `Edit Project - ${project!.code || project!.name}` : created ? `New Project - ${created.code || created.name} saved` : 'New Project'}</h2>
         {error && <div className="alert error" role="alert">{error}</div>}
@@ -337,7 +338,7 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
         </div>
 
         <label>Objective</label>
-        <textarea rows={3} value={form.objective} onChange={(e) => set('objective', e.target.value)} placeholder="What should this project achieve?" />
+        <RichTextEditor rows={3} value={form.objective} onChange={(v) => set('objective', v)} placeholder="What should this project achieve?" disabled={lock} />
         </fieldset>
 
         {withTasks && (

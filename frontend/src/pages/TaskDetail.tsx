@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { useIsPrivileged } from '../usePrivileged'
 import { Approval, Company, DelayRca, Department, Function, ProgressUpdate, Project, Task, User } from '../types'
 import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
+import { RichTextView } from '../components/RichText'
 import TaskForm from '../components/TaskForm'
 import { sbuName } from '../org'
 
@@ -144,8 +145,8 @@ export default function TaskDetail() {
           <div className="card">
             <div className="section-title" style={{ marginTop: 0 }}>Details</div>
             <div className="form-row">
-              <div><label>Description</label><div className="small">{task.description || '—'}</div></div>
-              <div><label>Expected Deliverable</label><div className="small">{task.expected_deliverable || '—'}</div></div>
+              <div><label>Description</label><div className="small"><RichTextView text={task.description} /></div></div>
+              <div><label>Expected Deliverable</label><div className="small"><RichTextView text={task.expected_deliverable} /></div></div>
             </div>
             <div className="form-row" style={{ marginTop: 12 }}>
               <div><label>Category</label><div className="small">{label(task.category)}</div></div>

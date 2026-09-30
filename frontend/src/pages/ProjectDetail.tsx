@@ -8,6 +8,7 @@ import ProjectContribution from '../components/ProjectContribution'
 import ProjectRaci from '../components/ProjectRaci'
 import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
+import { RichTextView } from '../components/RichText'
 import { sbuName } from '../org'
 
 export default function ProjectDetail() {
@@ -143,11 +144,11 @@ export default function ProjectDetail() {
           <div className="card">
             <div className="section-title" style={{ marginTop: 0 }}>Overview</div>
             <div className="form-row">
-              <div><label>Strategic Objective</label><div className="small">{project.strategic_objective || '—'}</div></div>
-              <div><label>Objective</label><div className="small">{project.objective || '—'}</div></div>
+              <div><label>Strategic Objective</label><div className="small"><RichTextView text={project.strategic_objective} /></div></div>
+              <div><label>Objective</label><div className="small"><RichTextView text={project.objective} /></div></div>
             </div>
             <div className="form-row" style={{ marginTop: 12 }}>
-              <div><label>Expected Outcome</label><div className="small">{project.expected_outcome || '—'}</div></div>
+              <div><label>Expected Outcome</label><div className="small"><RichTextView text={project.expected_outcome} /></div></div>
               <div><label>Type / Methodology</label><div className="small">{label(project.project_type)} · {label(project.methodology)}</div></div>
             </div>
             <div className="form-row three" style={{ marginTop: 12 }}>

@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import { RichTextEditor } from './RichText'
 import SbuSelect from './SbuSelect'
 import ProjectForm from './ProjectForm'
 
@@ -297,7 +298,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>{task ? `Edit ${task.code}` : 'New Task'}</h2>
         {limited && (
@@ -414,10 +415,10 @@ export default function TaskForm({ projects, users, companies = [], functions = 
         </div>
 
         <label>Description *</label>
-        <textarea rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
+        <RichTextEditor rows={3} value={form.description} onChange={(v) => set('description', v)} placeholder="What is this task about?" />
 
         <label>Expected Deliverable *</label>
-        <input value={form.expected_deliverable} onChange={(e) => set('expected_deliverable', e.target.value)} />
+        <RichTextEditor rows={2} value={form.expected_deliverable} onChange={(v) => set('expected_deliverable', v)} placeholder="What will be delivered when this task is done?" />
 
         <div className="form-row three">
           <fieldset disabled={lockResponsible} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockResponsible ? 'Only the Accountable person or an admin / PMO can change this' : undefined}>
@@ -523,7 +524,7 @@ function OrgModal({ kind, onClose, onCreated }: { kind: 'company' | 'function' |
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
         <h2>{titles[kind]}</h2>
         {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
@@ -556,7 +557,7 @@ function UserModal({ onClose, onCreated, isAdmin }: { onClose: () => void; onCre
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
         <h2>New User</h2>
         {!isAdmin && <div className="small muted mb" style={{ marginBottom: 12 }}>Only admins can create users.</div>}

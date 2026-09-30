@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Approval, DelayRca, ProgressUpdate, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
+import { RichTextView } from '../components/RichText'
 
 // The detail endpoint adds `can_decide` (the server decides who may approve).
 type ApprovalWithRights = Approval & { can_decide: boolean }
@@ -224,8 +225,8 @@ export default function ApprovalDetail() {
                 <Field name="Approved Due">{fmtDate(task.approved_due_date)}</Field>
                 <Field name="Forecast">{fmtDate(task.forecast_due_date)}</Field>
                 <Field name="Actual Completion">{fmtDate(task.actual_due_date)}</Field>
-                <Field name="Description" wide>{text(task.description)}</Field>
-                <Field name="Expected Deliverable" wide>{text(task.expected_deliverable)}</Field>
+                <Field name="Description" wide><RichTextView text={task.description} /></Field>
+                <Field name="Expected Deliverable" wide><RichTextView text={task.expected_deliverable} /></Field>
                 <Field name="Acceptance Criteria" wide>{text(task.acceptance_criteria)}</Field>
                 <Field name="Completion Evidence" wide>{text(task.completion_evidence)}</Field>
                 <Field name="Completion Remarks" wide>{text(task.completion_remarks)}</Field>
@@ -249,7 +250,7 @@ export default function ApprovalDetail() {
                 <Field name="Sponsor">{nameOf(project.sponsor_id)}</Field>
                 <Field name="Approved Due">{fmtDate(project.approved_due_date)}</Field>
                 <Field name="Completion">{project.completion_pct}%</Field>
-                <Field name="Objective" wide>{text(project.objective)}</Field>
+                <Field name="Objective" wide><RichTextView text={project.objective} /></Field>
               </Grid>
             </div>
           )}
