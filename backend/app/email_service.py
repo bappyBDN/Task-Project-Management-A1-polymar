@@ -473,3 +473,52 @@ def send_meeting_invite_email(
                             project_label, organizer_name)
     return _send([to_email], subject, html_body, text_body="\n".join(text_lines),
                  attachments=[("invite.ics", "text/calendar", ics)])
+
+# ---------------------------------------------------------------- New comment
+def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, entity_type: str,
+                       subject_label: str, project_label: str, commenter_name: str,
+                       commenter_employee_id: Optional[str], comment: str, sent_at: datetime,
+                       link: str) -> bool:
+    """Tells the Project Manager (project comment) or the task's Responsible person
+    (task comment) that someone commented."""
+    e = html.escape
+    what = "task" if entity_type == "task" else "project"
+    by = f"{commenter_name} ({commenter_employee_id})" if commenter_employee_id else commenter_name
+    # stored in UTC; shown in Bangladesh time like the meeting invitations
+    when = (sent_at + timedelta(hours=MEETING_TZ_OFFSET_HOURS)).strftime("%d %b %Y, %I:%M %p") + f" ({MEETING_TZ_LABEL})"
+    subject = f"New comment on {what} {subject_label}"
+
+    rows = [("Task" if what == "task" else "Project", subject_label)]
+    if what == "task" and project_label:
+        rows.append(("Project", project_label))
+    rows += [("Comment by", by), ("Sent", when)]
+    row_html = "".join(
+        f'<tr><td style="padding:6px 12px;color:#666;font-size:13px;white-space:nowrap;">{e(k)}</td>'
+        f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{e(v)}</td></tr>'
+        for k, v in rows
+    )
+    html_body = f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
+      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
+        <h2 style="color:#fff;margin:0;font-size:18px;">💬 New comment on your {what}</h2>
+      </div>
+      <div style="border:1px solid #eee;border-top:none;padding:16px 20px;border-radius:0 0 8px 8px;">
+        <p style="margin:0 0 12px;">Hello {e(recipient_name)},</p>
+        <p style="margin:0 0 12px;">{e(commenter_name)} commented on a {what} where you are the <b>{e(recipient_role)}</b>.</p>
+        <table style="width:100%;border-collapse:collapse;">{row_html}</table>
+        <div style="margin:14px 0 0;padding:12px 14px;background:#f4f6fa;border-left:4px solid #c8a24b;border-radius:4px;
+                    font-size:14px;line-height:1.5;white-space:pre-wrap;">{e(comment)}</div>
+        <p style="text-align:center;margin:20px 0 6px;">
+          <a href="{e(link)}" style="background:#0b1f3a;color:#fff;padding:10px 20px;border-radius:6px;
+             text-decoration:none;font-weight:600;display:inline-block;">Open in Task Manager</a>
+        </p>
+        <p style="color:#888;font-size:12px;margin-top:16px;">Automated notification from the Anwar Task &amp; Project Management System.</p>
+      </div>
+    </div>
+    """
+    text_body = "\n".join(
+        [f"Hello {recipient_name},", "", f"{commenter_name} commented on a {what} where you are the {recipient_role}.", ""]
+        + [f"{k}: {v}" for k, v in rows]
+        + ["", "Comment:", comment, "", f"Open: {link}"]
+    )
+    return _send([to_email], subject, html_body, text_body=text_body)

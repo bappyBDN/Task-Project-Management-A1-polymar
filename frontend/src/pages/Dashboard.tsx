@@ -2,11 +2,12 @@ import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { Company, Department, Function, Project, ProjectKpi, Task, TaskKpi, User } from '../types'
+import { Comment, Company, Department, Function, Project, ProjectKpi, Task, TaskKpi, User } from '../types'
 import { HEALTH_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { mergeSbuRows } from '../org'
 import { sbuKey } from '../components/SbuSelect'
 import ProfileForm from '../components/ProfileForm'
+import { commenterLabel, fmtDateTime } from '../components/CommentsPanel'
 
 /* Dashboard wired to the FastAPI backend (app/routers/dashboards.py + /tasks).
    Renders page content only — sidebar/topbar come from the app Layout. Scoped under .ad-root. */
@@ -132,7 +133,7 @@ const P: Record<string, string> = {
   folder: 'M3 6h6l2 2h10v11H3z', list: 'M4 7h16M4 12h10M4 17h16', gavel: 'M14 4l6 6-3 3-6-6zM11 9L4 16l4 4 7-7', grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
   shield: 'M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6zM9 12l2 2 4-4', search: 'M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5',
   bell: 'M6 9a6 6 0 0112 0c0 6 3 8 3 8H3s3-2 3-8M10 21h4', sun: 'M12 8a4 4 0 100 8 4 4 0 000-8zM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5',
-  chev: 'M6 9l6 6 6-6', cal: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4', warn: 'M12 4l9 16H3zM12 10v4M12 17v.5', ban: 'M12 3a9 9 0 100 18 9 9 0 000-18zM6 6l12 12',
+  chat: 'M4 5h16v11H9l-5 4zM8 9h8M8 12h5', chev: 'M6 9l6 6 6-6', cal: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4', warn: 'M12 4l9 16H3zM12 10v4M12 17v.5', ban: 'M12 3a9 9 0 100 18 9 9 0 000-18zM6 6l12 12',
   alert: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 8v5M12 16v.5', box: 'M4 4h16v16H4zM9 4v16', bars: 'M6 20V10M12 20V4M18 20v-7',
   users: 'M9 11a3 3 0 100-6 3 3 0 000 6zM3 20c0-4 3-6 6-6s6 2 6 6M17 11a3 3 0 100-6M21 20c0-3-2-5-4-5.5', target: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 8a4 4 0 100 8 4 4 0 000-8zM12 12h.01',
   out: 'M4 8h13l-3-3M20 16H7l3 3', refresh: 'M20 12a8 8 0 11-3-6.2M20 4v5h-5', l: 'M15 6l-6 6 6 6', r: 'M9 6l6 6-6 6', star: 'M12 4l2.5 5 5.5.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.5-.8z',
@@ -406,6 +407,64 @@ function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
   )
 }
 
+// ---------------------------------------------------------------- comments inbox
+// Comments others left on projects you manage and tasks you are Responsible for.
+// Shown only to Project Managers / Responsible people (or when there are comments).
+function CommentInbox({ tick }: { tick: number }) {
+  const navigate = useNavigate()
+  const [data, setData] = useState<{ eligible: boolean; comments: Comment[] } | null>(null)
+  const [filter, setFilter] = useState<'all' | 'project' | 'task'>('all')
+
+  useEffect(() => {
+    let cancelled = false
+    // optional widget: an older backend without /comments just hides it
+    api.get<{ eligible: boolean; comments: Comment[] }>('/comments/inbox')
+      .then((d) => { if (!cancelled) setData(d) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [tick])
+
+  if (!data || (!data.eligible && !data.comments.length)) return null
+  const list = filter === 'all' ? data.comments : data.comments.filter((c) => c.entity_type === filter)
+  const open = (c: Comment) => {
+    if (c.entity_type === 'task' && c.task_id) navigate(`/tasks/${c.task_id}`)
+    else if (c.project_id) navigate(`/projects/${c.project_id}`)
+  }
+  const ref = (code?: string | null, name?: string | null) => (code || name ? <><b>{code}</b>{code && name ? ' · ' : ''}{name}</> : '—')
+
+  return (
+    <div className="ad-card">
+      <div className="ad-head">
+        <h3 style={{ margin: 0 }}><Ic n="chat" s={17} />Comments<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({data.comments.length})</span></h3>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['all', 'project', 'task'] as const).map((f) => (
+            <button key={f} className="ad-btn" onClick={() => setFilter(f)}
+              style={filter === f ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' } : undefined}>
+              {f === 'all' ? 'All' : f === 'project' ? 'My Projects' : 'My Tasks'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="ad-scroll" style={{ maxHeight: 380, overflowY: 'auto' }}><table className="ad-t">
+        <thead><tr>{['ON', 'PROJECT', 'TASK', 'COMMENT', 'BY', 'SENT'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+        <tbody>
+          {list.map((c) => (
+            <tr key={c.id} onClick={() => open(c)} title="Open">
+              <td><span className="pill" style={c.entity_type === 'task' ? { background: '#e8f0ff', color: '#1d6bff' } : { background: '#fdf3d7', color: '#8a6d1f' }}>{label(c.entity_type)}</span></td>
+              <td style={{ minWidth: 120 }}>{ref(c.project_code, c.project_name)}</td>
+              <td style={{ minWidth: 120 }}>{c.entity_type === 'task' ? ref(c.task_code, c.task_name) : '—'}</td>
+              <td style={{ minWidth: 200, maxWidth: 360, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{c.comment.length > 240 ? `${c.comment.slice(0, 240)}…` : c.comment}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{commenterLabel(c)}</td>
+              <td>{fmtDateTime(c.created_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+      {!list.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>No comments on your {filter === 'project' ? 'projects' : filter === 'task' ? 'tasks' : 'projects or tasks'} yet.</div>}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- page
 export default function Dashboard() {
   const { user } = useAuth()
@@ -599,6 +658,8 @@ export default function Dashboard() {
               </table></div>
               {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked ? 'No tasks due on this date.' : 'No tasks assigned to you.'}</div>}
             </div>
+
+            <CommentInbox tick={tick} />
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,360px),1fr))', gap: 16 }}>
               <div className="ad-card">

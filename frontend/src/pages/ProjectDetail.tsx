@@ -6,6 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import ProjectForm from '../components/ProjectForm'
 import ProjectContribution from '../components/ProjectContribution'
 import ProjectRaci from '../components/ProjectRaci'
+import CommentsPanel from '../components/CommentsPanel'
 import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { RichTextView } from '../components/RichText'
@@ -211,6 +212,8 @@ export default function ProjectDetail() {
             </table>
             </div>
           </div>
+
+      <CommentsPanel kind="project" id={project.id} recipientId={project.manager_id} recipientName={userName(project.manager_id)} />
     </div>
   )
 }

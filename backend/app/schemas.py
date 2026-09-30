@@ -177,6 +177,30 @@ class ProjectAssociateOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class CommentIn(BaseModel):
+    comment: str
+
+
+class CommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    entity_type: str
+    comment: str
+    commenter_id: Optional[int] = None
+    commenter_name: str
+    commenter_employee_id: Optional[str] = None
+    project_id: Optional[int] = None
+    project_code: Optional[str] = None
+    project_name: Optional[str] = None
+    task_id: Optional[int] = None
+    task_code: Optional[str] = None
+    task_name: Optional[str] = None
+    recipient_id: Optional[int] = None
+    recipient_name: Optional[str] = None
+    email_sent: bool = False
+    created_at: Optional[datetime] = None
+
+
 class MilestoneBase(BaseModel):
     project_id: int
     name: str

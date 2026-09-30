@@ -7,6 +7,7 @@ import { Approval, Company, DelayRca, Department, Function, ProgressUpdate, Proj
 import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { RichTextView } from '../components/RichText'
 import TaskForm from '../components/TaskForm'
+import CommentsPanel from '../components/CommentsPanel'
 import { sbuName } from '../org'
 
 export default function TaskDetail() {
@@ -231,6 +232,8 @@ export default function TaskDetail() {
           )}
         </div>
       </div>
+
+      <CommentsPanel kind="task" id={task.id} recipientId={task.responsible_id} recipientName={owner?.name} />
 
       {showRca && <RcaForm task={task} users={users} onClose={() => setShowRca(false)} onSaved={() => { setShowRca(false); load() }} />}
       {showProgress && <ProgressForm task={task} canComplete={isPrivileged} onClose={() => setShowProgress(false)} onSaved={() => { setShowProgress(false); load() }} />}

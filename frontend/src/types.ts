@@ -71,6 +71,26 @@ export interface ProjectAssociate {
   created_at?: string
 }
 
+/** A comment on a project or task (see CommentsPanel). Names are stored with the comment. */
+export interface Comment {
+  id: number
+  entity_type: 'project' | 'task'
+  comment: string
+  commenter_id?: number | null
+  commenter_name: string
+  commenter_employee_id?: string | null
+  project_id?: number | null
+  project_code?: string | null
+  project_name?: string | null
+  task_id?: number | null
+  task_code?: string | null
+  task_name?: string | null
+  recipient_id?: number | null
+  recipient_name?: string | null
+  email_sent: boolean
+  created_at?: string
+}
+
 export interface Milestone {
   id: number
   project_id: number

@@ -204,6 +204,37 @@ class ProgressUpdate(Base, TimestampMixin):
     support_required: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+# ---------------------------------------------------------------- Comments
+class Comment(Base, TimestampMixin):
+    """A comment any employee leaves on a project or a task.
+
+    Names / codes are copied in when the comment is written, so the history
+    stays readable even if the project, task or person is later deleted (the
+    delete paths only clear the *_id links). created_at is the send time."""
+    __tablename__ = "comments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(16), index=True)  # project / task
+    comment: Mapped[str] = mapped_column(Text)
+
+    # who wrote it
+    commenter_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    commenter_name: Mapped[str] = mapped_column(String(120))
+    commenter_employee_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+
+    # what it is about (a task comment also records the task's project)
+    project_id: Mapped[Optional[int]] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
+    project_code: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    project_name: Mapped[Optional[str]] = mapped_column(String(240), nullable=True)
+    task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id"), nullable=True, index=True)
+    task_code: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    task_name: Mapped[Optional[str]] = mapped_column(String(240), nullable=True)
+
+    # who was notified: the Project Manager (project comment) or the task's Responsible person
+    recipient_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    recipient_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    email_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 # ---------------------------------------------------------------- Delay / RCA
 class DelayRca(Base, TimestampMixin):
     __tablename__ = "delay_rca"

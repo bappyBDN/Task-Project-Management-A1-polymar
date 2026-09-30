@@ -140,6 +140,7 @@ def permanent_delete_user(user_id: int, admin: models.User = Depends(get_admin_u
         (models.ManagementAction, ["responsible_id", "accountable_id"]),
         (models.Risk, ["owner_id"]),
         (models.Issue, ["owner_id"]),
+        (models.Comment, ["commenter_id", "recipient_id"]),  # comments keep the names
     ]:
         db.query(model).filter(getattr(model, cols[0]) == user_id).update({cols[0]: None}, synchronize_session=False)
         for col in cols[1:]:

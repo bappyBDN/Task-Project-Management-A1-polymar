@@ -200,6 +200,8 @@ def permanent_delete_task(task_id: int, admin: models.User = Depends(get_admin_u
         {"converted_task_id": None}, synchronize_session=False)
     db.query(models.Task).filter(models.Task.parent_id == task_id).update(
         {"parent_id": None}, synchronize_session=False)
+    db.query(models.Comment).filter(models.Comment.task_id == task_id).update(
+        {"task_id": None}, synchronize_session=False)  # comments keep the task's code / name
     services.audit(db, admin.name, "task", task_id, "permanent_deleted", previous_value=title,
                    reason=f"Hard-deleted by admin {admin.name}")
     db.delete(task)
