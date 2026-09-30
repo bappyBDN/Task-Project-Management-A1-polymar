@@ -1,19 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api } from '../api'
 import type { Project, ProjectAssociate, Task, User } from '../types'
-import { label } from '../constants'
+import { fmtDate, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
 import SignupForm from './SignupForm'
 
-// Who contributes to a project, and how much.
+// Who contributes to a project, and how much - shown as cards.
 // Task work is counted from the tasks: each person's share is the part of the
-// project's tasks they are Responsible for; Accountable / Reviewer are shown
-// alongside. People who help without being on a task are added as "associated"
-// with a short description of their contribution (stored on the server).
+// project's tasks they are Responsible for; Accountable / Reviewer (Consulted)
+// are shown alongside. People who help without being on a task are added as
+// "associated" with a short description of their contribution (stored on the server).
 
 const DONE = ['completed', 'closed']
 const CLOSED = [...DONE, 'cancelled']
 const today = () => new Date().toISOString().slice(0, 10)
+
+// one colour per contributor (fixed order, never cycled); beyond 8 -> grey "others"
+const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948']
+const OTHER = '#9aa3b2'
+const UNASSIGNED = '#d5dbe5'
 
 interface Row {
   user: User
@@ -31,6 +36,25 @@ interface Props {
   canManage: boolean
   /** reload the employee list (after adding a new employee); resolves to the new list */
   reloadUsers: () => Promise<User[]>
+}
+
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('')
+
+function Avatar({ name, color }: { name: string; color?: string }) {
+  return <div className="avatar" style={{ background: color ?? 'var(--navy)' }} aria-hidden>{initials(name)}</div>
+}
+
+function PersonHead({ user, color, children }: { user: User; color?: string; children?: ReactNode }) {
+  return (
+    <div className="person-head">
+      <Avatar name={user.name} color={color} />
+      <div className="who" style={{ flex: 1 }}>
+        <div className="name" title={user.name}>{user.name}</div>
+        <div className="sub">{user.designation || label(user.role)}</div>
+      </div>
+      {children}
+    </div>
+  )
 }
 
 export default function ProjectContribution({ project, tasks, users, canManage, reloadUsers }: Props) {
@@ -70,9 +94,33 @@ export default function ProjectContribution({ project, tasks, users, canManage, 
       || b.acc - a.acc || b.rev - a.rev || a.user.name.localeCompare(b.user.name))
   }, [project, tasks, users, associates])
 
+  const contributors = rows.filter((r) => r.resp.length || r.acc || r.rev)
+  const associatedOnly = rows.filter((r) => r.associate && !(r.resp.length || r.acc || r.rev))
   const withResp = tasks.filter((t) => t.responsible_id).length
-  const onTasks = rows.filter((r) => r.resp.length || r.acc || r.rev).length
-  const maxResp = Math.max(1, ...rows.map((r) => r.resp.length))
+
+  // colour follows the person (ordered by id), not their rank, so it stays put when numbers change
+  const colorOf = useMemo(() => {
+    const ids = contributors.map((r) => r.user.id).sort((a, b) => a - b)
+    return (uid: number) => { const i = ids.indexOf(uid); return i >= 0 && i < SERIES.length ? SERIES[i] : OTHER }
+  }, [contributors])
+
+  // task-share bar: each Responsible's tasks, anyone past 8 colours folded into "Others", then unassigned tasks
+  const shareSegments = useMemo(() => {
+    const segs: { key: string; name: string; count: number; color: string }[] = []
+    let others = 0
+    contributors.filter((r) => r.resp.length).forEach((r) => {
+      const c = colorOf(r.user.id)
+      if (c === OTHER) others += r.resp.length
+      else segs.push({ key: String(r.user.id), name: r.user.name, count: r.resp.length, color: c })
+    })
+    if (others) segs.push({ key: 'others', name: 'Others', count: others, color: OTHER })
+    const unassigned = tasks.length - withResp
+    if (unassigned) segs.push({ key: 'none', name: 'No Responsible yet', count: unassigned, color: UNASSIGNED })
+    return segs
+  }, [contributors, colorOf, tasks, withResp])
+
+  const keyRoles = ([['Project Manager', project.manager_id], ['Owner', project.owner_id], ['Sponsor', project.sponsor_id]] as const)
+    .map(([role, uid]) => ({ role, user: users.find((u) => u.id === uid) }))
 
   const remove = async (a: ProjectAssociate) => {
     if (confirmRemove !== a.id) { setConfirmRemove(a.id); return }
@@ -84,13 +132,28 @@ export default function ProjectContribution({ project, tasks, users, canManage, 
     } catch (e: any) { setLoadErr(e.message || 'Could not remove.') }
   }
 
+  const associateActions = (a: ProjectAssociate) => canManage && (
+    <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+      <button className="btn sm" onClick={() => { setMsg(''); setEditing(a) }}>Edit</button>
+      <button className="btn sm" onClick={() => remove(a)} onBlur={() => setConfirmRemove(null)}>
+        {confirmRemove === a.id ? 'Click to confirm' : 'Remove'}
+      </button>
+    </div>
+  )
+
+  const addedBy = (a: ProjectAssociate) => {
+    const by = users.find((u) => u.id === a.added_by_id)?.name
+    const when = a.created_at ? fmtDate(a.created_at.slice(0, 10)) : ''
+    return [by && `Added by ${by}`, when].filter(Boolean).join(' · ')
+  }
+
   return (
     <div className="card mt">
       <div className="row spread" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <div className="section-title" style={{ margin: 0 }}>Contribution &amp; Association ({rows.length})</div>
+          <div className="section-title" style={{ margin: 0 }}>Contributors &amp; Associates ({rows.length})</div>
           <div className="small muted" style={{ marginTop: 4 }}>
-            {onTasks} on tasks · {associates.length} associated · share = part of the project's {withResp} task(s) they are Responsible for
+            {contributors.length} contributing on tasks · {associates.length} associated outside tasks
           </div>
         </div>
         {canManage && <button className="btn primary sm" onClick={() => { setMsg(''); setEditing('new') }}>+ Add Associated Person</button>}
@@ -98,70 +161,151 @@ export default function ProjectContribution({ project, tasks, users, canManage, 
       {msg && <div className="alert success mt" role="status">{msg}</div>}
       {loadErr && <div className="alert error mt" role="alert">{loadErr}</div>}
 
-      {rows.length === 0 ? <div className="small muted mt">No one is on this project yet.</div> : (
-        <div style={{ overflowX: 'auto', marginTop: 12 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Employee</th><th>Responsible (share)</th><th>Done</th><th>Open</th><th>Overdue</th>
-                <th>Avg Progress</th><th>Accountable</th><th>Reviewer</th><th>Contribution</th>{canManage && <th />}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const done = r.resp.filter((t) => DONE.includes(t.status)).length
-                const open = r.resp.filter((t) => !CLOSED.includes(t.status)).length
-                const overdue = r.resp.filter((t) => {
-                  const due = t.approved_due_date || t.baseline_due_date
-                  return !CLOSED.includes(t.status) && !!due && due < today()
-                }).length
-                const avg = r.resp.length ? Math.round(r.resp.reduce((s, t) => s + (t.progress_pct || 0), 0) / r.resp.length) : null
-                const share = withResp ? Math.round((r.resp.length / withResp) * 100) : 0
-                const auto = [r.resp.length && `Responsible for ${r.resp.length} task(s)`, r.acc && `accountable for ${r.acc}`, r.rev && `reviews ${r.rev}`].filter(Boolean).join(', ')
-                return (
-                  <tr key={r.user.id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{r.user.name}</div>
-                      <div className="muted" style={{ fontSize: 11 }}>{r.user.designation || label(r.user.role)}</div>
-                      <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                        {r.roles.map((x) => <span key={x} className="badge gold" style={{ fontSize: 10 }}>{x}</span>)}
-                        {r.associate && <span className="badge gray" style={{ fontSize: 10 }}>Associated</span>}
-                      </div>
-                    </td>
-                    <td style={{ minWidth: 150 }}>
-                      {r.resp.length ? (
-                        <>
-                          <div className="progress"><span style={{ width: `${(r.resp.length / maxResp) * 100}%` }} /></div>
-                          <span className="small"><b>{r.resp.length}</b> task(s) · {share}%</span>
-                        </>
-                      ) : <span className="muted small">—</span>}
-                    </td>
-                    <td className="small">{r.resp.length ? done : '—'}</td>
-                    <td className="small">{r.resp.length ? open : '—'}</td>
-                    <td className="small" style={{ color: overdue ? 'var(--red)' : undefined, fontWeight: overdue ? 700 : undefined }}>{r.resp.length ? overdue : '—'}</td>
-                    <td className="small">{avg === null ? '—' : `${avg}%`}</td>
-                    <td className="small">{r.acc || '—'}</td>
-                    <td className="small">{r.rev || '—'}</td>
-                    <td className="small" style={{ minWidth: 200, maxWidth: 360, whiteSpace: 'pre-wrap' }}>
-                      {r.associate ? r.associate.contribution : <span className="muted">{auto ? auto[0].toUpperCase() + auto.slice(1) : '—'}</span>}
-                    </td>
-                    {canManage && (
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {r.associate && (
-                          <div className="row" style={{ gap: 4 }}>
-                            <button className="btn sm" onClick={() => { setMsg(''); setEditing(r.associate!) }}>Edit</button>
-                            <button className="btn sm" onClick={() => remove(r.associate!)} onBlur={() => setConfirmRemove(null)}>
-                              {confirmRemove === r.associate.id ? 'Click to confirm' : 'Remove'}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      {/* ---- key roles ---- */}
+      <div className="subhead">Key Roles</div>
+      <div className="people-grid">
+        {keyRoles.map(({ role, user }) => (
+          <div key={role} className="person-card key">
+            {user ? (
+              <PersonHead user={user} color={contributors.some((r) => r.user.id === user.id) ? colorOf(user.id) : undefined}>
+                <span className="badge gold" style={{ fontSize: 10 }}>{role}</span>
+              </PersonHead>
+            ) : (
+              <div className="person-head">
+                <div className="avatar empty">?</div>
+                <div className="who" style={{ flex: 1 }}><div className="name muted">Not set</div></div>
+                <span className="badge gray" style={{ fontSize: 10 }}>{role}</span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ---- task share across contributors ---- */}
+      <div className="subhead">Task Share (who is Responsible for the {tasks.length} task{tasks.length === 1 ? '' : 's'})</div>
+      {tasks.length === 0 ? <div className="small muted">No tasks yet.</div> : (
+        <>
+          <div className="stackbar lg" role="img"
+            aria-label={shareSegments.map((s) => `${s.name} ${s.count}`).join(', ')}>
+            {shareSegments.map((s) => (
+              <span key={s.key} style={{ width: `${(s.count / tasks.length) * 100}%`, background: s.color }}
+                title={`${s.name}: ${s.count} task(s) · ${Math.round((s.count / tasks.length) * 100)}%`} />
+            ))}
+          </div>
+          <div className="legend" style={{ marginTop: 8 }}>
+            {shareSegments.map((s) => (
+              <span key={s.key}><i style={{ background: s.color }} /><b>{s.name}</b> {s.count} · {Math.round((s.count / tasks.length) * 100)}%</span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ---- contributors (on tasks) ---- */}
+      <div className="subhead">Contributors on Tasks ({contributors.length})</div>
+      {contributors.length === 0 ? <div className="small muted">No one is assigned to a task yet.</div> : (
+        <div className="people-grid">
+          {contributors.map((r) => {
+            const done = r.resp.filter((t) => DONE.includes(t.status)).length
+            const overdue = r.resp.filter((t) => {
+              const due = t.approved_due_date || t.baseline_due_date
+              return !CLOSED.includes(t.status) && !!due && due < today()
+            }).length
+            const open = r.resp.filter((t) => !CLOSED.includes(t.status)).length - overdue
+            const cancelled = r.resp.length - done - open - overdue
+            const avg = r.resp.length ? Math.round(r.resp.reduce((s, t) => s + (t.progress_pct || 0), 0) / r.resp.length) : null
+            const share = tasks.length ? Math.round((r.resp.length / tasks.length) * 100) : 0
+            const status = [
+              { k: 'Done', n: done, c: 'var(--green)' },
+              { k: 'Open', n: open, c: 'var(--navy)' },
+              { k: 'Overdue', n: overdue, c: 'var(--red)' },
+              { k: 'Cancelled', n: cancelled, c: OTHER },
+            ].filter((s) => s.n)
+            return (
+              <div key={r.user.id} className="person-card">
+                <PersonHead user={r.user} color={colorOf(r.user.id)}>
+                  {r.resp.length > 0 && (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--navy)', lineHeight: 1 }}>{share}%</div>
+                      <div className="muted" style={{ fontSize: 10 }}>task share</div>
+                    </div>
+                  )}
+                </PersonHead>
+
+                {(r.roles.length > 0 || r.associate) && (
+                  <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                    {r.roles.map((x) => <span key={x} className="badge gold" style={{ fontSize: 10 }}>{x}</span>)}
+                    {r.associate && <span className="badge gray" style={{ fontSize: 10 }}>Associated</span>}
+                  </div>
+                )}
+
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                  <span className="raci-chip R" title="Responsible">R {r.resp.length}</span>
+                  <span className="raci-chip A" title="Accountable">A {r.acc}</span>
+                  <span className="raci-chip C" title="Consulted (Reviewer)">C {r.rev}</span>
+                </div>
+
+                {r.resp.length > 0 ? (
+                  <div>
+                    <div className="stackbar" role="img" aria-label={status.map((s) => `${s.k} ${s.n}`).join(', ')}>
+                      {status.map((s) => (
+                        <span key={s.k} style={{ width: `${(s.n / r.resp.length) * 100}%`, background: s.c }} title={`${s.k}: ${s.n}`} />
+                      ))}
+                    </div>
+                    <div className="legend" style={{ marginTop: 6 }}>
+                      {status.map((s) => <span key={s.k}><i style={{ background: s.c }} />{s.k} <b>{s.n}</b></span>)}
+                    </div>
+                    <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                      <span className="small muted" style={{ whiteSpace: 'nowrap' }}>Avg progress</span>
+                      <div className="progress" style={{ flex: 1, minWidth: 0 }}><span style={{ width: `${avg}%` }} /></div>
+                      <span className="small" style={{ fontWeight: 600 }}>{avg}%</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="small muted">
+                    {[r.acc && `Accountable for ${r.acc} task(s)`, r.rev && `reviews ${r.rev}`].filter(Boolean).join(', ')}
+                  </div>
+                )}
+
+                {r.associate && (
+                  <>
+                    <div className="contribution-note">{r.associate.contribution}</div>
+                    {associateActions(r.associate)}
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ---- associated people (help outside tasks) ---- */}
+      <div className="subhead">Associated People ({associatedOnly.length})</div>
+      {associatedOnly.length === 0 ? (
+        <div className="small muted">
+          No one associated outside tasks yet.{canManage && ' Use "+ Add Associated Person" for people who help without being on a task.'}
+        </div>
+      ) : (
+        <div className="people-grid">
+          {associatedOnly.map((r) => (
+            <div key={r.user.id} className="person-card associate">
+              <PersonHead user={r.user} color="var(--gold)">
+                <span className="badge gray" style={{ fontSize: 10 }}>Associated</span>
+              </PersonHead>
+              {r.roles.length > 0 && (
+                <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                  {r.roles.map((x) => <span key={x} className="badge gold" style={{ fontSize: 10 }}>{x}</span>)}
+                </div>
+              )}
+              <div>
+                <div className="small muted" style={{ marginBottom: 4 }}>Contribution</div>
+                <div className="contribution-note">{r.associate!.contribution}</div>
+              </div>
+              <div className="row spread" style={{ flexWrap: 'wrap', gap: 6 }}>
+                <span className="muted" style={{ fontSize: 11 }}>{addedBy(r.associate!)}</span>
+                {associateActions(r.associate!)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

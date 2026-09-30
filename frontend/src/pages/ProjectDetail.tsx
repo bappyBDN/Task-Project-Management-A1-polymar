@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { useIsPrivileged } from '../usePrivileged'
 import ProjectForm from '../components/ProjectForm'
 import ProjectContribution from '../components/ProjectContribution'
+import ProjectRaci from '../components/ProjectRaci'
 import { Company, Milestone, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { sbuName } from '../org'
@@ -61,6 +62,22 @@ export default function ProjectDetail() {
   // associated people: also the project's Manager / Owner / Sponsor (same rule as the server)
   const canManageAssociates = canEdit || (!!user && [project.manager_id, project.owner_id, project.sponsor_id].includes(user.id))
 
+  // headline numbers for the KPI strip
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const isClosed = (t: Task) => ['completed', 'closed', 'cancelled'].includes(t.status)
+  const doneCount = tasks.filter((t) => ['completed', 'closed'].includes(t.status)).length
+  const overdueCount = tasks.filter((t) => {
+    const due = t.approved_due_date || t.baseline_due_date
+    return !isClosed(t) && !!due && due < todayStr
+  }).length
+  const openCount = tasks.filter((t) => !isClosed(t)).length
+  const people = new Set([project.manager_id, project.owner_id, project.sponsor_id,
+    ...tasks.flatMap((t) => [t.responsible_id, t.accountable_id, t.reviewer_id])].filter(Boolean)).size
+  const dueDate = project.approved_due_date || project.baseline_due_date
+  const daysLeft = dueDate && !project.actual_due_date
+    ? Math.round((new Date(dueDate).getTime() - new Date(todayStr).getTime()) / 86400000)
+    : null
+
   return (
     <div>
       <div className="topbar">
@@ -88,7 +105,42 @@ export default function ProjectDetail() {
         />
       )}
 
-      <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr', alignItems: 'start', gap: 16 }}>
+      <div className="grid kpi-strip">
+        <div className="card kpi">
+          <div className="label">Completion</div>
+          <div className="value">{project.completion_pct ?? 0}%</div>
+          <div className="progress" style={{ marginTop: 6 }}><span style={{ width: `${project.completion_pct ?? 0}%` }} /></div>
+        </div>
+        <div className="card kpi">
+          <div className="label">Tasks Done</div>
+          <div className="value green">{doneCount}<span className="small muted" style={{ fontWeight: 400 }}> / {tasks.length}</span></div>
+        </div>
+        <div className="card kpi">
+          <div className="label">Open Tasks</div>
+          <div className="value">{openCount}</div>
+        </div>
+        <div className="card kpi">
+          <div className="label">Overdue</div>
+          <div className={`value ${overdueCount ? 'red' : ''}`}>{overdueCount}</div>
+        </div>
+        <div className="card kpi">
+          <div className="label">People</div>
+          <div className="value">{people}</div>
+          <div className="hint">on roles &amp; tasks</div>
+        </div>
+        <div className="card kpi">
+          <div className="label">{project.actual_due_date ? 'Completed' : 'Due'}</div>
+          <div className={`value sm ${daysLeft !== null && daysLeft < 0 ? 'red' : ''}`}>
+            {project.actual_due_date ? fmtDate(project.actual_due_date)
+              : daysLeft === null ? '—'
+              : daysLeft < 0 ? `${-daysLeft} day(s) late`
+              : daysLeft === 0 ? 'Today' : `${daysLeft} day(s) left`}
+          </div>
+          {!project.actual_due_date && dueDate && <div className="hint">{fmtDate(dueDate)}</div>}
+        </div>
+      </div>
+
+      <div className="grid detail-grid" style={{ alignItems: 'start', gap: 16 }}>
         <div>
           <div className="card">
             <div className="section-title" style={{ marginTop: 0 }}>Overview</div>
@@ -142,6 +194,8 @@ export default function ProjectDetail() {
           </div>
         </div>
       </div>
+
+      <ProjectRaci projectId={project.id} tasks={tasks} />
 
       <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} reloadUsers={reloadUsers} />
 
