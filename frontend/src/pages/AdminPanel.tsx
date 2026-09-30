@@ -24,10 +24,13 @@ interface UserForm {
 // Added EmailLog interface
 export interface EmailLog {
   id: number
-  task_id?: number | null
-  backlog_item_id?: number | null
+  entity_type: string
+  entity_id: number
+  entity_code?: string | null
+  entity_title?: string | null
   email_type: string
-  sent_at: string
+  sent_date: string
+  recipients?: string | null
 }
 
 const EMPTY_USER: UserForm = { employee_id: '', name: '', email: '', designation: '', role: 'employee', company_id: null, function_id: null, department_id: null, reports_to_id: null }
@@ -121,7 +124,7 @@ export default function AdminPanel() {
     api.get<string[]>('/privileged-roles').then(setPrivileged)
     api.get<string[]>('/all-roles').then(setAllRoles)
     // Fetch email logs (Ensure backend endpoint exists)
-    api.get<EmailLog[]>('/email-logs').then(setEmailLogs).catch(() => console.warn('Email logs endpoint missing'))
+    api.get<EmailLog[]>('/notifications/email-logs').then(setEmailLogs).catch((e) => console.warn('Could not load email logs', e))
   }
 
   useEffect(load, [])
@@ -289,30 +292,26 @@ export default function AdminPanel() {
                 <th>Type</th>
                 <th>Target Reference</th>
                 <th>Title / Description</th>
-                <th>Sent At (Time)</th>
+                <th>Recipients</th>
+                <th>Sent On</th>
               </tr>
             </thead>
             <tbody>
-              {emailLogs.map((log) => {
-                const linkedTask = log.task_id ? tasks.find(t => t.id === log.task_id) : null;
-
-                return (
-                  <tr key={log.id}>
-                    <td>
-                      <span className={`badge ${log.email_type === 'overdue' || log.email_type.includes('-') ? 'red' : log.email_type === 'completed' ? 'green' : 'gold'}`}>
-                        {label(log.email_type)}
-                      </span>
-                    </td>
-                    <td className="small font-mono">
-                      {log.task_id ? (linkedTask ? linkedTask.code : `Task #${log.task_id}`) : log.backlog_item_id ? `Backlog #${log.backlog_item_id}` : '—'}
-                    </td>
-                    <td className="small muted">
-                      {linkedTask ? linkedTask.title : '—'}
-                    </td>
-                    <td className="small">{fmtDate(log.sent_at)}</td>
-                  </tr>
-                )
-              })}
+              {emailLogs.map((log) => (
+                <tr key={log.id}>
+                  <td>
+                    <span className={`badge ${log.email_type === 'overdue' || log.email_type === 'stale' ? 'red' : log.email_type === 'completed' ? 'green' : 'gold'}`}>
+                      {label(log.email_type)}
+                    </span>
+                  </td>
+                  <td className="small font-mono">
+                    {log.entity_code ?? `${log.entity_type === 'backlog' ? 'Backlog' : 'Task'} #${log.entity_id}`}
+                  </td>
+                  <td className="small muted">{log.entity_title ?? '—'}</td>
+                  <td className="small muted">{log.recipients || '—'}</td>
+                  <td className="small">{fmtDate(log.sent_date)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
           {emailLogs.length === 0 && <div className="empty">No emails have been dispatched by the system yet.</div>}
