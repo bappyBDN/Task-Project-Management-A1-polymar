@@ -247,6 +247,7 @@ label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); 
 /* ---------------------------------------------------------------- login / reset pages */
 .auth-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 16px; }
 .auth-card { width: 380px; max-width: 100%; padding: 32px; }
+.auth-logo { display: block; width: 140px; max-width: 60%; height: auto; margin: 0 auto 16px; }
 
 /* ---------------------------------------------------------------- keyboard focus
    (inputs hide the browser outline above; keep a visible ring for keyboard users) */

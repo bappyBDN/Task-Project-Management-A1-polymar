@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../auth'
+import logo from '../assets/anwars-logo.jpg'
 
 export default function Login() {
   const { login } = useAuth()
@@ -28,6 +29,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <form className="card auth-card" onSubmit={handleSubmit}>
+        <img className="auth-logo" src={logo} alt="Anwar Group" />
         <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Login</h2>
         {error && <div className="alert error" role="alert">{error}</div>}
 

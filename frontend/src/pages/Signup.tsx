@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import SignupForm from '../components/SignupForm'
+import logo from '../assets/anwars-logo.jpg'
 
 // Same fields as the admin "New User" form (see SignupForm, also used to add a new
 // employee from a project's Associated People).
@@ -9,6 +10,7 @@ export default function Signup() {
   return (
     <div className="auth-page">
       <div className="card auth-card" style={{ width: 560 }}>
+        <img className="auth-logo" src={logo} alt="Anwar Group" />
         <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Sign Up</h2>
         {msg && <div className="alert success" role="status">{msg}</div>}
 
