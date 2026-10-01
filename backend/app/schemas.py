@@ -550,3 +550,15 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     user: dict
+
+class MethodologyLinkIn(BaseModel):
+    doc_link: Optional[str] = None  # empty / null removes the link
+
+
+class MethodologyApproverIn(BaseModel):
+    approver_id: Optional[int] = None  # null unassigns the slot
+
+
+class MethodologyDecisionIn(BaseModel):
+    decision: str  # approved / rejected / review
+    note: Optional[str] = None

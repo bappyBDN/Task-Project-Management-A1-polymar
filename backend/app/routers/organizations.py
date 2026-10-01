@@ -141,6 +141,7 @@ def permanent_delete_user(user_id: int, admin: models.User = Depends(get_admin_u
         (models.Risk, ["owner_id"]),
         (models.Issue, ["owner_id"]),
         (models.Comment, ["commenter_id", "recipient_id"]),  # comments keep the names
+        (models.ProjectMethodology, ["link_updated_by_id"]),
     ]:
         db.query(model).filter(getattr(model, cols[0]) == user_id).update({cols[0]: None}, synchronize_session=False)
         for col in cols[1:]:
@@ -151,6 +152,10 @@ def permanent_delete_user(user_id: int, admin: models.User = Depends(get_admin_u
     db.query(models.ProjectAssociate).filter(models.ProjectAssociate.added_by_id == user_id).update(
         {"added_by_id": None}, synchronize_session=False)
     db.query(models.Notification).filter(models.Notification.user_id == user_id).delete(synchronize_session=False)
+    # their methodology approver slots become unassigned (pending) again
+    db.query(models.MethodologyApproval).filter(models.MethodologyApproval.approver_id == user_id).update(
+        {"approver_id": None, "approver_name": None, "decision": "pending", "note": None, "decided_at": None},
+        synchronize_session=False)
 
     db.delete(user)
     db.commit()

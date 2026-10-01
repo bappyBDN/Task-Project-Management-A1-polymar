@@ -9,7 +9,7 @@ from app import auth  # 👈 login / forgot-password / reset-password
 from app.routers import (
     organizations, projects, tasks, delays, approvals, backlogs, dashboards,
     audit, governance, raci, list_options, email_notifications, privileged, user_mapping,
-    comments,
+    comments, methodology,
 )
 from app.scheduler import start_scheduler, stop_scheduler
 from app.seed import seed
@@ -60,7 +60,7 @@ _login_required = [Depends(auth.get_current_user)]
 for _r in (
     organizations, projects, tasks, delays, approvals, backlogs, dashboards,
     audit, governance, raci, privileged, list_options, email_notifications, user_mapping,
-    comments,
+    comments, methodology,
 ):
     app.include_router(_r.router, dependencies=_login_required)
 

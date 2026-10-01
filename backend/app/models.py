@@ -405,3 +405,35 @@ class EmailLog(Base):
     __table_args__ = (
         UniqueConstraint("entity_type", "entity_id", "email_type", "sent_date", name="uq_email_once_per_day"),
     )
+
+# ---------------------------------------------------------------- Methodology approval
+class ProjectMethodology(Base, TimestampMixin):
+    """A project's methodology document (a Google Drive / Docs link) that the
+    Group Executive, Function Head and Team Lead approve. One row per project;
+    the project's code / name are copied in so the record stays readable."""
+    __tablename__ = "project_methodologies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), unique=True, index=True)
+    project_code: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    project_name: Mapped[Optional[str]] = mapped_column(String(240), nullable=True)
+    doc_link: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    link_updated_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    link_updated_by_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    link_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class MethodologyApproval(Base, TimestampMixin):
+    """One approver slot of a project's methodology: group_executive,
+    function_head or team_lead. decision: pending / approved / rejected / review."""
+    __tablename__ = "methodology_approvals"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    methodology_id: Mapped[int] = mapped_column(ForeignKey("project_methodologies.id"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    approver_role: Mapped[str] = mapped_column(String(24))
+    approver_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    approver_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    decision: Mapped[str] = mapped_column(String(16), default="pending")
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("methodology_id", "approver_role", name="uq_methodology_role"),)

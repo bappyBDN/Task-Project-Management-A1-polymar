@@ -6,6 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import ProjectForm from '../components/ProjectForm'
 import ProjectContribution from '../components/ProjectContribution'
 import ProjectRaci from '../components/ProjectRaci'
+import MethodologyApproval from '../components/MethodologyApproval'
 import CommentsPanel from '../components/CommentsPanel'
 import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
@@ -158,6 +159,8 @@ export default function ProjectDetail() {
               <div><label>Budget</label><div className="small">{project.budget ? project.budget.toLocaleString() : '—'}</div></div>
             </div>
           </div>
+
+          <MethodologyApproval projectId={project.id} users={users} reloadUsers={reloadUsers} />
 
         </div>
 

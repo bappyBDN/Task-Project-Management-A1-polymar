@@ -540,3 +540,40 @@ def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, 
         + ["", "Reply:" if is_reply else "Comment:", comment, "", f"Open: {link}"]
     )
     return _send([to_email], subject, html_body, text_body=text_body)
+
+
+def send_methodology_email(to_email: str, recipient_name: str, subject: str, heading: str, intro: str,
+                           rows: list[tuple[str, str]], link: str, note: Optional[str] = None) -> bool:
+    """Methodology approval notices: an approver is asked to review the document,
+    or the Project Manager hears an approver's decision (with their note)."""
+    e = html.escape
+    row_html = "".join(
+        f'<tr><td style="padding:6px 12px;color:#666;font-size:13px;white-space:nowrap;">{e(k)}</td>'
+        f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{e(v)}</td></tr>'
+        for k, v in rows
+    )
+    note_html = (f'<div style="margin:14px 0 0;padding:12px 14px;background:#f4f6fa;border-left:4px solid #c8a24b;'
+                 f'border-radius:4px;font-size:14px;line-height:1.5;white-space:pre-wrap;">{e(note)}</div>') if note else ""
+    html_body = f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
+      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
+        <h2 style="color:#fff;margin:0;font-size:18px;">{e(heading)}</h2>
+      </div>
+      <div style="border:1px solid #eee;border-top:none;padding:16px 20px;border-radius:0 0 8px 8px;">
+        <p style="margin:0 0 12px;">Hello {e(recipient_name)},</p>
+        <p style="margin:0 0 12px;">{e(intro)}</p>
+        <table style="width:100%;border-collapse:collapse;">{row_html}</table>
+        {note_html}
+        <p style="text-align:center;margin:20px 0 6px;">
+          <a href="{e(link)}" style="background:#0b1f3a;color:#fff;padding:10px 20px;border-radius:6px;
+             text-decoration:none;font-weight:600;display:inline-block;">Open the project</a>
+        </p>
+        <p style="color:#888;font-size:12px;margin-top:16px;">Automated notification from the Anwar Task &amp; Project Management System.</p>
+      </div>
+    </div>
+    """
+    text_body = "\n".join(
+        [f"Hello {recipient_name},", "", intro, ""] + [f"{k}: {v}" for k, v in rows]
+        + (["", "Note:", note] if note else []) + ["", f"Open: {link}"]
+    )
+    return _send([to_email], subject, html_body, text_body=text_body)

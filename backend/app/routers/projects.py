@@ -224,6 +224,8 @@ def delete_project(project_id: int, admin: models.User = Depends(get_admin_user)
         db.query(model).filter(model.project_id == project_id).update({"project_id": None}, synchronize_session=False)
     db.query(models.RaciEntry).filter(models.RaciEntry.project_id == project_id).delete(synchronize_session=False)
     db.query(models.ProjectAssociate).filter(models.ProjectAssociate.project_id == project_id).delete(synchronize_session=False)
+    db.query(models.MethodologyApproval).filter(models.MethodologyApproval.project_id == project_id).delete(synchronize_session=False)
+    db.query(models.ProjectMethodology).filter(models.ProjectMethodology.project_id == project_id).delete(synchronize_session=False)
     # comments keep the project's code / name, so only the link is cleared
     db.query(models.Comment).filter(models.Comment.project_id == project_id).update(
         {"project_id": None}, synchronize_session=False)
