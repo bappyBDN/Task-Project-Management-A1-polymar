@@ -199,6 +199,9 @@ class CommentOut(BaseModel):
     recipient_name: Optional[str] = None
     email_sent: bool = False
     created_at: Optional[datetime] = None
+    # replies are filled in by the comments router (a reply has parent_id set and no replies)
+    parent_id: Optional[int] = None
+    replies: list["CommentOut"] = []
 
 
 class MilestoneBase(BaseModel):

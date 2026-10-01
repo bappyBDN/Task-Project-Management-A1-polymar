@@ -7,7 +7,7 @@ import { HEALTH_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { mergeSbuRows } from '../org'
 import { sbuKey } from '../components/SbuSelect'
 import ProfileForm from '../components/ProfileForm'
-import { commenterLabel, fmtDateTime } from '../components/CommentsPanel'
+import { CommentReplies, REPLY_CSS, addReply, commenterLabel, fmtDateTime } from '../components/CommentsPanel'
 
 /* Dashboard wired to the FastAPI backend (app/routers/dashboards.py + /tasks).
    Renders page content only — sidebar/topbar come from the app Layout. Scoped under .ad-root. */
@@ -46,8 +46,10 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .ad-cols{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:16px;align-items:start}
 .ad-stack{display:flex;flex-direction:column;gap:16px;min-width:0}
 .ad-cmts{max-height:420px;overflow-y:auto;margin:0 -4px}
-.ad-cmt{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:10px 4px;cursor:pointer;font:inherit;color:inherit}
-.ad-cmt:hover{background:#f7f9fd}
+.ad-cmt{border-top:1px solid var(--line);padding:10px 4px}
+.ad-cmt-open{display:block;width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;border-radius:6px}
+.ad-cmt-open:hover{background:#f7f9fd}
+.ad-cmt .role{font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;margin-left:6px}
 .ad-cmt .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .ad-cmt .when{font-size:11px;color:var(--mut);white-space:nowrap}
 .ad-cmt .ref{font-size:12px;color:#334;margin-top:5px;overflow-wrap:anywhere}
@@ -109,6 +111,7 @@ table.ad-t{width:100%;border-collapse:collapse}
 @media(max-width:1200px){.ad-cols{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:860px){.ad-2{grid-template-columns:minmax(0,1fr)}.ad-port{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.ad-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ad-kpi{padding:12px;min-height:0}.ad-kpi .v{font-size:24px}.ad-kpi svg.sp{display:none}.ad-hello h1{font-size:20px}.ad-hello p{margin-left:0}}
+${REPLY_CSS}
 `
 
 // ---------------------------------------------------------------- types / helpers
@@ -437,10 +440,12 @@ function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
 }
 
 // ---------------------------------------------------------------- comments inbox
-// Comments others left on projects you manage and tasks you are Responsible for.
-// Shown only to Project Managers / Responsible people (or when there are comments).
+// Comment threads on projects you manage and tasks you are Responsible for (received),
+// plus the ones you wrote or replied to (sent). Each card shows its replies and a Reply box.
+// Shown to Project Managers / Responsible people, or whenever there are threads.
 function CommentInbox({ tick }: { tick: number }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [data, setData] = useState<{ eligible: boolean; comments: Comment[] } | null>(null)
   const [filter, setFilter] = useState<'all' | 'project' | 'task'>('all')
 
@@ -459,6 +464,7 @@ function CommentInbox({ tick }: { tick: number }) {
     if (c.entity_type === 'task' && c.task_id) navigate(`/tasks/${c.task_id}`)
     else if (c.project_id) navigate(`/projects/${c.project_id}`)
   }
+  const onReplied = (reply: Comment) => setData((d) => (d ? { ...d, comments: addReply(d.comments, reply) } : d))
   const ref = (code?: string | null, name?: string | null) => (code || name ? <><b>{code}</b>{code && name ? ' · ' : ''}{name}</> : '—')
 
   return (
@@ -468,25 +474,34 @@ function CommentInbox({ tick }: { tick: number }) {
         {(['all', 'project', 'task'] as const).map((f) => (
           <button key={f} className="ad-btn" onClick={() => setFilter(f)}
             style={{ flex: 1, padding: '5px 6px', ...(filter === f ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' } : {}) }}>
-            {f === 'all' ? 'All' : f === 'project' ? 'My Projects' : 'My Tasks'}
+            {f === 'all' ? 'All' : f === 'project' ? 'Projects' : 'Tasks'}
           </button>
         ))}
       </div>
       <div className="ad-cmts">
-        {list.map((c) => (
-          <button key={c.id} className="ad-cmt" onClick={() => open(c)} title="Open">
-            <div className="top">
-              <span className="pill" style={c.entity_type === 'task' ? { background: '#e8f0ff', color: '#1d6bff' } : { background: '#fdf3d7', color: '#8a6d1f' }}>{label(c.entity_type)}</span>
-              <span className="when">{fmtDateTime(c.created_at)}</span>
+        {list.map((c) => {
+          const sent = !!user && c.commenter_id === user.id
+          return (
+            <div key={c.id} className="ad-cmt">
+              <button className="ad-cmt-open" onClick={() => open(c)} title="Open">
+                <div className="top">
+                  <span>
+                    <span className="pill" style={c.entity_type === 'task' ? { background: '#e8f0ff', color: '#1d6bff' } : { background: '#fdf3d7', color: '#8a6d1f' }}>{label(c.entity_type)}</span>
+                    <span className="role" style={sent ? { background: '#eef2f7', color: '#475569' } : { background: '#e7f6ee', color: '#12a150' }}>{sent ? 'Sent' : 'Received'}</span>
+                  </span>
+                  <span className="when">{fmtDateTime(c.created_at)}</span>
+                </div>
+                <div className="ref">Project: {ref(c.project_code, c.project_name)}</div>
+                {c.entity_type === 'task' && <div className="ref">Task: {ref(c.task_code, c.task_name)}</div>}
+                <div className="txt">{c.comment.length > 240 ? `${c.comment.slice(0, 240)}…` : c.comment}</div>
+                <div className="by">— {commenterLabel(c)}{sent && c.recipient_name ? ` → ${c.recipient_name}` : ''}</div>
+              </button>
+              <CommentReplies comment={c} onReplied={onReplied} />
             </div>
-            <div className="ref">Project: {ref(c.project_code, c.project_name)}</div>
-            {c.entity_type === 'task' && <div className="ref">Task: {ref(c.task_code, c.task_name)}</div>}
-            <div className="txt">{c.comment.length > 240 ? `${c.comment.slice(0, 240)}…` : c.comment}</div>
-            <div className="by">— {commenterLabel(c)}</div>
-          </button>
-        ))}
+          )
+        })}
       </div>
-      {!list.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>No comments on your {filter === 'project' ? 'projects' : filter === 'task' ? 'tasks' : 'projects or tasks'} yet.</div>}
+      {!list.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>No {filter === 'project' ? 'project ' : filter === 'task' ? 'task ' : ''}comments yet.</div>}
     </div>
   )
 }

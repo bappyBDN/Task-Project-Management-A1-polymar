@@ -478,20 +478,33 @@ def send_meeting_invite_email(
 def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, entity_type: str,
                        subject_label: str, project_label: str, commenter_name: str,
                        commenter_employee_id: Optional[str], comment: str, sent_at: datetime,
-                       link: str) -> bool:
+                       link: str, reply_to: Optional[str] = None) -> bool:
     """Tells the Project Manager (project comment) or the task's Responsible person
-    (task comment) that someone commented."""
+    (task comment) that someone commented. With `reply_to` (the original comment's
+    text) it is a reply notice instead; recipient_role "comment author" means the
+    recipient wrote that original comment."""
     e = html.escape
     what = "task" if entity_type == "task" else "project"
     by = f"{commenter_name} ({commenter_employee_id})" if commenter_employee_id else commenter_name
     # stored in UTC; shown in Bangladesh time like the meeting invitations
     when = (sent_at + timedelta(hours=MEETING_TZ_OFFSET_HOURS)).strftime("%d %b %Y, %I:%M %p") + f" ({MEETING_TZ_LABEL})"
-    subject = f"New comment on {what} {subject_label}"
+    is_reply = reply_to is not None
+    if is_reply:
+        subject = f"New reply on {what} {subject_label}"
+        heading = f"💬 New reply on a {what} comment"
+        if recipient_role == "comment author":
+            intro = f"{commenter_name} replied to your comment on a {what}."
+        else:
+            intro = f"{commenter_name} replied to a comment on a {what} where you are the {recipient_role}."
+    else:
+        subject = f"New comment on {what} {subject_label}"
+        heading = f"💬 New comment on your {what}"
+        intro = f"{commenter_name} commented on a {what} where you are the {recipient_role}."
 
     rows = [("Task" if what == "task" else "Project", subject_label)]
     if what == "task" and project_label:
         rows.append(("Project", project_label))
-    rows += [("Comment by", by), ("Sent", when)]
+    rows += [("Reply by" if is_reply else "Comment by", by), ("Sent", when)]
     row_html = "".join(
         f'<tr><td style="padding:6px 12px;color:#666;font-size:13px;white-space:nowrap;">{e(k)}</td>'
         f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{e(v)}</td></tr>'
@@ -500,12 +513,16 @@ def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, 
     html_body = f"""
     <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
       <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="color:#fff;margin:0;font-size:18px;">💬 New comment on your {what}</h2>
+        <h2 style="color:#fff;margin:0;font-size:18px;">{e(heading)}</h2>
       </div>
       <div style="border:1px solid #eee;border-top:none;padding:16px 20px;border-radius:0 0 8px 8px;">
         <p style="margin:0 0 12px;">Hello {e(recipient_name)},</p>
-        <p style="margin:0 0 12px;">{e(commenter_name)} commented on a {what} where you are the <b>{e(recipient_role)}</b>.</p>
+        <p style="margin:0 0 12px;">{e(intro)}</p>
         <table style="width:100%;border-collapse:collapse;">{row_html}</table>
+        {f'''<div style="margin:14px 0 0;font-size:12px;color:#666;">Original comment:</div>
+        <div style="margin:4px 0 0;padding:10px 14px;background:#fafafa;border-left:4px solid #ccc;border-radius:4px;
+                    font-size:13px;color:#555;line-height:1.5;white-space:pre-wrap;">{e(reply_to)}</div>
+        <div style="margin:12px 0 0;font-size:12px;color:#666;">Reply:</div>''' if is_reply else ''}
         <div style="margin:14px 0 0;padding:12px 14px;background:#f4f6fa;border-left:4px solid #c8a24b;border-radius:4px;
                     font-size:14px;line-height:1.5;white-space:pre-wrap;">{e(comment)}</div>
         <p style="text-align:center;margin:20px 0 6px;">
@@ -517,8 +534,9 @@ def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, 
     </div>
     """
     text_body = "\n".join(
-        [f"Hello {recipient_name},", "", f"{commenter_name} commented on a {what} where you are the {recipient_role}.", ""]
+        [f"Hello {recipient_name},", "", intro, ""]
         + [f"{k}: {v}" for k, v in rows]
-        + ["", "Comment:", comment, "", f"Open: {link}"]
+        + (["", "Original comment:", reply_to] if is_reply else [])
+        + ["", "Reply:" if is_reply else "Comment:", comment, "", f"Open: {link}"]
     )
     return _send([to_email], subject, html_body, text_body=text_body)

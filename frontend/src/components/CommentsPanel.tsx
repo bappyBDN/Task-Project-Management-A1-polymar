@@ -17,6 +17,94 @@ export function commenterLabel(c: Comment): string {
   return c.commenter_employee_id ? `${c.commenter_name} (${c.commenter_employee_id})` : c.commenter_name
 }
 
+/** Styles for <CommentReplies>; the panel and the dashboard both include them. */
+export const REPLY_CSS = `
+.cr-list{margin:8px 0 0 12px;padding-left:10px;border-left:2px solid var(--line,#e6ebf2)}
+.cr-item{padding:6px 0}
+.cr-item + .cr-item{border-top:1px dashed var(--line,#e6ebf2)}
+.cr-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px}
+.cr-when{color:var(--mut,#6b7a90);font-size:11px;white-space:nowrap}
+.cr-txt{font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:3px;line-height:1.45}
+.cr-link{background:none;border:0;padding:0;margin-top:6px;font:inherit;font-size:12px;font-weight:600;color:var(--blue,#1d6bff);cursor:pointer}
+.cr-link:hover{text-decoration:underline}
+.cr-box{margin-top:8px}
+.cr-box textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line,#e6ebf2);border-radius:8px;resize:vertical}
+.cr-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.cr-err{color:var(--red,#ef4444);font-size:12px;margin-top:4px}
+`
+
+/** A comment's replies plus a "Reply" box. Anyone logged in can reply; the server
+ *  emails the comment's author and the Project Manager / Responsible person. */
+export function CommentReplies({ comment, onReplied }: { comment: Comment; onReplied: (reply: Comment) => void }) {
+  const replies = comment.replies ?? []
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [err, setErr] = useState('')
+
+  const submit = async () => {
+    const body = text.trim()
+    if (!body) { setErr('Write a reply first.'); return }
+    if (body.length > MAX_LENGTH) { setErr(`Reply is too long (${MAX_LENGTH} characters at most).`); return }
+    setErr(''); setSending(true)
+    try {
+      const saved = await api.post<Comment>(`/comments/${comment.id}/reply`, { comment: body })
+      onReplied(saved)
+      setText(''); setOpen(false)
+    } catch (e: any) {
+      setErr(e.message || 'Could not post the reply. Please try again.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <>
+      {replies.length > 0 && (
+        <div className="cr-list">
+          {replies.map((r) => (
+            <div key={r.id} className="cr-item">
+              <div className="cr-meta"><strong>{commenterLabel(r)}</strong><span className="cr-when">{fmtDateTime(r.created_at)}</span></div>
+              <div className="cr-txt">{r.comment}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!open && (
+        <button type="button" className="cr-link" onClick={() => setOpen(true)}>
+          ↩ Reply{replies.length > 0 ? ` (${replies.length})` : ''}
+        </button>
+      )}
+      {open && (
+        <div className="cr-box">
+          <textarea
+            rows={2}
+            autoFocus
+            value={text}
+            maxLength={MAX_LENGTH}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } }}
+            placeholder={`Reply to ${comment.commenter_name}…`}
+            disabled={sending}
+          />
+          {err && <div className="cr-err" role="alert">{err}</div>}
+          <div className="cr-actions">
+            <button type="button" className="btn sm" onClick={() => { setOpen(false); setErr('') }} disabled={sending}>Cancel</button>
+            <button type="button" className="btn sm primary" onClick={submit} disabled={sending || !text.trim()}>
+              {sending ? 'Posting…' : 'Post Reply'}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+/** Adds a reply to its comment in a list of comments. */
+export function addReply(list: Comment[], reply: Comment): Comment[] {
+  return list.map((c) => (c.id === reply.parent_id ? { ...c, replies: [...(c.replies ?? []), reply] } : c))
+}
+
 function MsgIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -41,7 +129,7 @@ const CSS = `
 .cm-head h2{margin:0;font-size:17px;color:var(--navy);display:flex;align-items:center;gap:8px}
 .cm-list{margin-top:14px;overflow-y:auto;flex:1;min-height:0}
 @media(max-width:600px){.cm-fab{right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:11px 16px}}
-`
+${REPLY_CSS}`
 
 /** Comments on a project or task. Any employee can comment; the Project Manager
  *  (project) or the Responsible person (task) is emailed. */
@@ -59,6 +147,7 @@ export default function CommentsPanel({ kind, id, recipientId, recipientName }: 
   const [okMsg, setOkMsg] = useState('')
   const [sending, setSending] = useState(false)
   const [open, setOpen] = useState(false)
+  const total = comments.reduce((n, c) => n + 1 + (c.replies?.length ?? 0), 0)
 
   const load = () => {
     setLoadErr('')
@@ -97,8 +186,8 @@ export default function CommentsPanel({ kind, id, recipientId, recipientName }: 
       {/* keeps the page's last fields scrollable above the floating button */}
       <div className="cm-spacer" aria-hidden />
       {!open && (
-        <button className="cm-fab" onClick={() => setOpen(true)} aria-label={`Comments (${comments.length})`}>
-          <MsgIcon />Comment{comments.length > 0 && <span className="cm-count">{comments.length}</span>}
+        <button className="cm-fab" onClick={() => setOpen(true)} aria-label={`Comments (${total})`}>
+          <MsgIcon />Comment{total > 0 && <span className="cm-count">{total}</span>}
         </button>
       )}
       {open && (
@@ -106,7 +195,7 @@ export default function CommentsPanel({ kind, id, recipientId, recipientName }: 
           <div className="cm-backdrop" onClick={() => setOpen(false)} />
           <aside className="cm-drawer" role="dialog" aria-label={`Comments on this ${kind}`}>
             <div className="cm-head">
-              <h2><MsgIcon />Comments ({comments.length})</h2>
+              <h2><MsgIcon />Comments ({total})</h2>
               <button className="btn sm" onClick={() => setOpen(false)} aria-label="Close comments">✕</button>
             </div>
             {err && <div className="alert error" role="alert">{err}</div>}
@@ -142,6 +231,7 @@ export default function CommentsPanel({ kind, id, recipientId, recipientName }: 
                     <span className="muted" style={{ fontSize: 11 }}>{fmtDateTime(c.created_at)}</span>
                   </div>
                   <div className="small" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginTop: 4 }}>{c.comment}</div>
+                  <CommentReplies comment={c} onReplied={(r) => setComments((list) => addReply(list, r))} />
                 </div>
               ))}
             </div>

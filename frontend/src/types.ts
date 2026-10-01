@@ -89,6 +89,10 @@ export interface Comment {
   recipient_name?: string | null
   email_sent: boolean
   created_at?: string
+  /** set on a reply: the comment it answers */
+  parent_id?: number | null
+  /** a comment's replies, oldest first (always empty on a reply) */
+  replies?: Comment[]
 }
 
 export interface Milestone {
