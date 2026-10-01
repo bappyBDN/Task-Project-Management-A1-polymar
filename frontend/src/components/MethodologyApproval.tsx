@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { User } from '../types'
-import SearchableSelect from './SearchableSelect'
+import { label } from '../constants'
 import SignupForm from './SignupForm'
 import { fmtDateTime } from './CommentsPanel'
 
@@ -87,6 +87,20 @@ const CSS = `
 .mth-choice.on.red{background:#fbe5e5;border-color:var(--red);color:var(--red)}
 .mth-link{background:none;border:0;padding:0;font:inherit;font-size:12px;font-weight:600;color:var(--navy);cursor:pointer;text-decoration:underline}
 .mth-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;flex-wrap:wrap}
+.mth-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box;padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-size:13px;cursor:pointer;text-align:left;min-height:38px}
+.mth-trigger:hover{border-color:#c8d2e0}
+.mth-menu{margin-top:6px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(16,30,54,.10);overflow:hidden}
+.mth-menu input{border:0;border-bottom:1px solid var(--line);border-radius:0;width:100%;box-sizing:border-box;padding:9px 12px;font:inherit;font-size:13px}
+.mth-menu input:focus{box-shadow:none}
+.mth-opts{max-height:280px;overflow-y:auto}
+.mth-group{padding:7px 12px 4px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:#fafbfd;border-top:1px solid var(--line)}
+.mth-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:8px 12px;border:0;background:#fff;font:inherit;text-align:left;cursor:pointer}
+.mth-opt:hover{background:#f5f7fb}
+.mth-opt.on{background:var(--gold-soft)}
+.mth-opt-name{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.mth-opt-sub{display:block;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.mth-add{color:#8a6d1f;font-weight:600;font-size:13px;background:var(--gold-soft)}
+.mth-add:hover{background:#ebdcb9}
 `
 
 export default function MethodologyApproval({ projectId, users, reloadUsers }: {
@@ -282,11 +296,7 @@ function AssignForm({ slot, data, users, reloadUsers, onDone }: {
   // someone just added may not be in `users` until the parent re-renders
   const [added, setAdded] = useState<User | null>(null)
 
-  const pool = (added && !users.some((u) => u.id === added.id) ? [...users, added] : users).filter((u) => u.is_active)
-  const suggested = SUGGESTED_ROLE[slot.role]
-  const items = [...pool]
-    .sort((a, b) => Number(b.role === suggested) - Number(a.role === suggested) || a.name.localeCompare(b.name))
-    .map((u) => ({ value: String(u.id), label: `${u.name}${u.designation ? ` - ${u.designation}` : ''}${u.role === suggested ? ` (${slot.label})` : ''}` }))
+  const pool = (added && !users.some((u) => u.id === added.id) ? [...users, added] : users).filter((u) => u.is_active !== false) // the users API may omit is_active
 
   const employeeAdded = async (message: string, employeeId: string) => {
     setAddingEmployee(false); setErr('')
@@ -317,15 +327,8 @@ function AssignForm({ slot, data, users, reloadUsers, onDone }: {
   return (
     <div className="mth-box">
       <label style={{ marginTop: 0 }}>{slot.label} approver</label>
-      <SearchableSelect
-        value={userId}
-        items={items}
-        onChange={setUserId}
-        placeholder="Search employee…"
-        onAddNew={() => { setInfo(''); setAddingEmployee(true) }}
-        addLabel="Add new employee (not in the system)"
-      />
-      <div className="small muted" style={{ marginTop: 4 }}>Not in the list? Choose "+ Add new employee" at the top of the list.</div>
+      <ApproverPicker slot={slot} users={pool} value={userId} onChange={setUserId}
+        onAddNew={() => { setInfo(''); setAddingEmployee(true) }} />
       {slot.decision !== 'unassigned' && slot.decision !== 'pending' && <div className="small" style={{ marginTop: 4, color: 'var(--warn, #b7791f)' }}>Changing the approver clears the current decision.</div>}
       {info && <div className="alert success mt" role="status">{info}</div>}
       {err && <div className="alert error mt" role="alert">{err}</div>}
@@ -343,6 +346,71 @@ function AssignForm({ slot, data, users, reloadUsers, onDone }: {
               Same as the Sign Up form: they get an email with a link to set their password, as an Employee (an admin can change the role).
             </div>
             <SignupForm forOther submitLabel="Create Employee" onSuccess={employeeAdded} onCancel={() => setAddingEmployee(false)} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// colour of each user role in the picker
+const ROLE_BADGE: Record<string, string> = {
+  group_executive: 'gold', functional_head: 'amber', team_lead: 'green', admin: 'black', pmo: 'gold',
+}
+
+/** Dropdown of every active employee showing name, designation and role. People whose
+ *  role matches the slot (e.g. group_executive for the Group Executive) are listed first.
+ *  Opens straight away; the search box filters by name, designation, role or Employee ID. */
+function ApproverPicker({ slot, users, value, onChange, onAddNew }: {
+  slot: Slot; users: User[]; value: string; onChange: (id: string) => void; onAddNew: () => void
+}) {
+  const [open, setOpen] = useState(true)
+  const [q, setQ] = useState('')
+  const suggestedRole = SUGGESTED_ROLE[slot.role]
+  const selected = users.find((u) => String(u.id) === value)
+
+  const term = q.trim().toLowerCase()
+  const matches = users
+    .filter((u) => !term || [u.name, u.designation, label(u.role), u.employee_id].some((s) => (s ?? '').toLowerCase().includes(term)))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const suggested = matches.filter((u) => u.role === suggestedRole)
+  const others = matches.filter((u) => u.role !== suggestedRole)
+
+  const pick = (u: User) => { onChange(String(u.id)); setOpen(false); setQ('') }
+  const row = (u: User) => (
+    <button key={u.id} type="button" className={`mth-opt ${String(u.id) === value ? 'on' : ''}`} onClick={() => pick(u)}>
+      <span style={{ minWidth: 0 }}>
+        <span className="mth-opt-name">{u.name}</span>
+        <span className="mth-opt-sub">{[u.designation, u.employee_id].filter(Boolean).join(' · ')}</span>
+      </span>
+      <span className={`badge ${ROLE_BADGE[u.role] ?? 'gray'}`} style={{ flexShrink: 0 }}>{label(u.role)}</span>
+    </button>
+  )
+
+  return (
+    <div>
+      <button type="button" className="mth-trigger" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {selected ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.name}</b>
+            <span className={`badge ${ROLE_BADGE[selected.role] ?? 'gray'}`}>{label(selected.role)}</span>
+          </span>
+        ) : <span className="muted">Choose the {slot.label}…</span>}
+        <span aria-hidden style={{ color: 'var(--muted)' }}>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div className="mth-menu">
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, designation, role or Employee ID…"
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } }} />
+          <button type="button" className="mth-opt mth-add" onClick={() => { setOpen(false); onAddNew() }}>
+            + Add new employee (not in the system)
+          </button>
+          <div className="mth-opts">
+            {suggested.length > 0 && <div className="mth-group">{label(suggestedRole)} — suggested</div>}
+            {suggested.map(row)}
+            {others.length > 0 && <div className="mth-group">{suggested.length ? 'All other employees' : 'All employees'}</div>}
+            {others.map(row)}
+            {!matches.length && <div className="small muted" style={{ padding: '10px 12px' }}>No employee matches “{q}”. Use “+ Add new employee” above.</div>}
           </div>
         </div>
       )}
