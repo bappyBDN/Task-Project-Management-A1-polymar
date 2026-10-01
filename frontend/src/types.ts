@@ -91,6 +91,8 @@ export interface Comment {
   created_at?: string
   /** set on a reply: the comment it answers */
   parent_id?: number | null
+  /** on a comment: may the current user reply (Project Manager / the task's R, A or Reviewer) */
+  can_reply?: boolean
   /** a comment's replies, oldest first (always empty on a reply) */
   replies?: Comment[]
 }

@@ -33,8 +33,9 @@ export const REPLY_CSS = `
 .cr-err{color:var(--red,#ef4444);font-size:12px;margin-top:4px}
 `
 
-/** A comment's replies plus a "Reply" box. Anyone logged in can reply; the server
- *  emails the comment's author and the Project Manager / Responsible person. */
+/** A comment's replies plus a "Reply" box, shown only when the server says this user
+ *  may reply (project: the Project Manager; task: its Responsible, Accountable or Reviewer).
+ *  The server emails the comment's author and the Project Manager / Responsible person. */
 export function CommentReplies({ comment, onReplied }: { comment: Comment; onReplied: (reply: Comment) => void }) {
   const replies = comment.replies ?? []
   const [open, setOpen] = useState(false)
@@ -70,12 +71,12 @@ export function CommentReplies({ comment, onReplied }: { comment: Comment; onRep
           ))}
         </div>
       )}
-      {!open && (
+      {!open && comment.can_reply && (
         <button type="button" className="cr-link" onClick={() => setOpen(true)}>
           ↩ Reply{replies.length > 0 ? ` (${replies.length})` : ''}
         </button>
       )}
-      {open && (
+      {open && comment.can_reply && (
         <div className="cr-box">
           <textarea
             rows={2}

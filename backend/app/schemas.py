@@ -201,6 +201,7 @@ class CommentOut(BaseModel):
     created_at: Optional[datetime] = None
     # replies are filled in by the comments router (a reply has parent_id set and no replies)
     parent_id: Optional[int] = None
+    can_reply: bool = False  # set on a root comment: may the current user reply?
     replies: list["CommentOut"] = []
 
 
