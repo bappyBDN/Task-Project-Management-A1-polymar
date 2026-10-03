@@ -418,13 +418,17 @@ export const store = {
   },
 
   // tasks
-  tasks: (filter?: { project_id?: number; responsible_id?: number; accountable_id?: number; reviewer_id?: number; status?: string; priority?: string; health?: string; overdue?: boolean; blocker?: boolean }) => {
+  tasks: (filter?: { project_id?: number; responsible_id?: number; accountable_id?: number; reviewer_id?: number; led_by_id?: number; status?: string; priority?: string; health?: string; overdue?: boolean; blocker?: boolean }) => {
     let list = db.tasks.filter((t) => !(t as any).is_deleted)
     if (!filter) return list
     if (filter.project_id) list = list.filter((t) => t.project_id === filter.project_id)
     if (filter.responsible_id) list = list.filter((t) => t.responsible_id === filter.responsible_id)
     if (filter.accountable_id) list = list.filter((t) => t.accountable_id === filter.accountable_id)
     if (filter.reviewer_id) list = list.filter((t) => t.reviewer_id === filter.reviewer_id)
+    if (filter.led_by_id) {
+      const led = new Set(db.projects.filter((p) => [p.manager_id, p.sponsor_id, p.owner_id].includes(filter.led_by_id)).map((p) => p.id))
+      list = list.filter((t) => t.project_id != null && led.has(t.project_id))
+    }
     if (filter.status) list = list.filter((t) => t.status === filter.status)
     if (filter.priority) list = list.filter((t) => t.priority === filter.priority)
     if (filter.health) list = list.filter((t) => t.health === filter.health)
@@ -668,7 +672,8 @@ export const store = {
   // dashboards
   individualKpi: (userId: number): TaskKpi => {
     const t0 = today()
-    const base = db.tasks.filter((t) => !(t as any).is_deleted && [t.responsible_id, t.accountable_id, t.reviewer_id].includes(userId))
+    const led = new Set(db.projects.filter((p) => [p.manager_id, p.sponsor_id, p.owner_id].includes(userId)).map((p) => p.id))
+    const base = db.tasks.filter((t) => !(t as any).is_deleted && ([t.responsible_id, t.accountable_id, t.reviewer_id].includes(userId) || (t.project_id != null && led.has(t.project_id))))
     const total = base.length
     const open = base.filter((t) => OPEN_STATUSES.includes(t.status)).length
     const completed = base.filter((t) => DONE_STATUSES.includes(t.status)).length

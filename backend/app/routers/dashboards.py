@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -14,13 +14,23 @@ OPEN_STATUSES = ["backlog", "ready", "in_progress", "in_review", "blocked", "on_
 DONE_STATUSES = ["completed", "closed"]
 
 
+def _mine(user_id: int):
+    """The tasks the personal dashboard tracks for a user: the ones they are Responsible /
+    Accountable / Reviewer on, plus every task of the projects they lead (Manager, Sponsor
+    or Owner) - so a project manager follows the whole project from the dashboard."""
+    led = select(models.Project.id).where(
+        (models.Project.manager_id == user_id) | (models.Project.sponsor_id == user_id)
+        | (models.Project.owner_id == user_id))
+    return ((models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id)
+            | (models.Task.reviewer_id == user_id) | models.Task.project_id.in_(led))
+
+
 @router.get("/individual/{user_id}", response_model=schemas.TaskKpiOut)
 def individual_kpi(user_id: int, db: Session = Depends(get_db)):
     today = date.today()
     base = db.query(models.Task).filter(
         models.Task.is_deleted.is_(False),
-        (models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id)
-        | (models.Task.reviewer_id == user_id),
+        _mine(user_id),
     )
     total = base.count()
     open_tasks = base.filter(models.Task.status.in_(OPEN_STATUSES)).count()
@@ -196,8 +206,7 @@ def individual_trends(user_id: int, days: int = 7, db: Session = Depends(get_db)
     today = date.today()
     tasks = db.query(models.Task).filter(
         models.Task.is_deleted.is_(False),
-        (models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id)
-        | (models.Task.reviewer_id == user_id),
+        _mine(user_id),
     ).all()
 
     upd_by_day: dict[str, set] = {}

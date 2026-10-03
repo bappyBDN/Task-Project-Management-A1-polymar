@@ -67,6 +67,10 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .ad-leg div{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
 .ad-leg div:last-child{border:0}.ad-leg i{width:9px;height:9px;border-radius:3px}.ad-leg b{margin-left:auto}
 table.ad-t{width:100%;border-collapse:collapse}
+.ad-t th.srt{cursor:pointer;user-select:none;white-space:nowrap}.ad-t th.srt:hover{color:var(--navy)}
+.ad-t td .sub{display:block;font-size:11px;color:var(--mut);margin-top:2px}
+.ad-t td a{color:var(--navy);font-weight:600;text-decoration:none}.ad-t td a:hover{text-decoration:underline}
+.ad-mine-f{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 8px;font-size:12px;color:#334;max-width:220px}
 .ad-t th{font-size:11px;color:var(--mut);font-weight:500;text-align:left;padding:8px 6px;letter-spacing:.03em}
 .ad-t td{padding:11px 6px;border-top:1px solid var(--line);font-size:12.5px}
 .ad-t td:first-child,.ad-t td:last-child{white-space:nowrap}
@@ -151,6 +155,12 @@ const KPIS: { l: string; k: KpiKey; c: string; bg: string; bd: string; ic: strin
   { l: 'CRITICAL', k: 'critical', c: '#ef4444', bg: '#fff1f1', bd: '#fbd2d2', ic: 'alert', bad: true },
   { l: 'BLOCKED', k: 'blocked', c: '#5b6b82', bg: '#f4f6f9', bd: '#dfe4ec', ic: 'ban', bad: true },
 ]
+
+// My Tasks table: click a column heading to sort
+type TaskSort = 'code' | 'title' | 'project' | 'responsible' | 'priority' | 'status' | 'progress' | 'due'
+const TASK_COLS: [TaskSort, string][] = [['code', 'CODE'], ['title', 'TASK'], ['project', 'PROJECT'], ['responsible', 'RESPONSIBLE'],
+  ['priority', 'PRIORITY'], ['status', 'STATUS'], ['progress', 'PROGRESS'], ['due', 'DUE']]
+const PRIORITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
 
 // ---------------------------------------------------------------- icons
 const P: Record<string, string> = {
@@ -527,6 +537,12 @@ export default function Dashboard() {
   const [taskKpi, setTaskKpi] = useState<TaskKpi | null>(null)
   const [projKpi, setProjKpi] = useState<ProjectKpi | null>(null)
   const [myTasks, setMyTasks] = useState<Task[]>([])
+  // names for the My Tasks table (project, its manager, the task's Responsible person)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [people, setPeople] = useState<User[]>([])
+  const [sort, setSort] = useState<{ key: TaskSort; desc: boolean }>({ key: 'project', desc: false })
+  const [projectFilter, setProjectFilter] = useState('')       // '' = all, 'none' = no project, else project id
+  const [responsibleFilter, setResponsibleFilter] = useState('') // '' = all, else user id
   const [healthDist, setHealthDist] = useState<Record<string, number>>({})
   const [delayCauses, setDelayCauses] = useState<{ category: string; count: number }[]>([])
   const [orgIntel, setOrgIntel] = useState<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] } | null>(null)
@@ -582,12 +598,16 @@ export default function Dashboard() {
       .catch(fail)
     // Trends are optional: an older backend without this route just shows flat sparklines.
     api.get<Trends>(`/dashboards/individual/${userId}/trends?days=7`).then(ok(setTrends)).catch(() => {})
-    // The KPI cards count tasks where you are Responsible, Accountable OR Reviewer, so the
-    // list loads all three - otherwise "Total Tasks: 1" could sit next to an empty list.
+    // The KPI cards count tasks where you are Responsible, Accountable OR Reviewer, plus every
+    // task of the projects you lead (Manager / Sponsor / Owner), so the list loads all four -
+    // otherwise "Total Tasks: 1" could sit next to an empty list.
+    api.get<Project[]>('/projects').then(ok(setProjects)).catch(() => {})
+    api.get<User[]>('/organizations/users').then(ok(setPeople)).catch(() => {})
     Promise.all([
       api.get<Task[]>(`/tasks?responsible_id=${userId}`),
       api.get<Task[]>(`/tasks?accountable_id=${userId}`),
       api.get<Task[]>(`/tasks?reviewer_id=${userId}`),
+      api.get<Task[]>(`/tasks?led_by_id=${userId}`),
     ])
       .then((lists) => {
         const byId = new Map<number, Task>()
@@ -600,7 +620,36 @@ export default function Dashboard() {
   }, [userId, tick])
 
   const todayIso = isoOf(now)
-  const rows = useMemo(() => myTasks.filter((t) => (!picked || dueOf(t) === picked) && (!kpi || KPI_MATCH[kpi](t, todayIso))), [myTasks, picked, kpi, todayIso])
+  const projectOf = (t: Task) => projects.find((p) => p.id === t.project_id)
+  const personName = (id?: number | null) => people.find((u) => u.id === id)?.name ?? ''
+  const rows = useMemo(() => {
+    const projName = (t: Task) => projects.find((p) => p.id === t.project_id)?.name ?? ''
+    const respName = (t: Task) => people.find((u) => u.id === t.responsible_id)?.name ?? ''
+    const text = (a: string, b: string) => (!a !== !b ? (a ? -1 : 1) : a.localeCompare(b)) // blanks last
+    const due = (t: Task) => dueOf(t) || '9999'
+    const by: Record<TaskSort, (a: Task, b: Task) => number> = {
+      code: (a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }),
+      title: (a, b) => a.title.localeCompare(b.title),
+      project: (a, b) => text(projName(a), projName(b)),
+      responsible: (a, b) => text(respName(a), respName(b)),
+      priority: (a, b) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9),
+      status: (a, b) => a.status.localeCompare(b.status),
+      progress: (a, b) => a.progress_pct - b.progress_pct,
+      due: (a, b) => due(a).localeCompare(due(b)),
+    }
+    const dir = sort.desc ? -1 : 1
+    return myTasks
+      .filter((t) => (!picked || dueOf(t) === picked) && (!kpi || KPI_MATCH[kpi](t, todayIso))
+        && (!projectFilter || (projectFilter === 'none' ? !t.project_id : String(t.project_id) === projectFilter))
+        && (!responsibleFilter || String(t.responsible_id) === responsibleFilter))
+      // the chosen column, then project, due date and code so the order is always steady
+      .sort((a, b) => dir * by[sort.key](a, b) || by.project(a, b) || by.due(a, b) || by.code(a, b))
+  }, [myTasks, picked, kpi, todayIso, sort, projectFilter, responsibleFilter, projects, people])
+  const clickSort = (key: TaskSort) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: false }))
+  // filter choices: only the projects / people that appear in my tasks
+  const myProjects = useMemo(() => projects.filter((p) => myTasks.some((t) => t.project_id === p.id)).sort((a, b) => a.name.localeCompare(b.name)), [projects, myTasks])
+  const myResponsibles = useMemo(() => people.filter((u) => myTasks.some((t) => t.responsible_id === u.id)).sort((a, b) => a.name.localeCompare(b.name)), [people, myTasks])
+  const hasStandalone = myTasks.some((t) => !t.project_id)
   const kpiLabel = kpi ? label(KPIS.find((k) => k.k === kpi)!.l.toLowerCase()) : ''
   // click a KPI card: list those tasks in My Tasks (click it again to show all)
   const pickKpi = (k: KpiKey) => {
@@ -702,20 +751,40 @@ export default function Dashboard() {
             <div className="ad-card" ref={myTasksRef} style={{ scrollMarginTop: 12 }}>
               <div className="ad-head">
                 <h3 style={{ margin: 0, flexWrap: 'wrap' }}><Ic n="cal" />My Tasks{kpi && kpi !== 'total' && <span style={{ fontWeight: 400 }}>— {kpiLabel}</span>}{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({rows.length})</span></h3>
-                <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select className="ad-mine-f" aria-label="Filter by project" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+                    <option value="">All projects</option>
+                    {myProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {hasStandalone && <option value="none">No project</option>}
+                  </select>
+                  <select className="ad-mine-f" aria-label="Filter by responsible person" value={responsibleFilter} onChange={(e) => setResponsibleFilter(e.target.value)}>
+                    <option value="">All responsible</option>
+                    {myResponsibles.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
                   {kpi && <button className="ad-btn" onClick={() => setKpi(null)}>Show all tasks</button>}
                   {picked && <button className="ad-btn" onClick={() => setPicked(null)}>Clear date filter</button>}
                 </span>
               </div>
               <div className="ad-scroll"><table className="ad-t">
-                <thead><tr>{['CODE', 'TASK', 'PRIORITY', 'STATUS', 'PROGRESS', 'DUE'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                <thead><tr>{TASK_COLS.map(([k, h]) => (
+                  <th key={k} className="srt" onClick={() => clickSort(k)} title="Click to sort" aria-sort={sort.key === k ? (sort.desc ? 'descending' : 'ascending') : undefined}>
+                    {h}{sort.key === k ? (sort.desc ? ' ▼' : ' ▲') : ''}
+                  </th>
+                ))}</tr></thead>
                 <tbody>
                   {rows.map((t) => {
                     const p = PR[t.priority] ?? PR.medium, s = stTone(t.status), d = dueOf(t), done = DONE.includes(t.status)
+                    const proj = projectOf(t), onTask = [t.responsible_id, t.accountable_id, t.reviewer_id].includes(userId)
                     return (
                       <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)}>
                         <td>{t.code}</td>
-                        <td>{t.title}{t.blocker && <span className="pill" style={{ background: '#fdeaea', color: '#e23b3b', marginLeft: 8 }}>Blocked</span>}{t.reviewer_id === userId && t.responsible_id !== userId && t.accountable_id !== userId && <span className="pill" style={{ background: '#f5f1ff', color: '#7c4dff', marginLeft: 8 }}>To review</span>}</td>
+                        <td>{t.title}{t.blocker && <span className="pill" style={{ background: '#fdeaea', color: '#e23b3b', marginLeft: 8 }}>Blocked</span>}{t.reviewer_id === userId && t.responsible_id !== userId && t.accountable_id !== userId && <span className="pill" style={{ background: '#f5f1ff', color: '#7c4dff', marginLeft: 8 }}>To review</span>}{!onTask && <span className="pill" style={{ background: '#fdf3d7', color: '#8a6d1f', marginLeft: 8 }}>My project</span>}</td>
+                        <td style={{ minWidth: 140 }}>
+                          {proj
+                            ? <><Link to={`/projects/${proj.id}`} onClick={(e) => e.stopPropagation()}>{proj.name}</Link><span className="sub">PM: {personName(proj.manager_id) || '—'}</span></>
+                            : <span style={{ color: 'var(--mut)' }}>{t.project_id ? '—' : 'No project'}</span>}
+                        </td>
+                        <td>{personName(t.responsible_id) || '—'}{t.responsible_id === userId && <span className="sub">You</span>}</td>
                         <td><span className="pill" style={{ background: p[0], color: p[1] }}><Ic n="star" s={10} />{label(t.priority)}</span></td>
                         <td><span className="pill" style={{ background: s[0], color: s[1] }}>{done ? '✓' : '›'} {label(t.status)}</span></td>
                         <td><span className="pb"><span style={{ width: `${t.progress_pct}%`, background: done || t.progress_pct >= 50 ? '#12a150' : '#1d6bff' }} /></span>{Math.round(t.progress_pct)}%</td>
@@ -725,7 +794,7 @@ export default function Dashboard() {
                   })}
                 </tbody>
               </table></div>
-              {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked || kpi ? 'No tasks match this filter.' : 'No tasks assigned to you.'}</div>}
+              {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked || kpi || projectFilter || responsibleFilter ? 'No tasks match this filter.' : 'No tasks assigned to you.'}</div>}
             </div>
 
 

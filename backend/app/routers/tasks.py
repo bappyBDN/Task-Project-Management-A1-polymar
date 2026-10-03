@@ -1,7 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import case
+from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,7 @@ def list_tasks(
     responsible_id: int | None = None,
     accountable_id: int | None = None,
     reviewer_id: int | None = None,
+    led_by_id: int | None = None,  # tasks of the projects this user leads (Manager / Sponsor / Owner)
     status: str | None = None,
     priority: str | None = None,
     health: str | None = None,
@@ -58,6 +59,10 @@ def list_tasks(
         q = q.filter(models.Task.accountable_id == accountable_id)
     if reviewer_id:
         q = q.filter(models.Task.reviewer_id == reviewer_id)
+    if led_by_id:
+        q = q.filter(models.Task.project_id.in_(select(models.Project.id).where(
+            (models.Project.manager_id == led_by_id) | (models.Project.sponsor_id == led_by_id)
+            | (models.Project.owner_id == led_by_id))))
     if status:
         q = q.filter(models.Task.status == status)
     if priority:
