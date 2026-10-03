@@ -5,11 +5,13 @@ import type { Company, Department, Function, User } from '../types'
 import { label } from '../constants'
 import SbuSelect from './SbuSelect'
 import SearchableSelect from './SearchableSelect'
+import InviteUserModal from './InviteUserModal'
 
 // "Edit My Profile": the signed-in user edits their own details with the same
-// fields as the admin's user form. Employee ID, email (the login) and role can
-// only be changed by an admin, so for everyone else they are shown read-only
-// (the server enforces this: PATCH /organizations/users/me ignores them).
+// fields as the admin's user form. Employee ID and email (the login) can only be
+// changed by an admin, so for everyone else they are shown read-only. Everyone
+// picks their own role, except admin and the privileged roles (an admin gives those).
+// The server enforces all of this (PATCH /organizations/users/me).
 // Closes only with Cancel, like the other forms.
 
 export default function ProfileForm({ onClose, onSaved }: { onClose: () => void; onSaved: (msg: string) => void }) {
@@ -20,6 +22,8 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<string[]>([])
+  const [privileged, setPrivileged] = useState<string[]>(['admin'])
+  const [addingManager, setAddingManager] = useState(false)
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -40,8 +44,9 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
     api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
     api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
     api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
-    if (isAdmin) api.get<string[]>('/all-roles').then(setRoles).catch(() => {})
-  }, [isAdmin])
+    api.get<string[]>('/all-roles').then(setRoles).catch(() => {})
+    api.get<string[]>('/privileged-roles').then((r) => setPrivileged(['admin', ...r])).catch(() => {})
+  }, [])
 
   if (!user) return null
 
@@ -59,10 +64,11 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
         function_id: form.function_id,
         department_id: form.department_id,
         reports_to_id: form.reports_to_id,
+        role: form.role,
       }
       // an admin uses the admin route, which can also change Employee ID, email and role
       const saved = isAdmin
-        ? await api.patch<User>(`/organizations/users/${user.id}`, { ...mine, employee_id: form.employee_id.trim(), email: form.email.trim(), role: form.role })
+        ? await api.patch<User>(`/organizations/users/${user.id}`, { ...mine, employee_id: form.employee_id.trim(), email: form.email.trim() })
         : await api.patch<User>('/organizations/users/me', mine)
       setMe({ ...user, ...saved })
       onSaved('Your profile was updated.')
@@ -74,6 +80,9 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
   }
 
   const adminOnly = isAdmin ? undefined : 'Only an admin can change this'
+  // roles this person may pick: an admin any; others every role an admin doesn't have to give
+  const roleChoices = (isAdmin ? roles : roles.filter((r) => !privileged.includes(r)))
+  const roleOptions = roleChoices.includes(form.role) ? roleChoices : [form.role, ...roleChoices]
   const managerItems = users.filter((u) => u.id !== user.id && u.is_active !== false)
     .map((u) => ({ value: String(u.id), label: `${u.name} — ${label(u.role)}` }))
   // a department belongs to a function: once a function is chosen, list only its departments
@@ -144,18 +153,29 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
               items={managerItems}
               onChange={(v) => set('reports_to_id', v ? Number(v) : null)}
               placeholder="Search employee by name…"
+              onAddNew={() => setAddingManager(true)}
+              addLabel="new user"
             />
+            {addingManager && (
+              <InviteUserModal title="Add Your Manager" onClose={() => setAddingManager(false)}
+                onInvited={(u) => {
+                  setAddingManager(false)
+                  if (u.id === user.id) { setErr('You cannot report to yourself'); return }
+                  setUsers((l) => [...l.filter((x) => x.id !== u.id), u])
+                  set('reports_to_id', u.id)
+                }} />
+            )}
           </div>
         </div>
         <label>Role</label>
-        {isAdmin ? (
-          <select value={form.role} onChange={(e) => set('role', e.target.value)}>
-            {(roles.includes(form.role) ? roles : [form.role, ...roles]).map((r) => <option key={r} value={r}>{label(r)}</option>)}
-          </select>
-        ) : (
-          <input value={label(form.role)} disabled title={adminOnly} />
+        <select value={form.role} onChange={(e) => set('role', e.target.value)}>
+          {roleOptions.map((r) => <option key={r} value={r}>{label(r)}</option>)}
+        </select>
+        {!isAdmin && (
+          <div className="small muted" style={{ marginTop: 6 }}>
+            Employee ID and email can only be changed by an admin. {privileged.filter((r) => roles.includes(r)).map((r) => label(r)).join(', ')} roles are given by an admin.
+          </div>
         )}
-        {!isAdmin && <div className="small muted" style={{ marginTop: 6 }}>Employee ID, email and role can only be changed by an admin.</div>}
 
         <div className="modal-actions">
           <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>

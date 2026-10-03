@@ -4,11 +4,12 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import models, schemas, services
+from app import models, permissions, schemas, services
 from app.auth import (
     create_invited_user, get_admin_user, get_current_user, is_invited, send_set_password_link, send_signup_invite,
 )
 from app.database import get_db
+from app.routers.privileged import ALL_ROLES
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -53,9 +54,20 @@ def me(user: models.User = Depends(get_current_user)):
 
 @router.patch("/users/me", response_model=schemas.UserOut)
 def update_me(payload: schemas.UserSelfUpdate, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Edit My Profile: the signed-in user updates their own details (not role / email / Employee ID).
+    """Edit My Profile: the signed-in user updates their own details (not email / Employee ID).
+    They may pick their own role, except admin and the privileged roles (see everything,
+    approve): those are given by an admin only.
     Declared before /users/{user_id} so "me" is not read as an id."""
     data = payload.model_dump(exclude_unset=True)
+    new_role = (data.pop("role", None) or "").strip().lower()
+    if new_role and new_role != user.role:
+        if new_role not in ALL_ROLES:
+            raise HTTPException(400, "Unknown role")
+        if new_role in permissions.privileged_roles(db):
+            raise HTTPException(403, "Only an admin can give this role. Please ask your admin.")
+        services.audit(db, user.name, "user", user.id, "role_changed", previous_value=user.role, new_value=new_role,
+                       reason="Changed by the user in Edit My Profile")
+        data["role"] = new_role
     if "name" in data:
         if not (data["name"] or "").strip():
             raise HTTPException(400, "Name is required")

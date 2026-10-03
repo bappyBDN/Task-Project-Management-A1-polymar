@@ -46,15 +46,17 @@ TASK_ACCOUNTABLE_FIELDS = TASK_PROGRESS_FIELDS | {
 }
 TASK_RESPONSIBLE_FIELDS = TASK_ACCOUNTABLE_FIELDS | {"accountable_id", "reviewer_id"}
 
-def is_privileged(db: Session, user: models.User) -> bool:
-    if user.role == ADMIN_ROLE:
-        return True
+def privileged_roles(db: Session) -> set:
+    """Roles that see and edit everything: admin plus the list set in the Admin Panel."""
     rows = db.query(models.ListOption.value).filter(
         models.ListOption.kind == "privileged_role",
         models.ListOption.is_active.is_(True),
     ).all()
-    roles = {r[0] for r in rows} or set(DEFAULT_PRIVILEGED)
-    return user.role in roles
+    return ({r[0] for r in rows} or set(DEFAULT_PRIVILEGED)) | {ADMIN_ROLE}
+
+
+def is_privileged(db: Session, user: models.User) -> bool:
+    return user.role in privileged_roles(db)
 
 
 def _changed(obj, data: dict) -> set:

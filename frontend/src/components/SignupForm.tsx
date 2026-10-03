@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import SearchableSelect from './SearchableSelect'
 import SbuSelect, { isPendingSbu } from './SbuSelect'
+import InviteUserModal from './InviteUserModal'
 
 // The sign-up form, shared by the Sign Up page and "Add new employee" (e.g. on a
 // project's Associated People), so both save exactly the same way: role is always
@@ -40,8 +41,13 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
   // typed in with "+ Add" rather than picked from the list
   const isNew = (v: string) => v.trim() !== '' && !v.startsWith('id:')
   const asTyped = (v: string) => v
-  // Reports To typed in: an email (the manager is added and invited) or, as before, an Employee ID
-  const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+  // Reports To: picked from the list ("id:<n>") or, with "+ Add new user", a manager known
+  // only by email ("email:<address>") - the server adds and invites them on sign-up
+  const [addingManager, setAddingManager] = useState(false)
+  const managerEmail = form.reports_to_id.startsWith('email:') ? form.reports_to_id.slice(6) : ''
+  const managerItems = managerEmail
+    ? [{ value: form.reports_to_id, label: `${managerEmail} (will be invited)` }, ...items(opts.users)]
+    : items(opts.users)
   const their = forOther ? 'their' : 'your'
   const they = forOther ? 'they' : 'you'
 
@@ -50,6 +56,7 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
     e.stopPropagation() // may sit inside another form / modal
     setError('')
     if (!form.name.trim() || !form.email.trim() || !form.employee_id.trim()) { setError('Name, email and employee id are required'); return }
+    if (managerEmail && managerEmail.toLowerCase() === form.email.trim().toLowerCase()) { setError(`${forOther ? 'Their' : 'Your'} manager's email can't be ${their} own.`); return }
     const num = (v: string) => (v.startsWith('id:') ? Number(v.slice(3)) : null)
     setBusy(true)
     try {
@@ -66,8 +73,7 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
         // typed in rather than picked: added to the lists / looked up by the server
         new_function: isNew(form.function_id) ? form.function_id.trim() : null,
         new_department: isNew(form.department_id) ? form.department_id.trim() : null,
-        reports_to_employee_id: isNew(form.reports_to_id) && !isEmail(form.reports_to_id) ? form.reports_to_id.trim() : null,
-        reports_to_email: isNew(form.reports_to_id) && isEmail(form.reports_to_id) ? form.reports_to_id.trim() : null,
+        reports_to_email: managerEmail || null,
       })
       const employeeId = form.employee_id.trim()
       setForm(EMPTY)
@@ -80,6 +86,7 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit}>
       {error && <div className="alert error" role="alert">{error}</div>}
 
@@ -113,13 +120,12 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
         </div>
         <div>
           <label>Reports To (manager)</label>
-          <SearchableSelect value={form.reports_to_id} items={items(opts.users)} onChange={(v) => set('reports_to_id', v)} placeholder="Search name, or type manager's email…" allowCustom customLabel={asTyped} />
+          <SearchableSelect value={form.reports_to_id} items={managerItems} onChange={(v) => set('reports_to_id', v)} placeholder="Search manager by name…"
+            onAddNew={() => setAddingManager(true)} addLabel="new user" />
           <div className="small muted" style={{ marginTop: 4 }}>
-            {!isNew(form.reports_to_id)
-              ? 'Manager not in the list? Type their email and press Enter - they will get an invitation to sign up.'
-              : isEmail(form.reports_to_id)
-                ? `Manager's email: ${form.reports_to_id.trim()}. If they have no account yet, they will be added and get an email asking them to sign up.`
-                : `Manager's Employee ID: ${form.reports_to_id.trim()}. If they have no account yet, ${they}'ll be linked to them when they join. Or type their email to invite them.`}
+            {managerEmail
+              ? `${managerEmail} will get an email asking them to sign up, and ${they}'ll be linked to them.`
+              : 'Manager not in the list? Choose "+ Add new user" and enter their email.'}
           </div>
         </div>
       </div>
@@ -135,5 +141,11 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
         </button>
       )}
     </form>
+    {/* outside the <form>: a form cannot sit inside another one */}
+    {addingManager && (
+      <InviteUserModal title="Add Your Manager" onClose={() => setAddingManager(false)}
+        onEmail={(email) => { set('reports_to_id', `email:${email}`); setAddingManager(false) }} />
+    )}
+    </>
   )
 }

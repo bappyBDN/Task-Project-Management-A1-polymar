@@ -72,8 +72,10 @@ class UserUpdate(BaseModel):
 
 class UserSelfUpdate(BaseModel):
     """PATCH /organizations/users/me: what anyone may change about themselves.
-    Employee ID, email (the login) and role stay with an admin."""
+    Employee ID and email (the login) stay with an admin. Role: any ordinary role;
+    admin and the privileged roles can only be given by an admin."""
     name: Optional[str] = None
+    role: Optional[str] = None
     designation: Optional[str] = None
     company_id: Optional[int] = None
     function_id: Optional[int] = None

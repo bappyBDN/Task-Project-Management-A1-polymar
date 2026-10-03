@@ -8,7 +8,17 @@ import type { User } from '../types'
 // a link to the Sign Up page, where they fill in the rest themselves.
 interface InviteResult { user: User; email_sent: boolean; already_registered: boolean }
 
-export default function InviteUserModal({ onClose, onInvited }: { onClose: () => void; onInvited: (u: User) => void }) {
+interface Props {
+  onClose: () => void
+  /** the person was saved (and invited): select them */
+  onInvited?: (u: User) => void
+  /** Sign Up page (nobody is logged in yet): only hand back the email; the server
+   *  adds and invites the person when the sign-up itself is submitted */
+  onEmail?: (email: string) => void
+  title?: string
+}
+
+export default function InviteUserModal({ onClose, onInvited, onEmail, title = 'Add New User' }: Props) {
   const [email, setEmail] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -19,6 +29,7 @@ export default function InviteUserModal({ onClose, onInvited }: { onClose: () =>
     e.stopPropagation() // sits inside another form / modal
     const value = email.trim()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { setErr('Enter a valid email address.'); return }
+    if (onEmail) { onEmail(value); return }
     setBusy(true)
     setErr('')
     try {
@@ -33,7 +44,7 @@ export default function InviteUserModal({ onClose, onInvited }: { onClose: () =>
   return (
     <div className="modal-backdrop" onClick={(e) => e.stopPropagation()}>
       <div className="modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
-        <h2>Add New User</h2>
+        <h2>{title}</h2>
         {done ? (
           <>
             {done.already_registered ? (
@@ -49,20 +60,22 @@ export default function InviteUserModal({ onClose, onInvited }: { onClose: () =>
               </div>
             )}
             <div className="modal-actions">
-              <button className="btn primary" onClick={() => onInvited(done.user)} autoFocus>OK</button>
+              <button className="btn primary" onClick={() => onInvited?.(done.user)} autoFocus>OK</button>
             </div>
           </>
         ) : (
           <form onSubmit={submit}>
             <div className="small muted" style={{ marginBottom: 12 }}>
-              Enter their email. They will get a mail with a link to sign up, and you can assign them right away.
+              {onEmail
+                ? 'Enter their email. When you finish signing up, they will get a mail with a link to sign up too.'
+                : 'Enter their email. They will get a mail with a link to sign up, and you can assign them right away.'}
             </div>
             {err && <div className="alert error" role="alert">{err}</div>}
             <label>Email *</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" autoFocus disabled={busy} />
             <div className="modal-actions">
               <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-              <button type="submit" className="btn primary" disabled={busy}>{busy ? 'Sending…' : 'Add & Send Invitation'}</button>
+              <button type="submit" className="btn primary" disabled={busy}>{busy ? 'Sending…' : onEmail ? 'Add' : 'Add & Send Invitation'}</button>
             </div>
           </form>
         )}
