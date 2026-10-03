@@ -15,21 +15,44 @@ Setup (one-time):
 Nothing else in the app needs to change — every function below reads
 credentials from app.config.settings, so swapping accounts is just an
 .env edit.
+
+Every email uses one layout (`_layout`): the Anwar Group logo and the system name at
+the top, a titled band, the message, and a standard footer. The logo travels inside
+the email itself (app/assets/anwars-logo.jpg, attached inline), so it shows without
+the reader's mail program having to download anything from our server.
 """
 import html
 import logging
 import smtplib
 from datetime import date, datetime, timedelta
 from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email import encoders
 from email.utils import formataddr
+from pathlib import Path
 from typing import Optional
 
 from app.config import settings
 
 logger = logging.getLogger("app.email")
+
+# ---------------------------------------------------------------- branding
+SYSTEM_NAME = "Task and Project Management System of AGI"   # sender name, footer, sign-off
+SYSTEM_TITLE = "Task and Project Management System"         # next to the logo
+ORG_NAME = "Anwar Group of Industries (AGI)"
+
+NAVY, GOLD, INK, MUTED, LINE = "#0b1f3a", "#c8a24b", "#1a2333", "#5b6472", "#e3e8f0"
+GREEN, AMBER, RED, BLUE, PURPLE = "#1a8f5c", "#d9940a", "#c9342b", "#1d6bff", "#5b4bc4"
+FONT = "'Segoe UI',Arial,Helvetica,sans-serif"
+
+LOGO_CID = "agi-logo"
+try:
+    _LOGO: Optional[bytes] = (Path(__file__).parent / "assets" / "anwars-logo.jpg").read_bytes()
+except OSError:  # the mail still goes out, with the name where the logo would be
+    _LOGO = None
+    logger.warning("Email logo (app/assets/anwars-logo.jpg) not found - emails are sent without it.")
 
 
 def _filter_allowed(to_addrs: list[str]) -> list[str]:
@@ -44,13 +67,45 @@ def _filter_allowed(to_addrs: list[str]) -> list[str]:
     return kept
 
 
+def _build_message(to_addrs: list[str], subject: str, html_body: str, text_body: Optional[str] = None,
+                   attachments: Optional[list] = None):
+    """The complete email: text + HTML, the inline logo, and any file attachments."""
+    body = MIMEMultipart("alternative")
+    body.attach(MIMEText(text_body or "Please view this email in an HTML-capable client.", "plain", "utf-8"))
+    body.attach(MIMEText(html_body, "html", "utf-8"))
+    msg = body
+    if _LOGO and f"cid:{LOGO_CID}" in html_body:
+        # related = the HTML plus the picture it shows
+        msg = MIMEMultipart("related")
+        msg.attach(body)
+        logo = MIMEImage(_LOGO, _subtype="jpeg")
+        logo.add_header("Content-ID", f"<{LOGO_CID}>")
+        logo.add_header("Content-Disposition", "inline", filename="anwar-group-logo.jpg")
+        msg.attach(logo)
+    if attachments:
+        # mixed = the message plus file attachments
+        outer = MIMEMultipart("mixed")
+        outer.attach(msg)
+        for filename, mime_type, content in attachments:
+            maintype, subtype = mime_type.split("/", 1)
+            part = MIMEBase(maintype, subtype, name=filename)
+            part.set_payload(content.encode("utf-8"))
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=filename)
+            outer.attach(part)
+        msg = outer
+    msg["Subject"] = subject
+    msg["From"] = formataddr((SYSTEM_NAME, settings.gmail_user))
+    msg["To"] = ", ".join(to_addrs)
+    return msg
+
+
 def _send(to_addrs: list[str], subject: str, html_body: str, text_body: Optional[str] = None,
           attachments: Optional[list] = None) -> bool:
     """Low-level sender. Returns True only if the SMTP call actually succeeded.
 
     attachments (optional): list of (filename, mime_type, content_str), e.g.
-    ("invite.ics", "text/calendar", "..."). Existing callers don't pass it, so
-    their emails are built exactly as before.
+    ("invite.ics", "text/calendar", "...").
     """
     to_addrs = [a for a in dict.fromkeys(a.strip() for a in to_addrs if a)]
     to_addrs = _filter_allowed(to_addrs)
@@ -65,26 +120,7 @@ def _send(to_addrs: list[str], subject: str, html_body: str, text_body: Optional
         logger.warning("Gmail credentials missing (GMAIL_USER / GMAIL_APP_PASSWORD) — skipping '%s'.", subject)
         return False
 
-    body = MIMEMultipart("alternative")
-    body.attach(MIMEText(text_body or "Please view this email in an HTML-capable client.", "plain", "utf-8"))
-    body.attach(MIMEText(html_body, "html", "utf-8"))
-    if attachments:
-        # mixed = the text/HTML body plus file attachments
-        msg = MIMEMultipart("mixed")
-        msg.attach(body)
-        for filename, mime_type, content in attachments:
-            maintype, subtype = mime_type.split("/", 1)
-            part = MIMEBase(maintype, subtype, name=filename)
-            part.set_payload(content.encode("utf-8"))
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", "attachment", filename=filename)
-            msg.attach(part)
-    else:
-        msg = body  # unchanged behaviour for every existing email
-    msg["Subject"] = subject
-    msg["From"] = formataddr(("Anwar Task Manager", settings.gmail_user))
-    msg["To"] = ", ".join(to_addrs)
-
+    msg = _build_message(to_addrs, subject, html_body, text_body, attachments)
     try:
         if settings.smtp_port == 465:
             server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds)
@@ -101,148 +137,246 @@ def _send(to_addrs: list[str], subject: str, html_body: str, text_body: Optional
         return False
 
 
-# ---------------------------------------------------------------- HTML template helper
-def _card(title: str, color: str, rows: dict, footer_note: str = "") -> str:
-    row_html = "".join(
-        f'<tr>'
-        f'<td style="padding:6px 12px;color:#666;font-size:13px;white-space:nowrap;">{k}</td>'
-        f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{html.escape(str(v))}</td>'
-        f'</tr>'
-        for k, v in rows.items() if v not in (None, "")
+# ---------------------------------------------------------------- shared layout
+# Tables and inline styles only: that is what Outlook, Gmail and phone mail apps all render.
+def _layout(kicker: str, title: str, inner_html: str, accent: str = GOLD, preheader: str = "") -> str:
+    """The frame every email uses. `kicker` is the small line above the title
+    ("Reminder", "Meeting Invitation"); `accent` colours the strip under the title band;
+    `preheader` is the preview line mail apps show next to the subject."""
+    e = html.escape
+    logo = (f'<img src="cid:{LOGO_CID}" alt="Anwar Group" height="54" '
+            f'style="display:block;border:0;outline:none;height:54px;width:auto;">') if _LOGO else (
+            f'<div style="font-size:18px;font-weight:700;color:{RED};letter-spacing:1px;">ANWAR GROUP</div>')
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f2f4f8;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f2f4f8;font-size:1px;line-height:1px;">{e(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f2f4f8;">
+ <tr><td align="center" style="padding:24px 12px;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+         style="width:100%;max-width:600px;background:#ffffff;border:1px solid {LINE};border-radius:10px;font-family:{FONT};color:{INK};">
+   <tr><td style="padding:18px 26px;border-bottom:3px solid {GOLD};border-radius:10px 10px 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+     <td width="90" valign="middle">{logo}</td>
+     <td align="right" valign="middle" style="font-family:{FONT};">
+      <div style="font-size:15px;font-weight:700;color:{NAVY};line-height:1.3;">{SYSTEM_TITLE}</div>
+      <div style="font-size:12px;color:{MUTED};letter-spacing:.3px;margin-top:2px;">{ORG_NAME}</div>
+     </td>
+    </tr></table>
+   </td></tr>
+   <tr><td style="background:{NAVY};padding:18px 26px 16px;font-family:{FONT};">
+    <div style="color:{GOLD};font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;">{e(kicker)}</div>
+    <div style="color:#ffffff;font-size:20px;font-weight:600;line-height:1.35;margin-top:4px;">{e(title)}</div>
+   </td></tr>
+   <tr><td style="height:4px;line-height:4px;font-size:0;background:{accent};">&nbsp;</td></tr>
+   <tr><td style="padding:26px;font-family:{FONT};font-size:14px;line-height:1.65;color:{INK};">
+{inner_html}
+   </td></tr>
+   <tr><td style="padding:16px 26px;background:#f7f9fc;border-top:1px solid {LINE};border-radius:0 0 10px 10px;
+              font-family:{FONT};font-size:11.5px;line-height:1.6;color:#7a8699;">
+    This is an automated message from the <b style="color:{MUTED};">{SYSTEM_NAME}</b>. Please do not reply to this email.<br>
+    &copy; {date.today().year} Anwar Group of Industries. All rights reserved.
+   </td></tr>
+  </table>
+ </td></tr>
+</table>
+</body></html>"""
+
+
+def _p(text_html: str, margin: str = "0 0 14px") -> str:
+    return f'<p style="margin:{margin};">{text_html}</p>'
+
+
+def _greeting(name: Optional[str]) -> str:
+    return _p(f"Dear {html.escape(name)}," if name else "Dear Colleague,")
+
+
+def _rows(rows) -> str:
+    """Details table: label on the left, value on the right. Empty values are left out."""
+    e = html.escape
+    items = [(k, v) for k, v in (rows.items() if isinstance(rows, dict) else rows) if v not in (None, "")]
+    if not items:
+        return ""
+    body = "".join(
+        f'<tr><td style="padding:9px 14px;width:150px;font-size:13px;color:{MUTED};background:#f7f9fc;'
+        f'border-bottom:1px solid #eef1f5;vertical-align:top;">{e(str(k))}</td>'
+        f'<td style="padding:9px 14px;font-size:13.5px;font-weight:600;color:{INK};border-bottom:1px solid #eef1f5;'
+        f'vertical-align:top;">{e(str(v))}</td></tr>'
+        for k, v in items
     )
-    return f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
-      <div style="background:{color};padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="color:#fff;margin:0;font-size:18px;">{title}</h2>
-      </div>
-      <div style="border:1px solid #eee;border-top:none;padding:16px 20px;border-radius:0 0 8px 8px;">
-        <table style="width:100%;border-collapse:collapse;">{row_html}</table>
-        <p style="color:#888;font-size:12px;margin-top:16px;">{footer_note}</p>
-      </div>
-    </div>
-    """
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'style="border:1px solid #eef1f5;border-bottom:0;border-radius:6px;margin:4px 0 18px;">{body}</table>')
+
+
+def _button(label: str, link: str) -> str:
+    e = html.escape
+    return (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:22px auto 8px;">'
+            f'<tr><td align="center" bgcolor="{NAVY}" style="border-radius:6px;">'
+            f'<a href="{e(link)}" style="display:inline-block;padding:12px 28px;font-family:{FONT};font-size:14px;'
+            f'font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">{e(label)}</a></td></tr></table>')
+
+
+def _link_fallback(link: str) -> str:
+    e = html.escape
+    return (f'<p style="margin:14px 0 0;font-size:12px;color:{MUTED};">If the button does not work, copy this link into your browser:<br>'
+            f'<a href="{e(link)}" style="color:{BLUE};word-break:break-all;">{e(link)}</a></p>')
+
+
+def _note(text_html: str, color: str = GOLD, bg: str = "#fbf6e9") -> str:
+    """A highlighted line: an instruction, a deadline, a warning."""
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 16px;">'
+            f'<tr><td style="padding:12px 16px;background:{bg};border-left:4px solid {color};border-radius:4px;'
+            f'font-size:13.5px;line-height:1.55;color:{INK};">{text_html}</td></tr></table>')
+
+
+def _quote(label: str, text: str, color: str = GOLD, bg: str = "#f4f6fa") -> str:
+    """Someone's own words (a comment, an agenda, a note), kept exactly as written."""
+    e = html.escape
+    return (f'<div style="margin:0 0 6px;font-size:11.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:{MUTED};">{e(label)}</div>'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">'
+            f'<tr><td style="padding:12px 16px;background:{bg};border-left:4px solid {color};border-radius:4px;'
+            f'font-size:14px;line-height:1.6;color:{INK};white-space:pre-wrap;">{e(text)}</td></tr></table>')
+
+
+def _small(text_html: str) -> str:
+    return f'<p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#7a8699;">{text_html}</p>'
+
+
+def _signoff() -> str:
+    return (f'<p style="margin:20px 0 0;">Regards,<br><b>{SYSTEM_NAME}</b><br>'
+            f'<span style="font-size:12.5px;color:{MUTED};">Anwar Group of Industries</span></p>')
+
+
+TEXT_SIGNOFF = f"\nRegards,\n{SYSTEM_NAME}\nAnwar Group of Industries\n"
+
+
+def _card(title: str, color: str, rows: dict, footer_note: str = "", kicker: str = "Notification",
+          intro: str = "") -> str:
+    """A simple notice: a details table and one closing line."""
+    inner = _greeting(None) + (_p(html.escape(intro)) if intro else "") + _rows(rows) + (_p(footer_note, "0") if footer_note else "") + _signoff()
+    return _layout(kicker, title, inner, accent=color, preheader=intro or title)
+
+
+def _fmt_date(d) -> str:
+    return d.strftime("%d %b %Y") if isinstance(d, (date, datetime)) else (str(d) if d else "")
+
+
+def _label(v) -> str:
+    return str(v).replace("_", " ").title() if v else ""
+
+
+def _pct(v) -> str:
+    try:
+        return f"{float(v):g}%"
+    except (TypeError, ValueError):
+        return ""
 
 
 # ---------------------------------------------------------------- Task completed
 def send_task_completed_email(task, project_name: Optional[str], recipients: list[str]) -> bool:
     subject = f"Task Completed: {task.code} - {task.title}"
-    html = _card(
-        "✅ Task Completed", "#22a06b",
+    body = _card(
+        "Task Completed", GREEN,
         {
             "Task": f"{task.code} — {task.title}",
             "Project": project_name or "—",
-            "Completed on": task.actual_due_date,
-            "Final progress": f"{task.progress_pct}%",
+            "Completed on": _fmt_date(task.actual_due_date),
+            "Final progress": _pct(task.progress_pct),
             "Remarks": task.completion_remarks or "—",
         },
-        "Automated notification from the Anwar Task &amp; Project Management System.",
+        "No further action is required for this task.",
+        kicker="Task Update",
+        intro="The following task has been completed and approved.",
     )
-    return _send(recipients, subject, html)
+    return _send(recipients, subject, body)
 
 
 # ---------------------------------------------------------------- Task due / overdue
 def send_task_due_email(task, project_name: Optional[str], days_offset: int, recipients: list[str]) -> bool:
     """days_offset: negative for future (due-soon), 0 = due today, positive = days overdue."""
     if days_offset > 0:
-        subject = f"OVERDUE Task: {task.code} - {days_offset} day(s) overdue"
-        title, color = "⚠️ Task Overdue", "#d9534f"
+        subject = f"Overdue Task: {task.code} - {days_offset} day(s) overdue"
+        title, color, kicker = "Task Overdue", RED, "Action Required"
+        intro = f"The following task is {days_offset} day(s) past its due date and needs your attention."
     elif days_offset == 0:
         subject = f"Task Due Today: {task.code}"
-        title, color = "⏰ Task Due Today", "#e0a800"
+        title, color, kicker = "Task Due Today", AMBER, "Reminder"
+        intro = "The following task is due today."
     else:
         subject = f"Upcoming Task Due: {task.code} (in {abs(days_offset)} day(s))"
-        title, color = "🔔 Task Due Soon", "#3b82f6"
+        title, color, kicker = "Task Due Soon", BLUE, "Reminder"
+        intro = f"The following task is due in {abs(days_offset)} day(s)."
 
-    html = _card(
+    body = _card(
         title, color,
         {
             "Task": f"{task.code} — {task.title}",
             "Project": project_name or "—",
-            "Priority": task.priority,
-            "Status": task.status,
-            "Due date": task.approved_due_date or task.baseline_due_date,
-            "Progress": f"{task.progress_pct}%",
+            "Priority": _label(task.priority),
+            "Status": _label(task.status),
+            "Due date": _fmt_date(task.approved_due_date or task.baseline_due_date),
+            "Progress": _pct(task.progress_pct),
         },
-        "Please update task progress, or raise a Delay RCA if this task cannot be completed on time.",
+        "Please update the task's progress, or log a Delay RCA if it cannot be completed on time.",
+        kicker=kicker, intro=intro,
     )
-    return _send(recipients, subject, html)
+    return _send(recipients, subject, body)
 
 
 # ---------------------------------------------------------------- Stale backlog item
 def send_backlog_stale_email(item, project_name: Optional[str], days_open: int, recipients: list[str]) -> bool:
     subject = f"Backlog Item Needs Attention: {item.code}"
-    html = _card(
-        "📋 Backlog Item Pending", "#6c5ce7",
+    body = _card(
+        "Backlog Item Pending", PURPLE,
         {
             "Backlog item": f"{item.code} — {item.requirement}",
             "Project": project_name or "—",
-            "Status": item.status,
-            "Priority": item.priority,
+            "Status": _label(item.status),
+            "Priority": _label(item.priority),
             "Open for": f"{days_open} day(s)",
         },
-        "This backlog item has been open without progress. Please review and prioritize or convert it to a task.",
+        "Please review this item and either prioritise it or convert it to a task.",
+        kicker="Reminder",
+        intro="The following backlog item has been open without progress.",
     )
-    return _send(recipients, subject, html)
+    return _send(recipients, subject, body)
 
 
 # ---------------------------------------------------------------- Connectivity test
 def send_test_email(recipients: list[str]) -> bool:
-    html_body = _card(
-        "✉️ Test email", "#0b1f3a",
-        {"Status": "Gmail SMTP is configured correctly."},
-        "You can ignore this message — it was triggered from /notifications/email-test.",
+    body = _card(
+        "Test Email", NAVY,
+        {"Status": "Email sending is configured correctly."},
+        "You can ignore this message — it was sent from the email test page.",
+        kicker="System Check",
     )
-    return _send(recipients, "Task Manager — test email", html_body)
+    return _send(recipients, f"Test email - {SYSTEM_NAME}", body)
 
-#---------------------------------------forget password 
+
 # ---------------------------------------------------------------- Password reset
 def send_password_reset_email(user_name: str, to_email: str, reset_link: str) -> bool:
     """Send the 'reset your password' link. Uses the same _send pipeline as all other mail,
     so MAIL_ENABLED / MAIL_ALLOWED_RECIPIENTS / Gmail App Password all apply automatically."""
-    subject = "Reset your Anwar Task Manager password"
-
-    button_html = (
-        f'<p style="text-align:center;margin:24px 0;">'
-        f'<a href="{html.escape(reset_link)}" '
-        f'style="background:#0b1f3a;color:#fff;padding:12px 22px;border-radius:6px;'
-        f'text-decoration:none;font-weight:600;display:inline-block;">'
-        f'Reset Password</a></p>'
+    subject = f"Reset your password - {SYSTEM_NAME}"
+    inner = (
+        _greeting(user_name)
+        + _p(f"We received a request to reset the password of your account on the <b>{SYSTEM_NAME}</b>. "
+             "Please use the button below to choose a new password.")
+        + _note("This link is valid for <b>1 hour</b> and can be used only once.")
+        + _button("Reset Password", reset_link)
+        + _link_fallback(reset_link)
+        + _small("If you did not request a password reset, you can safely ignore this email — your current password will remain unchanged.")
+        + _signoff()
     )
-    link_fallback = (
-        f'<p style="color:#666;font-size:12px;margin:16px 0 4px;">If the button does not work, copy this link:</p>'
-        f'<p style="word-break:break-all;font-size:12px;">'
-        f'<a href="{html.escape(reset_link)}" style="color:#0056b3;">{html.escape(reset_link)}</a></p>'
-    )
-
-    html_body = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
-      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="color:#fff;margin:0;font-size:18px;">Password Reset Request</h2>
-      </div>
-      <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
-        <p>Hello {html.escape(user_name)},</p>
-        <p>We received a request to reset your Anwar Task Manager password.
-           Click the button below to choose a new one. This link is valid for
-           <b>1 hour</b>.</p>
-        {button_html}
-        {link_fallback}
-        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
-        <p style="color:#888;font-size:12px;">
-          If you did not request a password reset, you can safely ignore this email
-          — your current password will remain unchanged.
-        </p>
-      </div>
-    </div>
-    """
-
     text_body = (
-        f"Hello {user_name},\n\n"
-        f"Use the link below to reset your Anwar Task Manager password (valid 1 hour):\n"
+        f"Dear {user_name},\n\n"
+        f"We received a request to reset the password of your account on the {SYSTEM_NAME}.\n"
+        f"Use the link below to choose a new password (valid for 1 hour):\n"
         f"{reset_link}\n\n"
-        f"If you did not request this, ignore this email.\n"
+        f"If you did not request this, please ignore this email.\n" + TEXT_SIGNOFF
     )
+    return _send([to_email], subject, _layout("Account Security", "Password Reset Request", inner, preheader="Use the link inside to choose a new password."), text_body=text_body)
 
-    return _send([to_email], subject, html_body, text_body=text_body)
 
 # ---------------------------------------------------------------- Welcome / set password
 def send_welcome_set_password_email(
@@ -251,117 +385,55 @@ def send_welcome_set_password_email(
     set_link: str,
     expires_hours: int = 24,
 ) -> bool:
-    """Sent when an admin creates a new user account. The user sets their own
+    """Sent when a new account is created (by an admin or by sign-up). The user sets their own
     password via the same /reset-password page used by Forgot Password."""
-    subject = "Your Anwar Task Manager account is ready — set your password"
-
-    button_html = (
-        f'<p style="text-align:center;margin:24px 0;">'
-        f'<a href="{html.escape(set_link)}" '
-        f'style="background:#0b1f3a;color:#fff;padding:12px 22px;border-radius:6px;'
-        f'text-decoration:none;font-weight:600;display:inline-block;">'
-        f'Set Your Password</a></p>'
+    subject = f"Your account is ready - set your password | {SYSTEM_NAME}"
+    inner = (
+        _greeting(user_name)
+        + _p(f"Your account on the <b>{SYSTEM_NAME}</b> has been created. "
+             "Please set your password using the button below so that you can sign in.")
+        + _note(f"This link is valid for <b>{expires_hours} hours</b>. If it expires, use "
+                "<i>Forgot Password</i> on the sign-in page to receive a new one.")
+        + _button("Set Your Password", set_link)
+        + _link_fallback(set_link)
+        + _small("If you were not expecting this email, you can safely ignore it.")
+        + _signoff()
     )
-    link_fallback = (
-        f'<p style="color:#666;font-size:12px;margin:16px 0 4px;">If the button does not work, copy this link:</p>'
-        f'<p style="word-break:break-all;font-size:12px;">'
-        f'<a href="{html.escape(set_link)}" style="color:#0056b3;">{html.escape(set_link)}</a></p>'
-    )
-
-    html_body = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
-      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="color:#fff;margin:0;font-size:18px;">Welcome to Anwar Task Manager</h2>
-      </div>
-      <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
-        <p>Hello {html.escape(user_name)},</p>
-        <p>
-          The administrator has created your account on the
-          <b>Anwar Group Task &amp; Project Management System</b>.
-          Please set your password using the button below so you can sign in.
-        </p>
-        <p style="background:#fdf3d7;border-left:4px solid #e0a800;padding:10px 14px;
-                  border-radius:4px;font-size:13px;margin:14px 0;">
-          ⏱ <b>Please note:</b> This link is valid for <b>{expires_hours} hours</b>.
-          If it expires, ask your administrator to re-send, or use
-          <i>Forgot Password</i> on the login page.
-        </p>
-        {button_html}
-        {link_fallback}
-        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
-        <p style="color:#888;font-size:12px;">
-          If you were not expecting this email, you can safely ignore it.
-        </p>
-      </div>
-    </div>
-    """
-
     text_body = (
-        f"Hello {user_name},\n\n"
-        f"Your Anwar Task Manager account has been created.\n"
+        f"Dear {user_name},\n\n"
+        f"Your account on the {SYSTEM_NAME} has been created.\n"
         f"Set your password using the link below (valid for {expires_hours} hours):\n"
         f"{set_link}\n\n"
-        f"If you were not expecting this, ignore this email.\n"
+        f"If you were not expecting this, please ignore this email.\n" + TEXT_SIGNOFF
     )
-
-    return _send([to_email], subject, html_body, text_body=text_body)
+    return _send([to_email], subject, _layout("Welcome", "Your Account Is Ready", inner, accent=GREEN, preheader="Set your password to start using the system."), text_body=text_body)
 
 
 # ---------------------------------------------------------------- Invitation to sign up
 def send_signup_invite_email(to_email: str, inviter_name: str, signup_link: str) -> bool:
     """Sent when someone adds a person by email only ("+ Add new user"). The person
     finishes their own account on the Sign Up page; the link carries their email."""
-    subject = "You have been added to Anwar Task Manager — please sign up now"
-
-    button_html = (
-        f'<p style="text-align:center;margin:24px 0;">'
-        f'<a href="{html.escape(signup_link)}" '
-        f'style="background:#0b1f3a;color:#fff;padding:12px 22px;border-radius:6px;'
-        f'text-decoration:none;font-weight:600;display:inline-block;">'
-        f'Sign Up Now</a></p>'
+    e = html.escape
+    subject = f"You have been added - please sign up | {SYSTEM_NAME}"
+    inner = (
+        _greeting(None)
+        + _p(f"<b>{e(inviter_name)}</b> has added you to the <b>{SYSTEM_NAME}</b> and may already have "
+             "assigned work to you.")
+        + _note(f"Please <b>sign up immediately</b> using this email address (<b>{e(to_email)}</b>) "
+                "so that you can see your tasks and projects.")
+        + _button("Sign Up Now", signup_link)
+        + _link_fallback(signup_link)
+        + _small("If you were not expecting this email, you can safely ignore it.")
+        + _signoff()
     )
-    link_fallback = (
-        f'<p style="color:#666;font-size:12px;margin:16px 0 4px;">If the button does not work, copy this link:</p>'
-        f'<p style="word-break:break-all;font-size:12px;">'
-        f'<a href="{html.escape(signup_link)}" style="color:#0056b3;">{html.escape(signup_link)}</a></p>'
-    )
-
-    html_body = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
-      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="color:#fff;margin:0;font-size:18px;">You have been added to Anwar Task Manager</h2>
-      </div>
-      <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
-        <p>Hello,</p>
-        <p>
-          <b>{html.escape(inviter_name)}</b> has added you to the
-          <b>Anwar Group Task &amp; Project Management System</b> and may already have
-          assigned work to you.
-        </p>
-        <p style="background:#fdf3d7;border-left:4px solid #e0a800;padding:10px 14px;
-                  border-radius:4px;font-size:13px;margin:14px 0;">
-          <b>Please sign up immediately</b> with this email address
-          (<b>{html.escape(to_email)}</b>) so you can see your tasks and projects.
-        </p>
-        {button_html}
-        {link_fallback}
-        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
-        <p style="color:#888;font-size:12px;">
-          If you were not expecting this email, you can safely ignore it.
-        </p>
-      </div>
-    </div>
-    """
-
     text_body = (
-        f"Hello,\n\n"
-        f"{inviter_name} has added you to the Anwar Group Task & Project Management System.\n"
+        f"Dear Colleague,\n\n"
+        f"{inviter_name} has added you to the {SYSTEM_NAME} and may already have assigned work to you.\n"
         f"Please sign up immediately with this email address ({to_email}):\n"
         f"{signup_link}\n\n"
-        f"If you were not expecting this, ignore this email.\n"
+        f"If you were not expecting this, please ignore this email.\n" + TEXT_SIGNOFF
     )
-
-    return _send([to_email], subject, html_body, text_body=text_body)
+    return _send([to_email], subject, _layout("Invitation", "You Have Been Added to the System", inner, preheader=f"{inviter_name} has added you. Please sign up now."), text_body=text_body)
 
 
 # ---------------------------------------------------------------- Meeting invitation
@@ -461,51 +533,22 @@ def send_meeting_invite_email(
         ("Organised by", organizer_name),
         ("Your Role", role_text),
     ]
-    row_html = "".join(
-        f'<tr><td style="padding:8px 14px;color:#5b6472;font-size:13px;white-space:nowrap;'
-        f'border-bottom:1px solid #eef1f5;width:130px;">{e(k)}</td>'
-        f'<td style="padding:8px 14px;font-size:13px;font-weight:600;color:#1a2333;'
-        f'border-bottom:1px solid #eef1f5;">{e(v)}</td></tr>'
-        for k, v in rows if v
+    inner = (
+        _greeting(recipient_name)
+        + _p(f"You are cordially invited to attend the following meeting for the project <b>{e(project_label)}</b>, "
+             f"in which you are listed as <b>{e(role_text)}</b>. Your presence and input are important for the discussion.")
+        + _rows(rows)
+        + _quote("Purpose / Agenda", purpose)
+        + _p("Kindly plan to join on time and come prepared with any updates relevant to your role. "
+             "A calendar invitation (<b>invite.ics</b>) is attached &mdash; open it to add this meeting to "
+             "Outlook, Google Calendar or your phone's calendar.")
+        + _button("View Meeting in the System", link)
+        + f'<p style="margin:20px 0 0;">Best regards,<br><b>{e(organizer_name)}</b><br>'
+          f'<span style="font-size:12.5px;color:{MUTED};">{SYSTEM_NAME}</span></p>'
+        + _small("You received this invitation because you are Responsible, Accountable or Reviewer on a task in this project. "
+                 "Please contact the organiser directly with any questions.")
     )
-
-    html_body = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:auto;color:#1a2333;">
-      <div style="background:#0b1f3a;padding:18px 22px;border-radius:8px 8px 0 0;">
-        <div style="color:#c8a24b;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Anwar Group &middot; Meeting Invitation</div>
-        <h2 style="color:#ffffff;margin:6px 0 0;font-size:20px;">{e(title)}</h2>
-      </div>
-      <div style="border:1px solid #e3e8f0;border-top:none;padding:22px;border-radius:0 0 8px 8px;">
-        <p style="margin:0 0 12px;">Dear {e(recipient_name)},</p>
-        <p style="margin:0 0 18px;line-height:1.5;">
-          You are cordially invited to attend the following meeting for the project
-          <b>{e(project_label)}</b>, in which you are listed as <b>{e(role_text)}</b>.
-          Your presence and input are important for the discussion.
-        </p>
-        <table style="width:100%;border-collapse:collapse;border:1px solid #eef1f5;border-radius:6px;">{row_html}</table>
-        <div style="margin:18px 0 0;padding:14px 16px;background:#f4f6fa;border-left:4px solid #c8a24b;border-radius:4px;">
-          <div style="font-size:12px;color:#5b6472;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purpose / Agenda</div>
-          <div style="font-size:14px;line-height:1.55;white-space:pre-wrap;">{e(purpose)}</div>
-        </div>
-        <p style="margin:18px 0 0;line-height:1.5;">
-          Kindly plan to join on time and come prepared with any updates relevant to your role.
-          A calendar invitation (<b>invite.ics</b>) is attached &mdash; open it to add this meeting to
-          Outlook, Google Calendar or your phone's calendar.
-        </p>
-        <p style="text-align:center;margin:22px 0 6px;">
-          <a href="{e(link)}" style="background:#0b1f3a;color:#ffffff;padding:11px 22px;border-radius:6px;
-             text-decoration:none;font-weight:600;display:inline-block;">View in Task Manager</a>
-        </p>
-        <p style="margin:18px 0 0;">Best regards,<br><b>{e(organizer_name)}</b><br>
-          <span style="color:#5b6472;font-size:13px;">Anwar Group Task &amp; Project Management System</span></p>
-        <hr style="border:none;border-top:1px solid #eee;margin:20px 0 10px;">
-        <p style="color:#888;font-size:11px;margin:0;">
-          You received this invitation because you are Responsible, Accountable or Reviewer on a task in this project.
-          This is an automated message; please contact the organiser directly with any questions.
-        </p>
-      </div>
-    </div>
-    """
+    html_body = _layout("Meeting Invitation", title, inner, preheader=f"{date_long}, {time_12h} - {project_label}")
 
     text_lines = [
         f"Dear {recipient_name},",
@@ -519,17 +562,18 @@ def send_meeting_invite_email(
         purpose,
         "",
         "A calendar invitation (invite.ics) is attached.",
-        f"View in Task Manager: {link}",
+        f"View the meeting: {link}",
         "",
         "Best regards,",
         organizer_name,
-        "Anwar Group Task & Project Management System",
+        SYSTEM_NAME,
     ]
 
     ics = build_meeting_ics(meeting_id, title, meeting_date, meeting_time, purpose, location,
                             project_label, organizer_name)
     return _send([to_email], subject, html_body, text_body="\n".join(text_lines),
                  attachments=[("invite.ics", "text/calendar", ics)])
+
 
 # ---------------------------------------------------------------- New comment
 def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, entity_type: str,
@@ -548,89 +592,54 @@ def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, 
     is_reply = reply_to is not None
     if is_reply:
         subject = f"New reply on {what} {subject_label}"
-        heading = f"💬 New reply on a {what} comment"
+        heading = f"New Reply on a {what.title()} Comment"
         if recipient_role == "comment author":
             intro = f"{commenter_name} replied to your comment on a {what}."
         else:
             intro = f"{commenter_name} replied to a comment on a {what} where you are the {recipient_role}."
     else:
         subject = f"New comment on {what} {subject_label}"
-        heading = f"💬 New comment on your {what}"
+        heading = f"New Comment on Your {what.title()}"
         intro = f"{commenter_name} commented on a {what} where you are the {recipient_role}."
 
     rows = [("Task" if what == "task" else "Project", subject_label)]
     if what == "task" and project_label:
         rows.append(("Project", project_label))
     rows += [("Reply by" if is_reply else "Comment by", by), ("Sent", when)]
-    row_html = "".join(
-        f'<tr><td style="padding:6px 12px;color:#666;font-size:13px;white-space:nowrap;">{e(k)}</td>'
-        f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{e(v)}</td></tr>'
-        for k, v in rows
+    inner = (
+        _greeting(recipient_name)
+        + _p(e(intro))
+        + _rows(rows)
+        + (_quote("Original comment", reply_to, color="#c3cad6", bg="#fafbfc") if is_reply else "")
+        + _quote("Reply" if is_reply else "Comment", comment)
+        + _button(f"Open the {what.title()}", link)
+        + _signoff()
     )
-    html_body = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
-      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="color:#fff;margin:0;font-size:18px;">{e(heading)}</h2>
-      </div>
-      <div style="border:1px solid #eee;border-top:none;padding:16px 20px;border-radius:0 0 8px 8px;">
-        <p style="margin:0 0 12px;">Hello {e(recipient_name)},</p>
-        <p style="margin:0 0 12px;">{e(intro)}</p>
-        <table style="width:100%;border-collapse:collapse;">{row_html}</table>
-        {f'''<div style="margin:14px 0 0;font-size:12px;color:#666;">Original comment:</div>
-        <div style="margin:4px 0 0;padding:10px 14px;background:#fafafa;border-left:4px solid #ccc;border-radius:4px;
-                    font-size:13px;color:#555;line-height:1.5;white-space:pre-wrap;">{e(reply_to)}</div>
-        <div style="margin:12px 0 0;font-size:12px;color:#666;">Reply:</div>''' if is_reply else ''}
-        <div style="margin:14px 0 0;padding:12px 14px;background:#f4f6fa;border-left:4px solid #c8a24b;border-radius:4px;
-                    font-size:14px;line-height:1.5;white-space:pre-wrap;">{e(comment)}</div>
-        <p style="text-align:center;margin:20px 0 6px;">
-          <a href="{e(link)}" style="background:#0b1f3a;color:#fff;padding:10px 20px;border-radius:6px;
-             text-decoration:none;font-weight:600;display:inline-block;">Open in Task Manager</a>
-        </p>
-        <p style="color:#888;font-size:12px;margin-top:16px;">Automated notification from the Anwar Task &amp; Project Management System.</p>
-      </div>
-    </div>
-    """
     text_body = "\n".join(
-        [f"Hello {recipient_name},", "", intro, ""]
+        [f"Dear {recipient_name},", "", intro, ""]
         + [f"{k}: {v}" for k, v in rows]
         + (["", "Original comment:", reply_to] if is_reply else [])
-        + ["", "Reply:" if is_reply else "Comment:", comment, "", f"Open: {link}"]
+        + ["", "Reply:" if is_reply else "Comment:", comment, "", f"Open: {link}", TEXT_SIGNOFF]
     )
-    return _send([to_email], subject, html_body, text_body=text_body)
+    return _send([to_email], subject, _layout("Comments", heading, inner, accent=BLUE, preheader=intro), text_body=text_body)
 
 
 def send_methodology_email(to_email: str, recipient_name: str, subject: str, heading: str, intro: str,
                            rows: list[tuple[str, str]], link: str, note: Optional[str] = None) -> bool:
     """Methodology approval notices: an approver is asked to review the document,
     or the Project Manager hears an approver's decision (with their note)."""
-    e = html.escape
-    row_html = "".join(
-        f'<tr><td style="padding:6px 12px;color:#666;font-size:13px;white-space:nowrap;">{e(k)}</td>'
-        f'<td style="padding:6px 12px;font-size:13px;font-weight:600;color:#222;">{e(v)}</td></tr>'
-        for k, v in rows
+    inner = (
+        _greeting(recipient_name)
+        + _p(html.escape(intro))
+        + _rows(rows)
+        + (_quote("Note", note) if note else "")
+        + _button("Open the Project", link)
+        + _signoff()
     )
-    note_html = (f'<div style="margin:14px 0 0;padding:12px 14px;background:#f4f6fa;border-left:4px solid #c8a24b;'
-                 f'border-radius:4px;font-size:14px;line-height:1.5;white-space:pre-wrap;">{e(note)}</div>') if note else ""
-    html_body = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
-      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="color:#fff;margin:0;font-size:18px;">{e(heading)}</h2>
-      </div>
-      <div style="border:1px solid #eee;border-top:none;padding:16px 20px;border-radius:0 0 8px 8px;">
-        <p style="margin:0 0 12px;">Hello {e(recipient_name)},</p>
-        <p style="margin:0 0 12px;">{e(intro)}</p>
-        <table style="width:100%;border-collapse:collapse;">{row_html}</table>
-        {note_html}
-        <p style="text-align:center;margin:20px 0 6px;">
-          <a href="{e(link)}" style="background:#0b1f3a;color:#fff;padding:10px 20px;border-radius:6px;
-             text-decoration:none;font-weight:600;display:inline-block;">Open the project</a>
-        </p>
-        <p style="color:#888;font-size:12px;margin-top:16px;">Automated notification from the Anwar Task &amp; Project Management System.</p>
-      </div>
-    </div>
-    """
     text_body = "\n".join(
-        [f"Hello {recipient_name},", "", intro, ""] + [f"{k}: {v}" for k, v in rows]
-        + (["", "Note:", note] if note else []) + ["", f"Open: {link}"]
+        [f"Dear {recipient_name},", "", intro, ""] + [f"{k}: {v}" for k, v in rows]
+        + (["", "Note:", note] if note else []) + ["", f"Open: {link}", TEXT_SIGNOFF]
     )
-    return _send([to_email], subject, html_body, text_body=text_body)
+    # the callers' headings start with an emoji: keep the words only
+    clean = "".join(ch for ch in heading if ch.isascii() or ch.isalnum() or ch.isspace()).strip() or "Methodology Approval"
+    return _send([to_email], subject, _layout("Methodology Approval", clean, inner, preheader=intro), text_body=text_body)
