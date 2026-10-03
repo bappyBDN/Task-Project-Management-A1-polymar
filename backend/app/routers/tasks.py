@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app import models, permissions, schemas, services
 from app.auth import get_admin_user, get_current_user
 from app.database import get_db
+from app.visibility import Scope, get_scope
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -43,7 +44,9 @@ def list_tasks(
     blocker: bool | None = None,
     include_deleted: bool = False,  # also tasks waiting for a delete decision (Approvals page names them)
     db: Session = Depends(get_db),
+    scope: Scope = Depends(get_scope),
 ):
+    """Only the tasks this user may see (app/visibility.py)."""
     q = db.query(models.Task)
     if not include_deleted:
         q = q.filter(models.Task.is_deleted.is_(False))
@@ -70,7 +73,7 @@ def list_tasks(
             models.Task.approved_due_date.isnot(None),
             models.Task.approved_due_date < today,
         )
-    return q.order_by(models.Task.approved_due_date, _PRIORITY_RANK).all()
+    return [t for t in q.order_by(models.Task.approved_due_date, _PRIORITY_RANK).all() if scope.sees_task(t)]
 
 
 @router.post("", response_model=schemas.TaskOut, status_code=201)
@@ -117,10 +120,13 @@ def create_task(payload: schemas.TaskBase, db: Session = Depends(get_db)):
 
 
 @router.get("/{task_id}", response_model=schemas.TaskOut)
-def get_task(task_id: int, include_deleted: bool = False, db: Session = Depends(get_db)):
+def get_task(task_id: int, include_deleted: bool = False, db: Session = Depends(get_db),
+             scope: Scope = Depends(get_scope)):
     task = db.get(models.Task, task_id)
     if not task or (task.is_deleted and not include_deleted):
         raise HTTPException(404, "Task not found")
+    if not scope.sees_task(task):
+        raise HTTPException(403, "You don't have access to this task. Only the people on the task or its project, the heads of its SBU / function / department and admin / PMO can open it.")
     return task
 
 
@@ -258,7 +264,10 @@ def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session 
 
 
 @router.get("/{task_id}/progress", response_model=list[schemas.ProgressUpdateOut])
-def list_progress(task_id: int, db: Session = Depends(get_db)):
+def list_progress(task_id: int, db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    task = db.get(models.Task, task_id)
+    if task and not scope.sees_task(task):
+        return []
     return db.query(models.ProgressUpdate).filter(models.ProgressUpdate.task_id == task_id).order_by(models.ProgressUpdate.created_at.desc()).all()
 
 

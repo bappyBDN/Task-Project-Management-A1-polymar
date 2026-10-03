@@ -10,6 +10,7 @@ from app.auth import (
 )
 from app.database import get_db
 from app.routers.privileged import ALL_ROLES
+from app.visibility import HEAD_ROLES
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -55,19 +56,25 @@ def me(user: models.User = Depends(get_current_user)):
 @router.patch("/users/me", response_model=schemas.UserOut)
 def update_me(payload: schemas.UserSelfUpdate, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Edit My Profile: the signed-in user updates their own details (not email / Employee ID).
-    They may pick their own role, except admin and the privileged roles (see everything,
-    approve): those are given by an admin only.
+    They may pick their own role, except admin, the privileged roles (see everything,
+    approve) and the head roles (see their whole SBU / function / department): those are
+    given by an admin only. A head's SBU / function / department decides what they see
+    (app/visibility.py), so a head can't change their own either.
     Declared before /users/{user_id} so "me" is not read as an id."""
     data = payload.model_dump(exclude_unset=True)
     new_role = (data.pop("role", None) or "").strip().lower()
     if new_role and new_role != user.role:
         if new_role not in ALL_ROLES:
             raise HTTPException(400, "Unknown role")
-        if new_role in permissions.privileged_roles(db):
+        if new_role in permissions.privileged_roles(db) or new_role in HEAD_ROLES:
             raise HTTPException(403, "Only an admin can give this role. Please ask your admin.")
         services.audit(db, user.name, "user", user.id, "role_changed", previous_value=user.role, new_value=new_role,
                        reason="Changed by the user in Edit My Profile")
         data["role"] = new_role
+    if user.role in HEAD_ROLES and user.role != "admin":
+        for fk in ("company_id", "function_id", "department_id"):
+            if fk in data and data[fk] != getattr(user, fk):
+                raise HTTPException(403, "As a head, your SBU, function and department decide which projects you see. Please ask an admin to change them.")
     if "name" in data:
         if not (data["name"] or "").strip():
             raise HTTPException(400, "Name is required")

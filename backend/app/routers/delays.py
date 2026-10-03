@@ -3,18 +3,26 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas, services
 from app.database import get_db
+from app.visibility import Scope, get_scope
 
 router = APIRouter(prefix="/delays", tags=["delays"])
 
 
 @router.get("", response_model=list[schemas.DelayRcaOut])
-def list_delays(task_id: int | None = None, approval_status: str | None = None, db: Session = Depends(get_db)):
+def list_delays(task_id: int | None = None, approval_status: str | None = None, db: Session = Depends(get_db),
+                scope: Scope = Depends(get_scope)):
     q = db.query(models.DelayRca)
     if task_id:
         q = q.filter(models.DelayRca.task_id == task_id)
     if approval_status:
         q = q.filter(models.DelayRca.approval_status == approval_status)
-    return q.order_by(models.DelayRca.created_at.desc()).all()
+    rows = q.order_by(models.DelayRca.created_at.desc()).all()
+    if scope.all:
+        return rows
+    # only delays of tasks this user may see (app/visibility.py)
+    ids = {d.task_id for d in rows}
+    seen = {t.id for t in db.query(models.Task).filter(models.Task.id.in_(ids)).all() if scope.sees_task(t)} if ids else set()
+    return [d for d in rows if d.task_id in seen]
 
 
 @router.post("", response_model=schemas.DelayRcaOut, status_code=201)

@@ -7,7 +7,7 @@ import SbuSelect from '../components/SbuSelect'
 import DuplicatesPanel from '../components/DuplicatesPanel'
 import { clearPrivilegedCache } from '../usePrivileged'
 
-const ROLES = ['group_executive', 'business_head', 'functional_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
+const ROLES = ['group_executive', 'business_head', 'functional_head', 'department_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
 
 interface UserForm {
   employee_id: string

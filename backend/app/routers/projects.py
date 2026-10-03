@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app import models, permissions, schemas, services
 from app.auth import get_admin_user, get_current_user
 from app.database import get_db
+from app.visibility import Scope, get_scope
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -20,7 +21,9 @@ def list_projects(
     status: str | None = None,
     health: str | None = None,
     db: Session = Depends(get_db),
+    scope: Scope = Depends(get_scope),
 ):
+    """Only the projects this user may see (app/visibility.py)."""
     q = db.query(models.Project)
     if company_id:
         q = q.filter(models.Project.company_id == company_id)
@@ -30,12 +33,17 @@ def list_projects(
         q = q.filter(models.Project.status == status)
     if health:
         q = q.filter(models.Project.health == health)
-    return q.order_by(models.Project.name).all()
+    return [p for p in q.order_by(models.Project.name).all() if scope.sees_project(p)]
 
 
 @router.post("", response_model=schemas.ProjectOut, status_code=201)
-def create_project(payload: schemas.ProjectBase, db: Session = Depends(get_db)):
+def create_project(payload: schemas.ProjectBase, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
     data = payload.model_dump()
+    # whoever creates a project owns it unless another owner is named - otherwise they
+    # could not see the project they just made (app/visibility.py)
+    if not data.get("owner_id"):
+        data["owner_id"] = current_user.id
     data["name"] = (data.get("name") or "").strip()
     if not data["name"]:
         raise HTTPException(400, "Project name is required")
@@ -55,17 +63,18 @@ def create_project(payload: schemas.ProjectBase, db: Session = Depends(get_db)):
             db.rollback()
             if user_code or attempt == 2:
                 raise HTTPException(409, "Could not save the project (duplicate code). Please try again.")
-    services.audit(db, "system", "project", project.id, "created", new_value=project.name)
+    services.audit(db, current_user.name, "project", project.id, "created", new_value=project.name)
     db.commit()
     db.refresh(project)
     return project
 
 
 @router.get("/{project_id}", response_model=schemas.ProjectOut)
-def get_project(project_id: int, db: Session = Depends(get_db)):
+def get_project(project_id: int, db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
     project = db.get(models.Project, project_id)
     if not project:
         raise HTTPException(404, "Project not found")
+    _require_view(scope, project)
     return project
 
 
@@ -104,6 +113,11 @@ def _project_or_404(db: Session, project_id: int) -> models.Project:
     return project
 
 
+def _require_view(scope: Scope, project: models.Project):
+    if not scope.sees_project(project):
+        raise HTTPException(403, "You don't have access to this project. Only the people on the project, the heads of its SBU / function / department and admin / PMO can open it.")
+
+
 def _contribution(text: str) -> str:
     text = (text or "").strip()
     if not text:
@@ -119,8 +133,8 @@ def _require_manage(db: Session, user: models.User, project: models.Project):
 
 
 @router.get("/{project_id}/associates", response_model=list[schemas.ProjectAssociateOut])
-def list_associates(project_id: int, db: Session = Depends(get_db)):
-    _project_or_404(db, project_id)
+def list_associates(project_id: int, db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    _require_view(scope, _project_or_404(db, project_id))
     return db.query(models.ProjectAssociate).filter(
         models.ProjectAssociate.project_id == project_id).order_by(models.ProjectAssociate.id).all()
 
@@ -182,7 +196,9 @@ def remove_associate(project_id: int, associate_id: int, db: Session = Depends(g
 
 
 @router.get("/{project_id}/milestones", response_model=list[schemas.MilestoneOut])
-def list_milestones(project_id: int, db: Session = Depends(get_db)):
+def list_milestones(project_id: int, db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    if not scope.sees_project_id(project_id):
+        return []
     return db.query(models.Milestone).filter(models.Milestone.project_id == project_id).order_by(models.Milestone.due_date).all()
 
 

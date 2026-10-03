@@ -55,9 +55,7 @@ export default function Kanban() {
   const departmentName = (id?: number) => departments.find((d) => d.id === id)?.name
 
   const visibleTasks = useMemo(() => {
-    let list = user && !canSeeAll
-      ? tasks.filter((t) => [t.responsible_id, t.accountable_id, t.reviewer_id].includes(user.id))
-      : tasks
+    let list = tasks // the server already returns only the tasks this user may see
     if (filter.project_id) list = list.filter((t) => String(t.project_id) === String(filter.project_id))
     if (filter.company_id) list = list.filter((t) => inSbu(companies, t.company_id, filter.company_id))
     if (filter.function_id) list = list.filter((t) => inName(functions, t.function_id, filter.function_id))
@@ -65,7 +63,7 @@ export default function Kanban() {
     if (filter.responsible_id) list = list.filter((t) => String(t.responsible_id) === String(filter.responsible_id))
     if (filter.priority) list = list.filter((t) => t.priority === filter.priority)
     return list
-  }, [tasks, user, canSeeAll, filter, companies, functions, departments])
+  }, [tasks, filter, companies, functions, departments])
 
   // Responsible / Accountable move their own cards; only admin / PMO can drop into Completed
   // (everyone else finishes a task with "Submit for Completion" on the task page).
@@ -107,7 +105,7 @@ export default function Kanban() {
         <div>
           <h1>Kanban Board</h1>
           <div className="crumb">Drag a card to another column, or use "Move to…" on the card</div>
-          {!canSeeAll && user && <div className="small muted" style={{ marginTop: 4 }}>Showing your tasks only</div>}
+          {!canSeeAll && user && <div className="small muted" style={{ marginTop: 4 }}>Showing your tasks and projects only</div>}
         </div>
       </div>
 

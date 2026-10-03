@@ -20,6 +20,7 @@ ALL_ROLES: list[str] = [
     "group_executive",
     "business_head",
     "functional_head",
+    "department_head",
     "sponsor",
     "pmo",
     "pm",

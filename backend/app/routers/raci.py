@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.visibility import Scope, get_scope
 
 router = APIRouter(prefix="/raci", tags=["raci"])
 
@@ -35,7 +36,7 @@ def delete_raci(entry_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-def _build_matrix(db: Session, project_id: int | None, company_id: int | None,
+def _build_matrix(db: Session, scope: Scope, project_id: int | None, company_id: int | None,
                   function_id: int | None, department_id: int | None) -> dict:
     """RACI matrix: rows = tasks, columns = people, cells = R/A/C/I.
 
@@ -54,7 +55,8 @@ def _build_matrix(db: Session, project_id: int | None, company_id: int | None,
         q = q.filter(models.Task.function_id == function_id)
     if department_id:
         q = q.filter(models.Task.department_id == department_id)
-    tasks = q.order_by(models.Task.project_id, models.Task.id).all()
+    # only the tasks this user may see (app/visibility.py)
+    tasks = [t for t in q.order_by(models.Task.project_id, models.Task.id).all() if scope.sees_task(t)]
     task_ids = {t.id for t in tasks}
 
     # Extra RACI entries (e.g. Informed) for exactly these tasks. Matching on
@@ -98,15 +100,17 @@ def _build_matrix(db: Session, project_id: int | None, company_id: int | None,
 
 @router.get("/matrix")
 def raci_matrix_all(company_id: int | None = None, function_id: int | None = None,
-                    department_id: int | None = None, db: Session = Depends(get_db)):
+                    department_id: int | None = None, db: Session = Depends(get_db),
+                    scope: Scope = Depends(get_scope)):
     """All projects' tasks ("All projects" in the page)."""
-    return _build_matrix(db, None, company_id, function_id, department_id)
+    return _build_matrix(db, scope, None, company_id, function_id, department_id)
 
 
 @router.get("/matrix/{project_id}")
 def raci_matrix(project_id: int, company_id: int | None = None, function_id: int | None = None,
-                department_id: int | None = None, db: Session = Depends(get_db)):
+                department_id: int | None = None, db: Session = Depends(get_db),
+                scope: Scope = Depends(get_scope)):
     """One project's tasks."""
     if not db.get(models.Project, project_id):
         raise HTTPException(404, "Project not found")
-    return _build_matrix(db, project_id, company_id, function_id, department_id)
+    return _build_matrix(db, scope, project_id, company_id, function_id, department_id)

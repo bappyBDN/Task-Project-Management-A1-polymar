@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.visibility import Scope, get_scope
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
@@ -50,45 +51,53 @@ def individual_kpi(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/executive", response_model=schemas.ProjectKpiOut)
-def executive_kpi(db: Session = Depends(get_db)):
-    today = date.today()
-    total = db.query(models.Project).count()
-    active = db.query(models.Project).filter(models.Project.status.in_(["planning", "active"])).count()
-    green = db.query(models.Project).filter(models.Project.health == "green").count()
-    amber = db.query(models.Project).filter(models.Project.health == "amber").count()
-    red = db.query(models.Project).filter(models.Project.health == "red").count()
-    black = db.query(models.Project).filter(models.Project.health == "black").count()
-    forecast_miss = db.query(models.Project).filter(
-        models.Project.forecast_due_date.isnot(None),
-        models.Project.approved_due_date.isnot(None),
-        models.Project.forecast_due_date > models.Project.approved_due_date,
-        models.Project.status.notin_(["completed", "closed", "cancelled"]),
-    ).count()
+def executive_kpi(db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    """Portfolio counts over the projects this user may see (app/visibility.py)."""
+    projects = [p for p in db.query(models.Project).all() if scope.sees_project(p)]
+    health = lambda h: sum(1 for p in projects if p.health == h)
+    forecast_miss = sum(
+        1 for p in projects
+        if p.forecast_due_date and p.approved_due_date and p.forecast_due_date > p.approved_due_date
+        and p.status not in ("completed", "closed", "cancelled")
+    )
     return schemas.ProjectKpiOut(
-        total=total, active=active, green=green, amber=amber, red=red,
-        black=black, forecast_miss=forecast_miss,
+        total=len(projects), active=sum(1 for p in projects if p.status in ("planning", "active")),
+        green=health("green"), amber=health("amber"), red=health("red"),
+        black=health("black"), forecast_miss=forecast_miss,
     )
 
 
 @router.get("/health-distribution")
-def health_distribution(db: Session = Depends(get_db)):
-    rows = db.query(models.Project.health, func.count(models.Project.id)).group_by(models.Project.health).all()
-    return {h: c for h, c in rows}
+def health_distribution(db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    out: dict[str, int] = {}
+    for p in db.query(models.Project).all():
+        if scope.sees_project(p):
+            out[p.health] = out.get(p.health, 0) + 1
+    return out
 
 
 @router.get("/delay-causes")
-def delay_causes(db: Session = Depends(get_db)):
-    rows = db.query(models.DelayRca.delay_category, func.count(models.DelayRca.id)).group_by(models.DelayRca.delay_category).all()
-    return [{"category": c or "Other", "count": n} for c, n in rows]
+def delay_causes(db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    if scope.all:
+        rows = db.query(models.DelayRca.delay_category, func.count(models.DelayRca.id)).group_by(models.DelayRca.delay_category).all()
+        return [{"category": c or "Other", "count": n} for c, n in rows]
+    # delays of the tasks this user may see
+    seen = {t.id for t in db.query(models.Task).filter(models.Task.is_deleted.is_(False)).all() if scope.sees_task(t)}
+    out: dict[str, int] = {}
+    for task_id, category in db.query(models.DelayRca.task_id, models.DelayRca.delay_category).all():
+        if task_id in seen:
+            out[category or "Other"] = out.get(category or "Other", 0) + 1
+    return [{"category": c, "count": n} for c, n in out.items()]
 
 
 # ---------------------------------------------------------------- Org intelligence
 @router.get("/org-intelligence")
-def org_intelligence(db: Session = Depends(get_db)):
+def org_intelligence(db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
     """Rolls up task/project counts by SBU (company), Function and Department.
 
     Powers the Team and Portfolio Breakdown widget on the dashboard.
     Read-only aggregation over existing tables - no schema change, no writes.
+    Counts only the projects and tasks this user may see (app/visibility.py).
 
     Names are grouped case-insensitively so records that differ only in
     capitalization (for example 'growthanalytics' vs 'Growthanalytics')
@@ -100,8 +109,8 @@ def org_intelligence(db: Session = Depends(get_db)):
     functions = {f.id: f.name for f in db.query(models.Function).all()}
     departments = {d.id: d.name for d in db.query(models.Department).all()}
 
-    tasks = db.query(models.Task).filter(models.Task.is_deleted.is_(False)).all()
-    projects = db.query(models.Project).all()
+    tasks = [t for t in db.query(models.Task).filter(models.Task.is_deleted.is_(False)).all() if scope.sees_task(t)]
+    projects = [p for p in db.query(models.Project).all() if scope.sees_project(p)]
 
     by_sbu = {}
     by_function = {}

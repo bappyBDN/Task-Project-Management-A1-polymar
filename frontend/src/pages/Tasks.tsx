@@ -53,11 +53,9 @@ export default function Tasks() {
     api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
   }, [])
 
-  const visibleTasks = useMemo(() => {
-    if (!user || canSeeAll) return tasks
-    // Regular users see only their own tasks (responsible, accountable or reviewer)
-    return tasks.filter((t) => [t.responsible_id, t.accountable_id, t.reviewer_id].includes(user.id))
-  }, [tasks, user, canSeeAll])
+  // The server already returns only the tasks this user may see: their own, the tasks of
+  // their projects, their SBU / function / department if they head it; admin / PMO all.
+  const visibleTasks = tasks
 
   const filtered = useMemo(() => {
     return visibleTasks.filter((t) => {
@@ -148,7 +146,7 @@ export default function Tasks() {
       )}
 
       <div className="small muted" style={{ margin: '0 0 10px 2px' }}>
-        {filtered.length} of {visibleTasks.length} tasks{!canSeeAll && user ? ' (your tasks only)' : ''}
+        {filtered.length} of {visibleTasks.length} tasks{!canSeeAll && user ? ' (your tasks and projects only)' : ''}
       </div>
 
       <div className="card" style={{ padding: 0 }}>

@@ -3,18 +3,22 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.visibility import Scope, get_scope
 
 router = APIRouter(prefix="/backlogs", tags=["backlogs"])
 
 
 @router.get("", response_model=list[schemas.BacklogOut])
-def list_backlog(project_id: int | None = None, status: str | None = None, db: Session = Depends(get_db)):
+def list_backlog(project_id: int | None = None, status: str | None = None, db: Session = Depends(get_db),
+                 scope: Scope = Depends(get_scope)):
     q = db.query(models.BacklogItem)
     if project_id:
         q = q.filter(models.BacklogItem.project_id == project_id)
     if status:
         q = q.filter(models.BacklogItem.status == status)
-    return q.order_by(models.BacklogItem.priority, models.BacklogItem.id).all()
+    # items of projects this user may see, their own requests, and items with no project
+    return [b for b in q.order_by(models.BacklogItem.priority, models.BacklogItem.id).all()
+            if b.project_id is None or b.requested_by_id == scope.user_id or scope.sees_project_id(b.project_id)]
 
 
 @router.post("", response_model=schemas.BacklogOut, status_code=201)

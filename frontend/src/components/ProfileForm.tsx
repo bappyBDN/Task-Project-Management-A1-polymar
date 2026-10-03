@@ -11,8 +11,13 @@ import InviteUserModal from './InviteUserModal'
 // fields as the admin's user form. Employee ID and email (the login) can only be
 // changed by an admin, so for everyone else they are shown read-only. Everyone
 // picks their own role, except admin and the privileged roles (an admin gives those).
+// The head roles (SBU / function / department head) are also given by an admin, and a
+// head's own SBU / function / department are locked: they decide which projects the head sees.
 // The server enforces all of this (PATCH /organizations/users/me).
 // Closes only with Cancel, like the other forms.
+
+// SBU / function / department heads see every project of what they head
+const HEAD_ROLES = ['business_head', 'functional_head', 'department_head']
 
 export default function ProfileForm({ onClose, onSaved }: { onClose: () => void; onSaved: (msg: string) => void }) {
   const { user, setMe } = useAuth()
@@ -81,7 +86,10 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
 
   const adminOnly = isAdmin ? undefined : 'Only an admin can change this'
   // roles this person may pick: an admin any; others every role an admin doesn't have to give
-  const roleChoices = (isAdmin ? roles : roles.filter((r) => !privileged.includes(r)))
+  const roleChoices = (isAdmin ? roles : roles.filter((r) => !privileged.includes(r) && !HEAD_ROLES.includes(r)))
+  // a head's SBU / function / department decide what they see: only an admin changes them
+  const orgLocked = !isAdmin && HEAD_ROLES.includes(user.role)
+  const orgLockedTitle = orgLocked ? 'As a head, your SBU, function and department are set by an admin' : undefined
   const roleOptions = roleChoices.includes(form.role) ? roleChoices : [form.role, ...roleChoices]
   const managerItems = users.filter((u) => u.id !== user.id && u.is_active !== false)
     .map((u) => ({ value: String(u.id), label: `${u.name} — ${label(u.role)}` }))
@@ -117,7 +125,7 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
           </div>
         </div>
         <div className="form-row">
-          <div>
+          <fieldset disabled={orgLocked} title={orgLockedTitle} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <label>SBU</label>
             <SbuSelect
               value={form.company_id != null ? String(form.company_id) : ''}
@@ -125,8 +133,8 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
               onChange={(v) => set('company_id', v ? Number(v) : null)}
               placeholder="Search SBU…"
             />
-          </div>
-          <div>
+          </fieldset>
+          <fieldset disabled={orgLocked} title={orgLockedTitle} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <label>Function</label>
             <SearchableSelect
               value={form.function_id != null ? String(form.function_id) : ''}
@@ -134,10 +142,10 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
               onChange={(v) => setForm((f) => ({ ...f, function_id: v ? Number(v) : null, department_id: null }))}
               placeholder="Search function…"
             />
-          </div>
+          </fieldset>
         </div>
         <div className="form-row">
-          <div>
+          <fieldset disabled={orgLocked} title={orgLockedTitle} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <label>Department</label>
             <SearchableSelect
               value={form.department_id != null ? String(form.department_id) : ''}
@@ -145,7 +153,7 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
               onChange={(v) => set('department_id', v ? Number(v) : null)}
               placeholder="Search department…"
             />
-          </div>
+          </fieldset>
           <div>
             <label>Reports To (manager)</label>
             <SearchableSelect
@@ -173,7 +181,8 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
         </select>
         {!isAdmin && (
           <div className="small muted" style={{ marginTop: 6 }}>
-            Employee ID and email can only be changed by an admin. {privileged.filter((r) => roles.includes(r)).map((r) => label(r)).join(', ')} roles are given by an admin.
+            Employee ID and email can only be changed by an admin. {[...privileged, ...HEAD_ROLES].filter((r, i, a) => roles.includes(r) && a.indexOf(r) === i).map((r) => label(r)).join(', ')} roles are given by an admin.
+            {orgLocked && ' As a head, your SBU, function and department are also set by an admin.'}
           </div>
         )}
 
