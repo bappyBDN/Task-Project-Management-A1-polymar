@@ -10,102 +10,105 @@ import ProfileForm from '../components/ProfileForm'
 import { CommentReplies, REPLY_CSS, addReply, commenterLabel, fmtDateTime } from '../components/CommentsPanel'
 
 /* Dashboard wired to the FastAPI backend (app/routers/dashboards.py + /tasks).
-   Renders page content only — sidebar/topbar come from the app Layout. Scoped under .ad-root. */
+   Renders page content only — sidebar/topbar come from the app Layout. Scoped under .dsb-root.
+   The classes must NOT start with "ad-": ad blockers (uBlock, AdBlock, Brave, Opera...) hide
+   elements named .ad-body / .ad-card / .ad-row as adverts, which left this whole page blank
+   for everyone using one. */
 const CSS = `
-.ad-root{--navy:#0b1f3a;--blue:#1d6bff;--green:#12a150;--red:#ef4444;--amber:#f59e0b;--ink:#0f1b33;--mut:#6b7a90;--line:#e6ebf2;
+.dsb-root{--navy:#0b1f3a;--blue:#1d6bff;--green:#12a150;--red:#ef4444;--amber:#f59e0b;--ink:#0f1b33;--mut:#6b7a90;--line:#e6ebf2;
 color:var(--ink);font-family:inherit;font-size:13px}
-.ad-root *{box-sizing:border-box}
-.ad-body{max-width:1280px}
-.ad-hello{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;margin-bottom:18px}
-.ad-err{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff5f5;border:1px solid #fbd2d2;color:#b42318;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px}
-.ad-hello h1{margin:0;font-size:25px;color:var(--navy);display:flex;gap:10px;align-items:center}
-.ad-hello p{margin:2px 0 0 44px;color:var(--mut);font-size:14px}
-.ad-me{display:flex;align-items:center;gap:14px;min-width:0}
-.ad-me .ad-me-pic{position:relative;width:56px;height:56px;border-radius:50%;border:0;padding:0;flex:none;cursor:pointer;background:linear-gradient(135deg,#1d6bff,#0b1f3a);color:#fff;font-size:20px;font-weight:700;display:grid;place-items:center;box-shadow:0 2px 8px rgba(11,31,58,.18)}
-.ad-me .ad-me-pic:hover{box-shadow:0 0 0 3px #cfe0ff,0 2px 8px rgba(11,31,58,.18)}
-.ad-me .ad-me-pic b{position:absolute;right:-2px;bottom:-2px;width:22px;height:22px;border-radius:50%;background:#fff;color:#1d6bff;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:400;box-shadow:0 1px 3px rgba(0,0,0,.12)}
-.ad-me .ad-me-edit{border:0;background:none;padding:0;margin-top:4px;color:#1d6bff;font-size:12.5px;cursor:pointer}
-.ad-me .ad-me-edit:hover{text-decoration:underline}
-.ad-me p{margin-left:0!important}
-.ad-okmsg{background:#effaf3;border:1px solid #bfe8cf;color:#12a150;border-radius:10px;padding:8px 14px;margin-bottom:14px;font-size:13px}
-.ad-date{flex-wrap:wrap}
-.ad-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
-.ad-row .ad-leg{flex:1;min-width:140px}
-.ad-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px}
-.ad-date{display:flex;align-items:center;gap:10px;color:#334;margin-top:14px;font-size:13.5px}
-.ad-live{border:1px solid #bfe8cf;background:#effaf3;color:#12a150;border-radius:99px;padding:3px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
-.ad-live i{width:8px;height:8px;border:2px solid #12a150;border-radius:50%}
-.ad-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-bottom:22px}
-.ad-kpi{border-radius:12px;padding:16px 16px 12px;border:1px solid;min-height:136px;display:flex;flex-direction:column;min-width:0;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:box-shadow .15s,transform .15s}
-.ad-kpi:hover{box-shadow:0 4px 14px rgba(11,31,58,.12);transform:translateY(-1px)}
-.ad-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.ad-kpi.on{box-shadow:0 0 0 2px var(--navy)}
-.ad-kpi .h{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#3a475c;min-width:0}
-.ad-kpi .ib{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}
-.ad-kpi .v{font-size:30px;font-weight:700;color:var(--navy);margin-top:10px;line-height:1}
-.ad-kpi .f{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto;padding-top:8px}
-.ad-kpi .d{font-size:12px;display:block;white-space:nowrap;flex:none}.ad-kpi .d s{text-decoration:none;color:var(--mut);display:block;margin-top:2px;font-size:11.5px}
-.ad-kpi svg.sp{display:block;flex:0 1 100px;min-width:40px;max-width:100px;height:40px}
-.ad-cols{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:16px;align-items:start}
-.ad-stack{display:flex;flex-direction:column;gap:16px;min-width:0}
-.ad-cmts{max-height:420px;overflow-y:auto;margin:0 -4px}
-.ad-cmt{border-top:1px solid var(--line);padding:10px 4px}
-.ad-cmt-open{display:block;width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;border-radius:6px}
-.ad-cmt-open:hover{background:#f7f9fd}
-.ad-cmt .role{font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;margin-left:6px}
-.ad-cmt .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.ad-cmt .when{font-size:11px;color:var(--mut);white-space:nowrap}
-.ad-cmt .ref{font-size:12px;color:#334;margin-top:5px;overflow-wrap:anywhere}
-.ad-cmt .txt{font-size:12.5px;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}
-.ad-cmt .by{font-size:11.5px;color:var(--mut);margin-top:5px;overflow-wrap:anywhere}
-.ad-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px}
-.ad-scroll{overflow-x:auto}
-.ad-card{min-width:0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 16px;box-shadow:0 1px 2px rgba(16,30,54,.03)}
-.ad-card h3{margin:0 0 12px;font-size:15.5px;color:var(--navy);display:flex;align-items:center;gap:8px}
-.ad-card h3 svg{color:var(--blue)}
-.ad-sel{border:1px solid var(--line);background:#fff;border-radius:6px;padding:5px 10px;font-size:12px;display:inline-flex;align-items:center;gap:8px;color:#334}
-.ad-leg div{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
-.ad-leg div:last-child{border:0}.ad-leg i{width:9px;height:9px;border-radius:3px}.ad-leg b{margin-left:auto}
-table.ad-t{width:100%;border-collapse:collapse}
-.ad-t th.srt{cursor:pointer;user-select:none;white-space:nowrap}.ad-t th.srt:hover{color:var(--navy)}
-.ad-t td .sub{display:block;font-size:11px;color:var(--mut);margin-top:2px}
-.ad-t td a{color:var(--navy);font-weight:600;text-decoration:none}.ad-t td a:hover{text-decoration:underline}
-.ad-mine-f{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 8px;font-size:12px;color:#334;max-width:220px}
-.ad-t th{font-size:11px;color:var(--mut);font-weight:500;text-align:left;padding:8px 6px;letter-spacing:.03em}
-.ad-t td{padding:11px 6px;border-top:1px solid var(--line);font-size:12.5px}
-.ad-t td:first-child,.ad-t td:last-child{white-space:nowrap}
-.ad-t tbody tr{cursor:pointer}.ad-t tbody tr:hover{background:#f7f9fd}
+.dsb-root *{box-sizing:border-box}
+.dsb-body{max-width:1280px}
+.dsb-hello{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;margin-bottom:18px}
+.dsb-err{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff5f5;border:1px solid #fbd2d2;color:#b42318;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px}
+.dsb-hello h1{margin:0;font-size:25px;color:var(--navy);display:flex;gap:10px;align-items:center}
+.dsb-hello p{margin:2px 0 0 44px;color:var(--mut);font-size:14px}
+.dsb-me{display:flex;align-items:center;gap:14px;min-width:0}
+.dsb-me .dsb-me-pic{position:relative;width:56px;height:56px;border-radius:50%;border:0;padding:0;flex:none;cursor:pointer;background:linear-gradient(135deg,#1d6bff,#0b1f3a);color:#fff;font-size:20px;font-weight:700;display:grid;place-items:center;box-shadow:0 2px 8px rgba(11,31,58,.18)}
+.dsb-me .dsb-me-pic:hover{box-shadow:0 0 0 3px #cfe0ff,0 2px 8px rgba(11,31,58,.18)}
+.dsb-me .dsb-me-pic b{position:absolute;right:-2px;bottom:-2px;width:22px;height:22px;border-radius:50%;background:#fff;color:#1d6bff;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:400;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.dsb-me .dsb-me-edit{border:0;background:none;padding:0;margin-top:4px;color:#1d6bff;font-size:12.5px;cursor:pointer}
+.dsb-me .dsb-me-edit:hover{text-decoration:underline}
+.dsb-me p{margin-left:0!important}
+.dsb-okmsg{background:#effaf3;border:1px solid #bfe8cf;color:#12a150;border-radius:10px;padding:8px 14px;margin-bottom:14px;font-size:13px}
+.dsb-date{flex-wrap:wrap}
+.dsb-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.dsb-row .dsb-leg{flex:1;min-width:140px}
+.dsb-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+.dsb-date{display:flex;align-items:center;gap:10px;color:#334;margin-top:14px;font-size:13.5px}
+.dsb-live{border:1px solid #bfe8cf;background:#effaf3;color:#12a150;border-radius:99px;padding:3px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
+.dsb-live i{width:8px;height:8px;border:2px solid #12a150;border-radius:50%}
+.dsb-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-bottom:22px}
+.dsb-kpi{border-radius:12px;padding:16px 16px 12px;border:1px solid;min-height:136px;display:flex;flex-direction:column;min-width:0;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:box-shadow .15s,transform .15s}
+.dsb-kpi:hover{box-shadow:0 4px 14px rgba(11,31,58,.12);transform:translateY(-1px)}
+.dsb-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.dsb-kpi.on{box-shadow:0 0 0 2px var(--navy)}
+.dsb-kpi .h{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#3a475c;min-width:0}
+.dsb-kpi .ib{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}
+.dsb-kpi .v{font-size:30px;font-weight:700;color:var(--navy);margin-top:10px;line-height:1}
+.dsb-kpi .f{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto;padding-top:8px}
+.dsb-kpi .d{font-size:12px;display:block;white-space:nowrap;flex:none}.dsb-kpi .d s{text-decoration:none;color:var(--mut);display:block;margin-top:2px;font-size:11.5px}
+.dsb-kpi svg.sp{display:block;flex:0 1 100px;min-width:40px;max-width:100px;height:40px}
+.dsb-cols{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:16px;align-items:start}
+.dsb-stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+.dsb-cmts{max-height:420px;overflow-y:auto;margin:0 -4px}
+.dsb-cmt{border-top:1px solid var(--line);padding:10px 4px}
+.dsb-cmt-open{display:block;width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;border-radius:6px}
+.dsb-cmt-open:hover{background:#f7f9fd}
+.dsb-cmt .role{font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;margin-left:6px}
+.dsb-cmt .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dsb-cmt .when{font-size:11px;color:var(--mut);white-space:nowrap}
+.dsb-cmt .ref{font-size:12px;color:#334;margin-top:5px;overflow-wrap:anywhere}
+.dsb-cmt .txt{font-size:12.5px;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}
+.dsb-cmt .by{font-size:11.5px;color:var(--mut);margin-top:5px;overflow-wrap:anywhere}
+.dsb-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px}
+.dsb-scroll{overflow-x:auto}
+.dsb-card{min-width:0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 16px;box-shadow:0 1px 2px rgba(16,30,54,.03)}
+.dsb-card h3{margin:0 0 12px;font-size:15.5px;color:var(--navy);display:flex;align-items:center;gap:8px}
+.dsb-card h3 svg{color:var(--blue)}
+.dsb-sel{border:1px solid var(--line);background:#fff;border-radius:6px;padding:5px 10px;font-size:12px;display:inline-flex;align-items:center;gap:8px;color:#334}
+.dsb-leg div{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.dsb-leg div:last-child{border:0}.dsb-leg i{width:9px;height:9px;border-radius:3px}.dsb-leg b{margin-left:auto}
+table.dsb-t{width:100%;border-collapse:collapse}
+.dsb-t th.srt{cursor:pointer;user-select:none;white-space:nowrap}.dsb-t th.srt:hover{color:var(--navy)}
+.dsb-t td .sub{display:block;font-size:11px;color:var(--mut);margin-top:2px}
+.dsb-t td a{color:var(--navy);font-weight:600;text-decoration:none}.dsb-t td a:hover{text-decoration:underline}
+.dsb-mine-f{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 8px;font-size:12px;color:#334;max-width:220px}
+.dsb-t th{font-size:11px;color:var(--mut);font-weight:500;text-align:left;padding:8px 6px;letter-spacing:.03em}
+.dsb-t td{padding:11px 6px;border-top:1px solid var(--line);font-size:12.5px}
+.dsb-t td:first-child,.dsb-t td:last-child{white-space:nowrap}
+.dsb-t tbody tr{cursor:pointer}.dsb-t tbody tr:hover{background:#f7f9fd}
 .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:3px 9px;font-size:11.5px;white-space:nowrap}
 .pb{height:5px;border-radius:9px;background:#e8edf4;width:100px;display:inline-block;vertical-align:middle;overflow:hidden;margin-right:12px}.pb span{display:block;height:100%;border-radius:9px}
-.ad-btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;color:#334}
-.ad-port{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
-.ad-p{border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-height:88px;min-width:0;display:flex;flex-direction:column;background:linear-gradient(180deg,#fff,#f5f9ff)}
-.ad-p small{font-size:11px;color:#3a475c;letter-spacing:.02em}
-.ad-p .pv{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:auto;padding-top:6px}.ad-p b{font-size:24px;line-height:1;min-width:0;overflow-wrap:anywhere}
-.ad-p svg{flex:none}
-.ad-tabs{display:inline-flex;max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
-.ad-tabs button{border:0;background:#fff;font-size:14px;padding:10px 20px;cursor:pointer;color:#334;white-space:nowrap}.ad-tabs .on{background:#eef3ff;color:var(--navy);font-weight:700;box-shadow:inset 0 -2px 0 var(--blue)}
-.ad-mini th{font-size:12px;padding:14px 12px;letter-spacing:.05em}
-.ad-mini td{font-size:15px;padding:16px 12px}
-.ad-mini td:first-child{font-weight:600;color:var(--navy)}
-.ad-bk .num{text-align:right;white-space:nowrap}
-.ad-bk th.bk-s{cursor:pointer;user-select:none;white-space:nowrap}.ad-bk th.bk-s:hover{color:var(--navy)}
-.ad-bk tbody tr{cursor:default}
+.dsb-btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;color:#334}
+.dsb-port{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.dsb-p{border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-height:88px;min-width:0;display:flex;flex-direction:column;background:linear-gradient(180deg,#fff,#f5f9ff)}
+.dsb-p small{font-size:11px;color:#3a475c;letter-spacing:.02em}
+.dsb-p .pv{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:auto;padding-top:6px}.dsb-p b{font-size:24px;line-height:1;min-width:0;overflow-wrap:anywhere}
+.dsb-p svg{flex:none}
+.dsb-tabs{display:inline-flex;max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
+.dsb-tabs button{border:0;background:#fff;font-size:14px;padding:10px 20px;cursor:pointer;color:#334;white-space:nowrap}.dsb-tabs .on{background:#eef3ff;color:var(--navy);font-weight:700;box-shadow:inset 0 -2px 0 var(--blue)}
+.dsb-mini th{font-size:12px;padding:14px 12px;letter-spacing:.05em}
+.dsb-mini td{font-size:15px;padding:16px 12px}
+.dsb-mini td:first-child{font-weight:600;color:var(--navy)}
+.dsb-bk .num{text-align:right;white-space:nowrap}
+.dsb-bk th.bk-s{cursor:pointer;user-select:none;white-space:nowrap}.dsb-bk th.bk-s:hover{color:var(--navy)}
+.dsb-bk tbody tr{cursor:default}
 .bk-name{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--navy);cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-align:left}
 .bk-name:hover span{text-decoration:underline}.bk-name i{font-style:normal;font-size:11px;color:var(--blue);width:12px}
-.ad-bk tr.bk-open td{background:#f4f8ff}
-.ad-bk tr.bk-drill>td{padding:0 12px 14px;background:#f4f8ff;font-weight:400;white-space:normal}
+.dsb-bk tr.bk-open td{background:#f4f8ff}
+.dsb-bk tr.bk-drill>td{padding:0 12px 14px;background:#f4f8ff;font-weight:400;white-space:normal}
 .bk-proj{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .bk-proj th{font-size:11px;color:var(--mut);font-weight:600;text-align:left;padding:8px 10px;background:#fafcff;letter-spacing:.03em;white-space:nowrap}
 .bk-proj td{font-size:12.5px!important;padding:8px 10px!important;border-top:1px solid var(--line);color:var(--ink)!important;font-weight:400!important;white-space:nowrap;background:#fff!important}
 .bk-proj td.t{white-space:normal;min-width:180px}.bk-proj a{color:var(--navy);font-weight:600;text-decoration:none}.bk-proj a:hover{text-decoration:underline}
-.ad-bk tfoot td{border-top:2px solid var(--line);font-weight:700;color:var(--navy);font-size:15px;padding:14px 12px}
+.dsb-bk tfoot td{border-top:2px solid var(--line);font-weight:700;color:var(--navy);font-size:15px;padding:14px 12px}
 .bk-bar{display:inline-block;vertical-align:middle;width:80px;height:6px;border-radius:9px;background:#e8edf4;margin-right:10px;overflow:hidden}.bk-bar span{display:block;height:100%;background:#1d6bff;border-radius:9px}
 .bk-overlay{position:fixed;inset:0;z-index:1000;background:rgba(16,30,54,.45);padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex}
 .bk-overlay>div{flex:1;min-width:0;display:flex}
-.ad-bk.full{flex:1;display:flex;flex-direction:column;min-height:0}
-.ad-bk.full .bk-body{flex:1;overflow:auto}
-.ad-bk.full thead th{position:sticky;top:0;background:#fff;z-index:1}
+.dsb-bk.full{flex:1;display:flex;flex-direction:column;min-height:0}
+.dsb-bk.full .bk-body{flex:1;overflow:auto}
+.dsb-bk.full thead th{position:sticky;top:0;background:#fff;z-index:1}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;row-gap:2px}
 .cal .w{font-size:11px;color:var(--mut);padding:8px 0}
 .cal button{border:0;background:none;height:39px;font-size:13px;position:relative;cursor:pointer;color:var(--ink);border-radius:50%;width:39px;margin:auto}
@@ -113,11 +116,11 @@ table.ad-t{width:100%;border-collapse:collapse}
 .cal .t{background:#1d6bff!important;color:#fff;font-weight:700}
 .cal .p{outline:2px solid var(--amber);outline-offset:-3px}
 .cal button u{position:absolute;bottom:2px;left:50%;width:5px;height:5px;border-radius:50%;margin-left:-2.5px}
-.ad-hint{display:flex;gap:10px;align-items:center;background:#f3f7ff;border-radius:8px;padding:10px 12px;color:var(--mut);font-size:11px;margin-top:6px}
-@media(max-width:1440px){.ad-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:1200px){.ad-cols{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:860px){.ad-2{grid-template-columns:minmax(0,1fr)}.ad-port{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.ad-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ad-kpi{padding:12px;min-height:0}.ad-kpi .v{font-size:24px}.ad-kpi svg.sp{display:none}.ad-hello h1{font-size:20px}.ad-hello p{margin-left:0}}
+.dsb-hint{display:flex;gap:10px;align-items:center;background:#f3f7ff;border-radius:8px;padding:10px 12px;color:var(--mut);font-size:11px;margin-top:6px}
+@media(max-width:1440px){.dsb-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1200px){.dsb-cols{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:860px){.dsb-2{grid-template-columns:minmax(0,1fr)}.dsb-port{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.dsb-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dsb-kpi{padding:12px;min-height:0}.dsb-kpi .v{font-size:24px}.dsb-kpi svg.sp{display:none}.dsb-hello h1{font-size:20px}.dsb-hello p{margin-left:0}}
 ${REPLY_CSS}
 `
 
@@ -272,15 +275,15 @@ function Calendar({ onPick, picked, dots, today }: { onPick: (d: string | null) 
   }, [ym])
   const go = (n: number) => setYm(({ y, m }) => { const d = new Date(y, m + n, 1); return { y: d.getFullYear(), m: d.getMonth() } })
   return (
-    <div className="ad-card" style={{ padding: 16 }}>
+    <div className="dsb-card" style={{ padding: 16 }}>
       <h3><Ic n="cal" />Calendar</h3>
       <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        <button className="ad-btn" onClick={() => go(-1)} style={{ padding: '6px 9px' }}><Ic n="l" s={13} /></button>
-        <select className="ad-btn" style={{ flex: 1, textAlign: 'left' }} value={ym.m} onChange={(e) => setYm({ ...ym, m: +e.target.value })}>
+        <button className="dsb-btn" onClick={() => go(-1)} style={{ padding: '6px 9px' }}><Ic n="l" s={13} /></button>
+        <select className="dsb-btn" style={{ flex: 1, textAlign: 'left' }} value={ym.m} onChange={(e) => setYm({ ...ym, m: +e.target.value })}>
           {MONTHS.map((m, i) => <option key={m} value={i}>{m} {ym.y}</option>)}
         </select>
-        <button className="ad-btn" onClick={() => go(1)} style={{ padding: '6px 9px' }}><Ic n="r" s={13} /></button>
-        <button className="ad-btn" onClick={() => setYm({ y: today.getFullYear(), m: today.getMonth() })}>Today</button>
+        <button className="dsb-btn" onClick={() => go(1)} style={{ padding: '6px 9px' }}><Ic n="r" s={13} /></button>
+        <button className="dsb-btn" onClick={() => setYm({ y: today.getFullYear(), m: today.getMonth() })}>Today</button>
       </div>
       <div className="cal">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} className="w">{d}</div>)}
@@ -290,7 +293,7 @@ function Calendar({ onPick, picked, dots, today }: { onPick: (d: string | null) 
           return <button key={k} className={`${out ? 'o' : ''} ${isT ? 't' : ''} ${picked === k ? 'p' : ''}`} onClick={() => onPick(picked === k ? null : k)}>{d.getDate()}{dots[k] && !isT && <u style={{ background: dots[k] }} />}</button>
         })}
       </div>
-      <div className="ad-hint"><Ic n="cal" s={20} c="#1d6bff" /><span>Dots = tasks of yours due that day (red = overdue).<br />Click a day to filter My Tasks.</span></div>
+      <div className="dsb-hint"><Ic n="cal" s={20} c="#1d6bff" /><span>Dots = tasks of yours due that day (red = overdue).<br />Click a day to filter My Tasks.</span></div>
     </div>
   )
 }
@@ -380,19 +383,19 @@ function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
   const nameHead = BK_TABS.find(([k]) => k === tab)![2]
 
   const card = (
-    <div className={`ad-card ad-bk${full ? ' full' : ''}`}>
-      <div className="ad-head" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+    <div className={`dsb-card dsb-bk${full ? ' full' : ''}`}>
+      <div className="dsb-head" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}><Ic n="users" s={17} />Team &amp; Portfolio Breakdown</h3>
-        <button className="ad-btn" onClick={() => setFull((f) => !f)}>{full ? '✕ Close full screen' : '⛶ Full screen'}</button>
+        <button className="dsb-btn" onClick={() => setFull((f) => !f)}>{full ? '✕ Close full screen' : '⛶ Full screen'}</button>
       </div>
-      <div className="ad-head" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
-        <div className="ad-tabs" style={{ marginBottom: 0 }}>{BK_TABS.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+      <div className="dsb-head" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
+        <div className="dsb-tabs" style={{ marginBottom: 0 }}>{BK_TABS.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
         <span style={{ fontSize: 12, color: 'var(--mut)' }}>
           Sorted by {BK_SORT_NAME[sort.key]}{{ name: '', projects: ', then tasks', total: ', then projects' }[sort.key as string] ?? ', then projects and tasks'} · click a column heading to sort
         </span>
       </div>
       {data === null ? <div style={{ color: 'var(--mut)', padding: 10 }}>Loading…</div> : !rows.length ? <div style={{ color: 'var(--mut)', padding: 10 }}>No data yet.</div> : (
-        <div className="ad-scroll bk-body"><table className="ad-t ad-mini">
+        <div className="dsb-scroll bk-body"><table className="dsb-t dsb-mini">
           <thead><tr>
             <th className="bk-s" onClick={() => clickSort('name')}>{nameHead}{arrow('name')}</th>
             {BK_COLS.map(([k, l]) => <th key={k} className="bk-s num" onClick={() => clickSort(k)}>{l}{arrow(k)}</th>)}
@@ -423,7 +426,7 @@ function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
                       const list = projectsOf(tab, r.name, projects, org)
                       if (!list.length) return <div style={{ color: 'var(--mut)', padding: '8px 0' }}>No projects under {r.name}.</div>
                       return (
-                        <div className="ad-scroll">
+                        <div className="dsb-scroll">
                           <table className="bk-proj">
                             <thead><tr><th>CODE</th><th>PROJECT</th><th>STATUS</th><th>HEALTH</th><th>COMPLETION</th><th>DUE</th><th>PROJECT MANAGER</th></tr></thead>
                             <tbody>{list.map((pr) => (
@@ -457,7 +460,7 @@ function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
   if (!full) return <div style={{ marginTop: 16 }}>{card}</div>
   return (
     <>
-      <div className="ad-card" style={{ marginTop: 16, color: 'var(--mut)' }}>Team &amp; Portfolio Breakdown is open in full screen.</div>
+      <div className="dsb-card" style={{ marginTop: 16, color: 'var(--mut)' }}>Team &amp; Portfolio Breakdown is open in full screen.</div>
       <div className="bk-overlay" onClick={() => setFull(false)}><div onClick={(e) => e.stopPropagation()}>{card}</div></div>
     </>
   )
@@ -492,22 +495,22 @@ function CommentInbox({ tick }: { tick: number }) {
   const ref = (code?: string | null, name?: string | null) => (code || name ? <><b>{code}</b>{code && name ? ' · ' : ''}{name}</> : '—')
 
   return (
-    <div className="ad-card">
+    <div className="dsb-card">
       <h3 style={{ marginBottom: 8 }}><Ic n="chat" s={17} />Comments<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({data.comments.length})</span></h3>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         {(['all', 'project', 'task'] as const).map((f) => (
-          <button key={f} className="ad-btn" onClick={() => setFilter(f)}
+          <button key={f} className="dsb-btn" onClick={() => setFilter(f)}
             style={{ flex: 1, padding: '5px 6px', ...(filter === f ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' } : {}) }}>
             {f === 'all' ? 'All' : f === 'project' ? 'Projects' : 'Tasks'}
           </button>
         ))}
       </div>
-      <div className="ad-cmts">
+      <div className="dsb-cmts">
         {list.map((c) => {
           const sent = !!user && c.commenter_id === user.id
           return (
-            <div key={c.id} className="ad-cmt">
-              <button className="ad-cmt-open" onClick={() => open(c)} title="Open">
+            <div key={c.id} className="dsb-cmt">
+              <button className="dsb-cmt-open" onClick={() => open(c)} title="Open">
                 <div className="top">
                   <span>
                     <span className="pill" style={c.entity_type === 'task' ? { background: '#e8f0ff', color: '#1d6bff' } : { background: '#fdf3d7', color: '#8a6d1f' }}>{label(c.entity_type)}</span>
@@ -685,39 +688,39 @@ export default function Dashboard() {
   const initials = (user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?'
 
   return (
-    <div className="ad-root">
+    <div className="dsb-root">
       <style>{CSS}</style>
-      <div className="ad-body">
-        <div className="ad-hello">
-          <div className="ad-me">
-            <button className="ad-me-pic" onClick={() => { setProfileMsg(''); setEditProfile(true) }} title="Edit my profile" aria-label="Edit my profile">
+      <div className="dsb-body">
+        <div className="dsb-hello">
+          <div className="dsb-me">
+            <button className="dsb-me-pic" onClick={() => { setProfileMsg(''); setEditProfile(true) }} title="Edit my profile" aria-label="Edit my profile">
               {initials}<b aria-hidden>✎</b>
             </button>
             <div style={{ minWidth: 0 }}>
               <h1><Ic n="hand" s={34} c="#f5b31b" w={1.6} />Welcome back, {first}!</h1>
               <p>{[user?.designation, user?.role && label(user.role)].filter(Boolean).join(' · ') || "Here's what's happening with your tasks and projects today."}</p>
-              <button className="ad-me-edit" onClick={() => { setProfileMsg(''); setEditProfile(true) }}>✎ Edit my profile</button>
+              <button className="dsb-me-edit" onClick={() => { setProfileMsg(''); setEditProfile(true) }}>✎ Edit my profile</button>
             </div>
           </div>
-          <div className="ad-date"><Ic n="cal" s={18} c="#1d6bff" />{now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}<span className="ad-live" title={`Refreshes every minute${updatedAt ? ` · last updated ${updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}`}><i />Live</span></div>
+          <div className="dsb-date"><Ic n="cal" s={18} c="#1d6bff" />{now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}<span className="dsb-live" title={`Refreshes every minute${updatedAt ? ` · last updated ${updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}`}><i />Live</span></div>
         </div>
 
-        {profileMsg && <div className="ad-okmsg" role="status">{profileMsg}</div>}
+        {profileMsg && <div className="dsb-okmsg" role="status">{profileMsg}</div>}
         {editProfile && <ProfileForm onClose={() => setEditProfile(false)} onSaved={(m) => { setEditProfile(false); setProfileMsg(m) }} />}
 
         {(orgFailed || userFailed) && (
-          <div className="ad-err" role="alert">
+          <div className="dsb-err" role="alert">
             <span>Some dashboard data couldn't be loaded. What you see may be out of date.</span>
-            <button className="ad-btn" onClick={refresh}>Retry</button>
+            <button className="dsb-btn" onClick={refresh}>Retry</button>
           </div>
         )}
 
-        <div className="ad-kpis">
+        <div className="dsb-kpis">
           {KPIS.map((k, i) => {
             const d = delta(k.k, k.bad)
             const pts = trends?.series?.[k.k] ?? [0, 0]
             return (
-              <button key={k.l} type="button" className={`ad-kpi${kpi === k.k ? ' on' : ''}`} aria-pressed={kpi === k.k} onClick={() => pickKpi(k.k)}
+              <button key={k.l} type="button" className={`dsb-kpi${kpi === k.k ? ' on' : ''}`} aria-pressed={kpi === k.k} onClick={() => pickKpi(k.k)}
                 title={kpi === k.k ? 'Show all my tasks' : 'Show these tasks in My Tasks'}
                 style={{ background: `linear-gradient(160deg,${k.bg},#fff)`, borderColor: k.bd }}>
                 <span className="h"><span className="ib" style={{ background: k.c }}><Ic n={k.ic} s={17} c="#fff" /></span>{k.l}</span>
@@ -731,41 +734,41 @@ export default function Dashboard() {
           })}
         </div>
 
-        <div className="ad-cols">
-          <div className="ad-stack">
-            <div className="ad-2">
-              <div className="ad-card">
+        <div className="dsb-cols">
+          <div className="dsb-stack">
+            <div className="dsb-2">
+              <div className="dsb-card">
                 <h3>Task Completion Overview</h3>
-                <div className="ad-row">
+                <div className="dsb-row">
                   <Ring size={152} sw={16} segs={[{ f: cnt.done / nT, c: '#12a150' }, { f: cnt.doing / nT, c: '#1d6bff' }, { f: cnt.todo / nT, c: '#6b7a90' }, { f: cnt.blocked / nT, c: '#ef4444' }]}>
                     <div><div style={{ fontSize: 26, fontWeight: 700, color: 'var(--navy)' }}>{donePct}%</div><div style={{ fontSize: 12, color: 'var(--mut)' }}>Completed</div></div>
                   </Ring>
-                  <div className="ad-leg">
+                  <div className="dsb-leg">
                     {[['Completed', cnt.done, '#12a150'], ['In Progress', cnt.doing, '#1d6bff'], ['Not Started', cnt.todo, '#6b7a90'], ['Blocked', cnt.blocked, '#ef4444']].map(([l, v, c]) => <div key={l as string}><i style={{ background: c as string }} />{l}<b>{v}</b></div>)}
                   </div>
                 </div>
               </div>
-              <div className="ad-card"><h3><Ic n="bars" s={17} />Task Progress</h3><Progress data={trends?.chart ?? []} /></div>
+              <div className="dsb-card"><h3><Ic n="bars" s={17} />Task Progress</h3><Progress data={trends?.chart ?? []} /></div>
             </div>
 
-            <div className="ad-card" ref={myTasksRef} style={{ scrollMarginTop: 12 }}>
-              <div className="ad-head">
+            <div className="dsb-card" ref={myTasksRef} style={{ scrollMarginTop: 12 }}>
+              <div className="dsb-head">
                 <h3 style={{ margin: 0, flexWrap: 'wrap' }}><Ic n="cal" />My Tasks{kpi && kpi !== 'total' && <span style={{ fontWeight: 400 }}>— {kpiLabel}</span>}{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({rows.length})</span></h3>
                 <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <select className="ad-mine-f" aria-label="Filter by project" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+                  <select className="dsb-mine-f" aria-label="Filter by project" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
                     <option value="">All projects</option>
                     {myProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     {hasStandalone && <option value="none">No project</option>}
                   </select>
-                  <select className="ad-mine-f" aria-label="Filter by responsible person" value={responsibleFilter} onChange={(e) => setResponsibleFilter(e.target.value)}>
+                  <select className="dsb-mine-f" aria-label="Filter by responsible person" value={responsibleFilter} onChange={(e) => setResponsibleFilter(e.target.value)}>
                     <option value="">All responsible</option>
                     {myResponsibles.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
-                  {kpi && <button className="ad-btn" onClick={() => setKpi(null)}>Show all tasks</button>}
-                  {picked && <button className="ad-btn" onClick={() => setPicked(null)}>Clear date filter</button>}
+                  {kpi && <button className="dsb-btn" onClick={() => setKpi(null)}>Show all tasks</button>}
+                  {picked && <button className="dsb-btn" onClick={() => setPicked(null)}>Clear date filter</button>}
                 </span>
               </div>
-              <div className="ad-scroll"><table className="ad-t">
+              <div className="dsb-scroll"><table className="dsb-t">
                 <thead><tr>{TASK_COLS.map(([k, h]) => (
                   <th key={k} className="srt" onClick={() => clickSort(k)} title="Click to sort" aria-sort={sort.key === k ? (sort.desc ? 'descending' : 'ascending') : undefined}>
                     {h}{sort.key === k ? (sort.desc ? ' ▼' : ' ▲') : ''}
@@ -799,32 +802,32 @@ export default function Dashboard() {
 
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,360px),1fr))', gap: 16 }}>
-              <div className="ad-card">
+              <div className="dsb-card">
                 <h3><Ic n="users" s={17} />Group Portfolio</h3>
-                <div className="ad-port">
+                <div className="dsb-port">
                   {[['TOTAL PROJECTS', projKpi?.total, '#1d6bff', 'proj'], ['ACTIVE PROJECTS', projKpi?.active, '#12a150', 'play'], ['GREEN', projKpi?.green, '#12a150', 'leaf'], ['AMBER', projKpi?.amber, '#f59e0b', 'shield'], ['RED', projKpi?.red, '#ef4444', 'warn']].map(([l, v, c, i]) => (
-                    <div key={l as string} className="ad-p"><small>{l}</small><div className="pv"><b style={{ color: c as string }}>{(v as number | undefined) ?? '—'}</b><Ic n={i as string} s={20} c={c as string} /></div></div>
+                    <div key={l as string} className="dsb-p"><small>{l}</small><div className="pv"><b style={{ color: c as string }}>{(v as number | undefined) ?? '—'}</b><Ic n={i as string} s={20} c={c as string} /></div></div>
                   ))}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="ad-stack">
+          <div className="dsb-stack">
             <CommentInbox tick={tick} />
             <Calendar picked={picked} onPick={setPicked} dots={dots} today={now} />
-            <div className="ad-card">
+            <div className="dsb-card">
               <h3><Ic n="pulse" s={17} />Project Health Distribution</h3>
               {hTotal === 0 ? <div style={{ color: 'var(--mut)' }}>No projects</div> : (
-                <div className="ad-row" style={{ gap: 28 }}>
+                <div className="dsb-row" style={{ gap: 28 }}>
                   <Ring size={112} sw={14} segs={hEntries.map((h) => ({ f: healthDist[h] / hTotal, c: HEALTH_HEX[h] }))}><div><b style={{ fontSize: 18 }}>{hTotal}</b><div style={{ fontSize: 11, color: 'var(--mut)' }}>Projects</div></div></Ring>
-                  <div className="ad-leg">
+                  <div className="dsb-leg">
                     {hEntries.map((h) => <div key={h} style={{ border: 0, padding: '7px 0' }}><i style={{ background: HEALTH_HEX[h], borderRadius: '50%', width: 10, height: 10 }} />{label(h)}<b style={{ fontSize: 12 }}>{healthDist[h]} · {Math.round((healthDist[h] / hTotal) * 100)}%</b></div>)}
                   </div>
                 </div>
               )}
             </div>
-            <div className="ad-card">
+            <div className="dsb-card">
               <h3><Ic n="target" s={17} />Top Delay Causes</h3>
               {delayCauses.map((d) => (
                 <div key={d.category} style={{ marginBottom: 10 }}>
