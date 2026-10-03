@@ -48,6 +48,7 @@ interface TaskDraft {
   planned_start_date: string
   baseline_due_date: string
   priority: string
+  description: string
   expected_deliverable: string
   error?: string
 }
@@ -56,7 +57,7 @@ const newDraft = (prev?: TaskDraft): TaskDraft => ({
   key: ++draftKey, title: '', responsible_id: '',
   // Accountable / Reviewer are usually the same across a project's tasks - copy them from the last row
   accountable_id: prev?.accountable_id ?? '', reviewer_id: prev?.reviewer_id ?? '',
-  planned_start_date: '', baseline_due_date: '', priority: 'medium', expected_deliverable: '',
+  planned_start_date: '', baseline_due_date: '', priority: 'medium', description: '', expected_deliverable: '',
 })
 
 // FastAPI sends {"detail": "..."} or a list of validation errors - show it as a readable sentence.
@@ -250,7 +251,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
     return {
       code: null,
       title: d.title.trim(),
-      description: d.expected_deliverable.trim() || d.title.trim(),
+      description: d.description.trim() || d.expected_deliverable.trim() || d.title.trim(),
       expected_deliverable: d.expected_deliverable.trim() || null,
       category: common.category || 'operational',
       task_type: 'task',
@@ -461,6 +462,9 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                     <SearchableSelect value={d.priority} items={opts(PRIORITIES)} onChange={(v) => setDraft(d.key, 'priority', v || 'medium')} placeholder="Priority…" />
                   </div>
                 </div>
+                <label>Description</label>
+                <RichTextEditor rows={2} value={d.description} onChange={(v) => setDraft(d.key, 'description', v)}
+                  placeholder="What is this task about? Use Link to attach a document or page." disabled={saving} />
                 <label>Expected Deliverable</label>
                 <input value={d.expected_deliverable} onChange={(e) => setDraft(d.key, 'expected_deliverable', e.target.value)} placeholder="What will be delivered?" disabled={saving} />
               </div>

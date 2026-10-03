@@ -4,17 +4,43 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 // The text is stored as light markdown so older plain text stays valid and any
 // place that shows the raw value still reads well:
 //   **bold**   *italic*   ++underline++   "- " bullet line   "1. " numbered line
-// The view escapes everything first and only adds its own tags, so it is safe to render.
+//   [text](https://link)   - and a plain https://... / www... address is a link by itself
+// The view escapes everything first and only adds its own tags, so it is safe to render;
+// links open in a new tab and only http(s) / mailto addresses become links.
 
 type Marker = '**' | '*' | '++'
 const TAG: Record<Marker, string> = { '**': 'b', '*': 'i', '++': 'u' }
 
 const esc = (c: string) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c] ?? c
+const escAll = (s: string) => s.replace(/[&<>"']/g, esc)
+
+/** What someone typed as a link -> an address that is safe to open, or '' if it isn't one.
+ *  "www.x.com" / "x.com/doc" get https://, "name@x.com" becomes mailto:. Only http(s) and mailto. */
+export function safeUrl(raw: string): string {
+  let u = raw.trim()
+  if (!u || /\s/.test(u)) return ''
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(u) ? `mailto:${u}` : `https://${u}`
+  return /^(https?:\/\/[^\s/]+|mailto:[^\s@]+@[^\s@]+)/i.test(u) ? u : ''
+}
+
+const linkHtml = (url: string, text: string) =>
+  `<a href="${escAll(url)}" target="_blank" rel="noopener noreferrer">${escAll(text)}</a>`
 
 /** One line of markdown -> inline HTML. A marker without a partner stays as literal text. */
 function inlineHtml(s: string): string {
-  const toks: { m?: Marker; x?: string }[] = []
+  const toks: { m?: Marker; x?: string; h?: string }[] = []
   for (let i = 0; i < s.length;) {
+    // [text](address): one unit, so a * or ++ inside the address is not formatting
+    const md = s[i] === '[' ? /^\[([^\]\n]+)\]\(([^)\s]+)\)/.exec(s.slice(i)) : null
+    const mdUrl = md ? safeUrl(md[2]) : ''
+    if (md && mdUrl) { toks.push({ h: linkHtml(mdUrl, md[1]) }); i += md[0].length; continue }
+    // a plain address typed or pasted into the text
+    const bare = (i === 0 || !/[A-Za-z0-9]/.test(s[i - 1])) ? /^(https?:\/\/|www\.)[^\s<>"]+/i.exec(s.slice(i)) : null
+    if (bare) {
+      const text = bare[0].replace(/[.,;:!?)\]]+$/, '') // punctuation after the address is not part of it
+      const url = safeUrl(text)
+      if (url) { toks.push({ h: linkHtml(url, text) }); i += text.length; continue }
+    }
     const two = s.slice(i, i + 2)
     if (two === '**' || two === '++') { toks.push({ m: two }); i += 2 }
     else if (s[i] === '*') { toks.push({ m: '*' }); i++ }
@@ -29,6 +55,7 @@ function inlineHtml(s: string): string {
   // keep tags properly nested: closing an outer tag closes and reopens the inner ones
   const stack: Marker[] = []
   const out = toks.map((t, i) => {
+    if (t.h) return t.h
     if (!t.m) return esc(t.x!)
     const r = role.get(i)
     if (r === 'open') { stack.push(t.m); return `<${TAG[t.m]}>` }
@@ -99,6 +126,15 @@ export function htmlToMd(root: HTMLElement): string {
           close()
         } else walk(li)
       })
+      return
+    }
+    if (tag === 'A') {
+      // a link is one unit: "[text](address)", or just the address when that is the text
+      const text = (n.textContent ?? '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim()
+      const url = safeUrl(n.getAttribute('href') ?? '')
+      if (!text) return
+      open()
+      cur += !url ? text : (text === url || safeUrl(text) === url) && /^(https?:\/\/|www\.)/i.test(text) ? text : `[${text.replace(/[\[\]]/g, '')}](${url})`
       return
     }
     const st = n.style
@@ -184,6 +220,30 @@ export function RichTextEditor({ value, onChange, placeholder, rows = 3, disable
     ref.current.focus()
     try { document.execCommand('styleWithCSS', false, 'false') } catch { /* ignore */ }
     document.execCommand(cmd)
+    if (cmd === 'removeFormat') document.execCommand('unlink') // "Clear" also turns a link back into text
+    emit()
+  }
+
+  // "Link": the selected words become a link; with nothing selected the address itself is inserted
+  const addLink = () => {
+    if (disabled || !ref.current) return
+    const sel = document.getSelection()
+    const inside = !!sel && sel.rangeCount > 0 && ref.current.contains(sel.anchorNode)
+    const range = inside ? sel!.getRangeAt(0).cloneRange() : null
+    const picked = range ? range.toString().trim() : ''
+    const typed = prompt(picked ? `Link address for "${picked.slice(0, 60)}":` : 'Link address (document, page or email):', picked && safeUrl(picked) && /[./@]/.test(picked) ? picked : 'https://')
+    if (typed === null) return
+    const url = safeUrl(typed)
+    if (!url) { alert('That does not look like a link. Use an address like https://example.com/document'); return }
+    ref.current.focus()
+    const s2 = document.getSelection()
+    if (s2) {
+      s2.removeAllRanges()
+      if (range) s2.addRange(range) // the prompt may have dropped the selection
+      else { const end = document.createRange(); end.selectNodeContents(ref.current); end.collapse(false); s2.addRange(end) }
+    }
+    if (picked) document.execCommand('createLink', false, url)
+    else document.execCommand('insertHTML', false, `${linkHtml(url, typed.trim())}&nbsp;`)
     emit()
   }
 
@@ -197,6 +257,10 @@ export function RichTextEditor({ value, onChange, placeholder, rows = 3, disable
             {t.label}
           </button>
         ))}
+        <button type="button" className="rte-btn" title="Add a link: select the words first, or just click to insert an address"
+          disabled={disabled} onMouseDown={(e) => { e.preventDefault(); addLink() }}>
+          🔗 Link
+        </button>
       </div>
       <div
         ref={ref}
@@ -209,6 +273,12 @@ export function RichTextEditor({ value, onChange, placeholder, rows = 3, disable
         data-placeholder={placeholder ?? ''}
         onInput={emit}
         onBlur={emit}
+        // a link inside the editor: Ctrl + click (or middle click) opens it; a plain click edits the text
+        onClick={(e) => {
+          const a = (e.target as HTMLElement).closest?.('a')
+          const url = a ? safeUrl(a.getAttribute('href') ?? '') : ''
+          if (url && (e.ctrlKey || e.metaKey || disabled)) { e.preventDefault(); window.open(url, '_blank', 'noopener,noreferrer') }
+        }}
         // paste as plain text so formatting from Word / web pages doesn't come along
         onPaste={(e) => {
           e.preventDefault()

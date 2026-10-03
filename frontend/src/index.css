@@ -362,6 +362,9 @@ tr.clickable, .clickable { cursor: pointer; }
 .rich-text ul, .rich-text ol { margin: 4px 0; padding-left: 22px; }
 .rich-text li { margin: 2px 0; }
 .rich-text { overflow-wrap: anywhere; line-height: 1.5; }
+.rich-text a { color: #1d6bff; text-decoration: underline; }
+.rich-text a:hover { color: var(--navy); }
+.rte-area a { cursor: text; }
 .rte { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .rte:focus-within { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(200,162,75,0.15); }
 .rte.disabled { background: #f7f9fc; }
