@@ -38,7 +38,20 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .dsb-date{display:flex;align-items:center;gap:10px;color:#334;margin-top:14px;font-size:13.5px}
 .dsb-live{border:1px solid #bfe8cf;background:#effaf3;color:#12a150;border-radius:99px;padding:3px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
 .dsb-live i{width:8px;height:8px;border:2px solid #12a150;border-radius:50%}
-.dsb-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-bottom:22px}
+.dsb-kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:14px;margin-bottom:22px}
+.dsb-kpi .hb{display:flex;height:8px;border-radius:9px;overflow:hidden;background:#e3e9f2;flex:1;min-width:40px;max-width:120px}
+.dsb-kpi .hb i{display:block;height:100%}
+.dsb-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.dsb-seg button{border:0;background:#fff;font-size:12.5px;padding:6px 14px;cursor:pointer;color:#334;display:inline-flex;align-items:center;gap:6px}
+.dsb-seg button+button{border-left:1px solid var(--line)}
+.dsb-seg .on{background:var(--navy);color:#fff;font-weight:600}
+.dsb-pj td{vertical-align:middle}
+.dsb-pj .nm{font-weight:600;color:var(--navy)}
+.dsb-pj .hd{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle}
+.dsb-pj .cnt{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.dsb-pj .lnk{border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 10px;font-size:11.5px;cursor:pointer;color:var(--blue);white-space:nowrap}
+.dsb-pj .lnk:hover{background:#eef3ff;border-color:#cfe0ff}
+.dsb-pj .pb{width:64px;margin-right:8px}
 .dsb-kpi{border-radius:12px;padding:16px 16px 12px;border:1px solid;min-height:136px;display:flex;flex-direction:column;min-width:0;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:box-shadow .15s,transform .15s}
 .dsb-kpi:hover{box-shadow:0 4px 14px rgba(11,31,58,.12);transform:translateY(-1px)}
 .dsb-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
@@ -117,7 +130,7 @@ table.dsb-t{width:100%;border-collapse:collapse}
 .cal .p{outline:2px solid var(--amber);outline-offset:-3px}
 .cal button u{position:absolute;bottom:2px;left:50%;width:5px;height:5px;border-radius:50%;margin-left:-2.5px}
 .dsb-hint{display:flex;gap:10px;align-items:center;background:#f3f7ff;border-radius:8px;padding:10px 12px;color:var(--mut);font-size:11px;margin-top:6px}
-@media(max-width:1440px){.dsb-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1440px){.dsb-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.dsb-kpi.proj{grid-column:span 2}}
 @media(max-width:1200px){.dsb-cols{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:860px){.dsb-2{grid-template-columns:minmax(0,1fr)}.dsb-port{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.dsb-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dsb-kpi{padding:12px;min-height:0}.dsb-kpi .v{font-size:24px}.dsb-kpi svg.sp{display:none}.dsb-hello h1{font-size:20px}.dsb-hello p{margin-left:0}}
@@ -554,6 +567,7 @@ export default function Dashboard() {
   const [trends, setTrends] = useState<Trends | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [kpi, setKpi] = useState<KpiKey | null>(null) // KPI card clicked: My Tasks shows only those tasks
+  const [view, setView] = useState<'tasks' | 'projects'>('tasks') // what the list under the cards shows
   const myTasksRef = useRef<HTMLDivElement>(null)
 
   // "Live": bump `tick` every minute (and when the user comes back to the tab)
@@ -656,9 +670,45 @@ export default function Dashboard() {
   const kpiLabel = kpi ? label(KPIS.find((k) => k.k === kpi)!.l.toLowerCase()) : ''
   // click a KPI card: list those tasks in My Tasks (click it again to show all)
   const pickKpi = (k: KpiKey) => {
-    setKpi((cur) => (cur === k ? null : k))
+    setKpi((cur) => (view === 'tasks' && cur === k ? null : k))
+    setView('tasks')
     myTasksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  // ---- Projects card: the projects I lead (Manager / Sponsor / Owner) or have a task in
+  const projectRows = useMemo(() => {
+    const rank: Record<string, number> = { black: 0, red: 1, amber: 2, green: 3 }
+    return projects
+      .filter((p) => [p.manager_id, p.sponsor_id, p.owner_id].includes(userId) || myTasks.some((t) => t.project_id === p.id))
+      .map((p) => {
+        const mine = myTasks.filter((t) => t.project_id === p.id)
+        return {
+          p,
+          due: p.approved_due_date || p.baseline_due_date || '',
+          tasks: mine.length,
+          open: mine.filter((t) => OPEN.includes(t.status)).length,
+          overdue: mine.filter((t) => KPI_MATCH.overdue(t, todayIso)).length,
+          closed: ['completed', 'closed', 'cancelled'].includes(p.status),
+        }
+      })
+      // the ones needing attention first: worst health, then the nearest due date
+      .sort((a, b) => Number(a.closed) - Number(b.closed) || (rank[a.p.health] ?? 9) - (rank[b.p.health] ?? 9)
+        || (a.due || '9999').localeCompare(b.due || '9999') || a.p.name.localeCompare(b.p.name))
+  }, [projects, myTasks, userId, todayIso])
+  const projHealth = (['green', 'amber', 'red', 'black'] as const).map((h) => ({ h, n: projectRows.filter((r) => r.p.health === h).length })).filter((x) => x.n > 0)
+  const projActive = projectRows.filter((r) => !r.closed).length
+  const showProjects = () => {
+    setView((v) => (v === 'projects' ? 'tasks' : 'projects'))
+    myTasksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  // from a project row: back to the task list, showing only that project's tasks
+  const showProjectTasks = (id: number) => { setKpi(null); setPicked(null); setResponsibleFilter(''); setProjectFilter(String(id)); setView('tasks') }
+  const viewToggle = (
+    <span className="dsb-seg" role="tablist" aria-label="List">
+      <button type="button" role="tab" aria-selected={view === 'tasks'} className={view === 'tasks' ? 'on' : ''} onClick={() => setView('tasks')}><Ic n="check" s={13} />Tasks</button>
+      <button type="button" role="tab" aria-selected={view === 'projects'} className={view === 'projects' ? 'on' : ''} onClick={() => setView('projects')}><Ic n="folder" s={13} />Projects</button>
+    </span>
+  )
   const dots = useMemo(() => {
     const m: Record<string, string> = {}
     myTasks.forEach((t) => { const d = dueOf(t); if (d) m[d] = !DONE.includes(t.status) && d < todayIso ? '#ef4444' : m[d] ?? '#f59e0b' })
@@ -716,12 +766,24 @@ export default function Dashboard() {
         )}
 
         <div className="dsb-kpis">
+          <button type="button" className={`dsb-kpi proj${view === 'projects' ? ' on' : ''}`} aria-pressed={view === 'projects'} onClick={showProjects}
+            title={view === 'projects' ? 'Back to my tasks' : 'Show my projects in the list below'}
+            style={{ background: 'linear-gradient(160deg,#e9f8f6,#fff)', borderColor: '#bfe7e1' }}>
+            <span className="h"><span className="ib" style={{ background: '#0e9f92' }}><Ic n="folder" s={17} c="#fff" /></span>PROJECTS</span>
+            <span className="v">{projectRows.length}</span>
+            <span className="f">
+              <span className="d"><span style={{ color: '#0e9f92' }}>{projActive} active</span><s>{projectRows.length - projActive} finished</s></span>
+              <span className="hb" title={projHealth.map((x) => `${label(x.h)}: ${x.n}`).join(' · ') || 'No projects'}>
+                {projHealth.map((x) => <i key={x.h} style={{ width: `${(x.n / projectRows.length) * 100}%`, background: HEALTH_HEX[x.h] }} />)}
+              </span>
+            </span>
+          </button>
           {KPIS.map((k, i) => {
             const d = delta(k.k, k.bad)
             const pts = trends?.series?.[k.k] ?? [0, 0]
             return (
-              <button key={k.l} type="button" className={`dsb-kpi${kpi === k.k ? ' on' : ''}`} aria-pressed={kpi === k.k} onClick={() => pickKpi(k.k)}
-                title={kpi === k.k ? 'Show all my tasks' : 'Show these tasks in My Tasks'}
+              <button key={k.l} type="button" className={`dsb-kpi${view === 'tasks' && kpi === k.k ? ' on' : ''}`} aria-pressed={view === 'tasks' && kpi === k.k} onClick={() => pickKpi(k.k)}
+                title={view === 'tasks' && kpi === k.k ? 'Show all my tasks' : 'Show these tasks in My Tasks'}
                 style={{ background: `linear-gradient(160deg,${k.bg},#fff)`, borderColor: k.bd }}>
                 <span className="h"><span className="ib" style={{ background: k.c }}><Ic n={k.ic} s={17} c="#fff" /></span>{k.l}</span>
                 <span className="v">{taskKpi ? taskKpi[k.k] : '—'}</span>
@@ -751,10 +813,47 @@ export default function Dashboard() {
               <div className="dsb-card"><h3><Ic n="bars" s={17} />Task Progress</h3><Progress data={trends?.chart ?? []} /></div>
             </div>
 
-            <div className="dsb-card" ref={myTasksRef} style={{ scrollMarginTop: 12 }}>
+            <div ref={myTasksRef} style={{ scrollMarginTop: 12, minWidth: 0 }}>
+            {view === 'projects' ? (
+              <div className="dsb-card">
+                <div className="dsb-head">
+                  <h3 style={{ margin: 0, flexWrap: 'wrap' }}><Ic n="folder" />My Projects<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({projectRows.length})</span></h3>
+                  {viewToggle}
+                </div>
+                <div className="dsb-scroll"><table className="dsb-t dsb-pj">
+                  <thead><tr>{['PROJECT', 'PROJECT MANAGER', 'STATUS', 'HEALTH', 'COMPLETION', 'MY TASKS', 'DUE'].map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {projectRows.map(({ p, due, tasks, open, overdue, closed }) => {
+                      const s = stTone(p.status), pct = Math.round(p.completion_pct ?? 0), late = !closed && !!due && due < todayIso
+                      return (
+                        <tr key={p.id} onClick={() => navigate(`/projects/${p.id}`)} title="Open the project">
+                          <td style={{ minWidth: 160, whiteSpace: 'normal' }}><span className="nm">{p.name}</span><span className="sub">{p.code}{p.manager_id === userId && ' · you manage this project'}</span></td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{personName(p.manager_id) || '—'}</td>
+                          <td><span className="pill" style={{ background: s[0], color: s[1] }}>{label(p.status)}</span></td>
+                          <td style={{ whiteSpace: 'nowrap' }}><i className="hd" style={{ background: HEALTH_HEX[p.health] ?? '#9aa6b8' }} />{label(p.health)}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}><span className="pb"><span style={{ width: `${pct}%`, background: pct >= 50 ? '#12a150' : '#1d6bff' }} /></span>{pct}%</td>
+                          <td>
+                            <span className="cnt">
+                              {tasks > 0
+                                ? <button type="button" className="lnk" title={`${open} open of ${tasks} - show these tasks in the list`} onClick={(e) => { e.stopPropagation(); showProjectTasks(p.id) }}>{tasks} task{tasks === 1 ? '' : 's'} ›</button>
+                                : <span style={{ color: 'var(--mut)' }}>—</span>}
+                              {overdue > 0 && <span className="pill" style={{ background: '#fdeaea', color: '#e23b3b' }}>{overdue} overdue</span>}
+                            </span>
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap', color: closed ? '#9aa6b8' : late ? '#e23b3b' : undefined, fontWeight: late ? 600 : 400 }}>{fmt(due)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table></div>
+                {!projectRows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>You are not on any project yet.</div>}
+              </div>
+            ) : (
+            <div className="dsb-card">
               <div className="dsb-head">
                 <h3 style={{ margin: 0, flexWrap: 'wrap' }}><Ic n="cal" />My Tasks{kpi && kpi !== 'total' && <span style={{ fontWeight: 400 }}>— {kpiLabel}</span>}{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({rows.length})</span></h3>
                 <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {viewToggle}
                   <select className="dsb-mine-f" aria-label="Filter by project" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
                     <option value="">All projects</option>
                     {myProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -798,6 +897,8 @@ export default function Dashboard() {
                 </tbody>
               </table></div>
               {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked || kpi || projectFilter || responsibleFilter ? 'No tasks match this filter.' : 'No tasks assigned to you.'}</div>}
+            </div>
+            )}
             </div>
 
 
