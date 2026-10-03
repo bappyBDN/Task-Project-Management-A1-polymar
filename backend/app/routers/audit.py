@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -28,7 +30,43 @@ def list_notifications(user_id: int | None = None, db: Session = Depends(get_db)
     q = db.query(models.Notification)
     if user_id:
         q = q.filter(models.Notification.user_id == user_id)
-    return q.order_by(models.Notification.created_at.desc()).limit(100).all()
+    return _with_links(db, q.order_by(models.Notification.created_at.desc()).limit(100).all())
+
+
+# A task / project code as written in notification texts: "TSK-0012", "PRJ-0003".
+_CODE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-\d+\b")
+
+
+def _with_links(db: Session, rows: list) -> list:
+    """Add where each notification leads, so the page can open it with one click.
+
+    Notifications store only text (no schema change): every task / project one names its
+    code in the title or body, so the first code that is a real task or project decides the
+    link. A task that is hidden while its delete request waits leads to Approvals instead."""
+    found = {n.id: _CODE.findall(f"{n.title} {n.body or ''}") for n in rows}
+    codes = {c for cs in found.values() for c in cs}
+    tasks = {t.code: t for t in db.query(models.Task).filter(models.Task.code.in_(codes)).all()} if codes else {}
+    projects = {p.code: p for p in db.query(models.Project).filter(models.Project.code.in_(codes)).all()} if codes else {}
+
+    out = []
+    for n in rows:
+        item = schemas.NotificationOut.model_validate(n)
+        for code in found[n.id]:
+            if code in tasks:
+                hidden = tasks[code].is_deleted
+                item.link, item.link_label = ("/approvals", "Open approvals") if hidden else (f"/tasks/{tasks[code].id}", "Open task")
+                break
+            if code in projects:
+                item.link, item.link_label = f"/projects/{projects[code].id}", "Open project"
+                break
+        if not item.link:
+            title = n.title.lower()
+            if n.kind == "approval":
+                item.link, item.link_label = "/approvals", "Open approvals"
+            elif n.kind == "meeting" or title.startswith(("decision", "management action", "you are accountable for action")):
+                item.link, item.link_label = "/governance", "Open actions & decisions"
+        out.append(item)
+    return out
 
 
 @router.post("/notifications/{notification_id}/read", response_model=schemas.NotificationOut)

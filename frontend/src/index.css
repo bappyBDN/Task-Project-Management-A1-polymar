@@ -358,6 +358,12 @@ tr.clickable, .clickable { cursor: pointer; }
 .raci-bar-counts { display: flex; gap: 3px; }
 .raci-bar-counts .raci-chip { min-width: 0; height: 18px; padding: 0 5px; font-size: 10px; }
 
+/* notifications that lead to a task / project */
+.notif-row:hover { background: #f7f9fd; }
+.notif-open { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--navy); cursor: pointer; text-align: left; }
+.notif-row:hover .notif-open, .notif-open:focus-visible { text-decoration: underline; }
+.notif-go { font-size: 11px; color: #1d6bff; margin-top: 3px; }
+
 /* rich text: editor + read-only view */
 .rich-text ul, .rich-text ol { margin: 4px 0; padding-left: 22px; }
 .rich-text li { margin: 2px 0; }

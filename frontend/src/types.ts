@@ -320,4 +320,7 @@ export interface Notification {
   kind: string
   is_read: boolean
   created_at: string
+  /** where a click leads (/tasks/12, /projects/3, /approvals ...), worked out by the server */
+  link?: string | null
+  link_label?: string | null
 }

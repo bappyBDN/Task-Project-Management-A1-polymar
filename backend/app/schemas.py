@@ -512,6 +512,10 @@ class NotificationOut(BaseModel):
     kind: str
     is_read: bool
     created_at: datetime
+    # Where a click on the notification goes (/tasks/12, /projects/3, /approvals ...).
+    # Worked out when the list is read (routers/audit.py) - not stored.
+    link: Optional[str] = None
+    link_label: Optional[str] = None
 
 
 # ---------------------------------------------------------------- Dashboards

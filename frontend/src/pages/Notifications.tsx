@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Notification, User } from '../types'
@@ -10,6 +11,7 @@ const KIND_COLORS: Record<string, string> = {
 
 export default function Notifications() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const isAdmin = user?.role === 'admin'
   const [notifs, setNotifs] = useState<Notification[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -42,6 +44,14 @@ export default function Notifications() {
     } catch (e: any) {
       setErr(`Could not mark as read: ${e.message || e}`)
     }
+  }
+
+  // Click a notification: go to its task / project (or Approvals) and mark it read.
+  const open = (n: Notification) => {
+    if (!n.link) return
+    // only my own: an admin browsing someone else's must not mark it read for them
+    if (!n.is_read && n.user_id === user?.id) api.post(`/audit/notifications/${n.id}/read`).catch(() => {})
+    navigate(n.link)
   }
 
   const scan = async () => {
@@ -91,17 +101,25 @@ export default function Notifications() {
           </thead>
           <tbody>
             {notifs.map((n) => (
-              <tr key={n.id} style={{ opacity: n.is_read ? 0.55 : 1 }}>
+              <tr key={n.id} className={n.link ? 'notif-row' : undefined} style={{ opacity: n.is_read ? 0.55 : 1, cursor: n.link ? 'pointer' : undefined }}
+                onClick={() => open(n)} title={n.link ? n.link_label ?? 'Open' : undefined}>
                 <td><span className={`badge ${KIND_COLORS[n.kind] ?? 'gray'}`}>{n.kind}</span></td>
                 <td>
-                  <div className="small" style={{ fontWeight: n.is_read ? 400 : 600 }}>{n.title}</div>
+                  {n.link ? (
+                    // a real button so it also works from the keyboard
+                    <button type="button" className="notif-open" style={{ fontWeight: n.is_read ? 400 : 600 }}
+                      onClick={(e) => { e.stopPropagation(); open(n) }}>{n.title}</button>
+                  ) : (
+                    <div className="small" style={{ fontWeight: n.is_read ? 400 : 600 }}>{n.title}</div>
+                  )}
                   {n.body && <div className="muted" style={{ fontSize: 11 }}>{n.body}</div>}
+                  {n.link && <div className="notif-go">{n.link_label ?? 'Open'} ›</div>}
                 </td>
                 <td className="small">{users.find((u) => u.id === n.user_id)?.name ?? '—'}</td>
                 <td>{n.is_read ? <span className="badge green">Read</span> : <span className="badge gray">Unread</span>}</td>
                 <td className="small muted">{new Date(n.created_at).toLocaleString('en-GB')}</td>
                 <td>
-                  {!n.is_read && <button className="btn sm" onClick={() => markRead(n)}>Mark read</button>}
+                  {!n.is_read && <button className="btn sm" onClick={(e) => { e.stopPropagation(); markRead(n) }}>Mark read</button>}
                 </td>
               </tr>
             ))}
