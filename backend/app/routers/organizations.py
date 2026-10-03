@@ -1,5 +1,3 @@
-import secrets
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func
@@ -8,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas, services
 from app.auth import (
-    INVITE_PREFIX, get_admin_user, get_current_user, is_invited, send_set_password_link, send_signup_invite,
+    create_invited_user, get_admin_user, get_current_user, is_invited, send_set_password_link, send_signup_invite,
 )
 from app.database import get_db
 
@@ -123,13 +121,8 @@ def invite_user(payload: InviteRequest, current_user: models.User = Depends(get_
         return {"user": schemas.UserOut.model_validate(user), "email_sent": False, "already_registered": True}
 
     if user is None:
-        user = models.User(
-            employee_id=f"{INVITE_PREFIX}{secrets.token_hex(5).upper()}",  # placeholder until they sign up
-            name=email, email=email, role="employee",
-        )
-        db.add(user)
         try:
-            db.flush()
+            user = create_invited_user(db, email)
         except IntegrityError:
             db.rollback()  # the same email invited twice at the same moment
             raise HTTPException(409, "This person was just added. Please pick them from the list.")

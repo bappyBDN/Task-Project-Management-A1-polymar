@@ -40,6 +40,8 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
   // typed in with "+ Add" rather than picked from the list
   const isNew = (v: string) => v.trim() !== '' && !v.startsWith('id:')
   const asTyped = (v: string) => v
+  // Reports To typed in: an email (the manager is added and invited) or, as before, an Employee ID
+  const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
   const their = forOther ? 'their' : 'your'
   const they = forOther ? 'they' : 'you'
 
@@ -64,7 +66,8 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
         // typed in rather than picked: added to the lists / looked up by the server
         new_function: isNew(form.function_id) ? form.function_id.trim() : null,
         new_department: isNew(form.department_id) ? form.department_id.trim() : null,
-        reports_to_employee_id: isNew(form.reports_to_id) ? form.reports_to_id.trim() : null,
+        reports_to_employee_id: isNew(form.reports_to_id) && !isEmail(form.reports_to_id) ? form.reports_to_id.trim() : null,
+        reports_to_email: isNew(form.reports_to_id) && isEmail(form.reports_to_id) ? form.reports_to_id.trim() : null,
       })
       const employeeId = form.employee_id.trim()
       setForm(EMPTY)
@@ -110,11 +113,13 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
         </div>
         <div>
           <label>Reports To (manager)</label>
-          <SearchableSelect value={form.reports_to_id} items={items(opts.users)} onChange={(v) => set('reports_to_id', v)} placeholder="Search name, or type manager's Employee ID…" allowCustom customLabel={asTyped} />
+          <SearchableSelect value={form.reports_to_id} items={items(opts.users)} onChange={(v) => set('reports_to_id', v)} placeholder="Search name, or type manager's email…" allowCustom customLabel={asTyped} />
           <div className="small muted" style={{ marginTop: 4 }}>
-            {isNew(form.reports_to_id)
-              ? `Manager's Employee ID: ${form.reports_to_id.trim()}. If they have no account yet, ${they}'ll be linked to them when they join.`
-              : 'Manager not in the list? Type their Employee ID and press Enter.'}
+            {!isNew(form.reports_to_id)
+              ? 'Manager not in the list? Type their email and press Enter - they will get an invitation to sign up.'
+              : isEmail(form.reports_to_id)
+                ? `Manager's email: ${form.reports_to_id.trim()}. If they have no account yet, they will be added and get an email asking them to sign up.`
+                : `Manager's Employee ID: ${form.reports_to_id.trim()}. If they have no account yet, ${they}'ll be linked to them when they join. Or type their email to invite them.`}
           </div>
         </div>
       </div>

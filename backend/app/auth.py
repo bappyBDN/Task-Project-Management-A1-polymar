@@ -154,6 +154,17 @@ def is_invited(user: models.User) -> bool:
     return bool(user) and not user.hashed_password and (user.employee_id or "").startswith(INVITE_PREFIX)
 
 
+def create_invited_user(db: Session, email: str) -> models.User:
+    """Placeholder account for someone known only by email (flushed, not committed)."""
+    user = User(
+        employee_id=f"{INVITE_PREFIX}{secrets.token_hex(5).upper()}",  # until they sign up
+        name=email, email=email, role="employee",
+    )
+    db.add(user)
+    db.flush()
+    return user
+
+
 def send_signup_invite(user: models.User, inviter_name: str) -> bool:
     link = f"{settings.frontend_url}/signup?email={quote(user.email)}"
     sent = email_service.send_signup_invite_email(to_email=user.email, inviter_name=inviter_name, signup_link=link)
@@ -200,6 +211,9 @@ class SignupRequest(BaseModel):
     new_function: str | None = None
     new_department: str | None = None
     reports_to_employee_id: str | None = None
+    # ...or the manager's email: linked if they have an account, otherwise they are
+    # added by that email and get an invitation to sign up.
+    reports_to_email: EmailStr | None = None
 
 
 @router.get("/signup-options")
@@ -210,8 +224,11 @@ def signup_options(db: Session = Depends(get_db)):
         "functions": [{"id": f.id, "name": f.name} for f in db.query(models.Function).order_by(models.Function.name)],
         "departments": [{"id": d.id, "name": d.name, "function_id": d.function_id}
                         for d in db.query(models.Department).order_by(models.Department.name)],
+        # not people added by email who haven't signed up: their "name" is still their email,
+        # and this list is public
         "users": [{"id": u.id, "name": u.name}
-                  for u in db.query(User).filter(User.is_active.is_(True)).order_by(User.name)],
+                  for u in db.query(User).filter(User.is_active.is_(True)).order_by(User.name)
+                  if not is_invited(u)],
     }
 
 
@@ -271,6 +288,26 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
         else:
             pending_manager = manager_emp
 
+    # Manager given by email: link to their account, or add them by email and invite them.
+    manager_email = str(request.reports_to_email or "").strip()
+    manager_to_invite = None
+    if reports_to_id is None and not manager_emp and manager_email:
+        if manager_email.lower() == email.lower():
+            raise HTTPException(400, "Your manager's email can't be your own.")
+        if len(manager_email) > 120:
+            raise HTTPException(400, "Your manager's email is too long.")
+        manager = db.query(User).filter(func.lower(User.email) == manager_email.lower()).first()
+        if manager is None:
+            try:
+                manager = create_invited_user(db, manager_email)
+            except IntegrityError:
+                db.rollback()
+                raise HTTPException(409, "Could not add your manager. Please try again.")
+            services.audit(db, name, "user", manager.id, "invited", new_value=manager_email)
+        if is_invited(manager):
+            manager_to_invite = manager
+        reports_to_id = manager.id
+
     details = dict(
         employee_id=employee_id,
         name=name,
@@ -303,6 +340,11 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     db.refresh(user)
     send_set_password_link(db, user)
     message = "Account created. Check your email for a link to set your password."
+    if manager_to_invite is not None:
+        if send_signup_invite(manager_to_invite, name):
+            message += f" An invitation to sign up was sent to your manager ({manager_to_invite.email})."
+        else:
+            message += f" Your manager ({manager_to_invite.email}) was added, but the invitation email could not be sent - please ask them to sign up."
     if pending_manager:
         message += f" Your manager ({pending_manager}) has no account yet - you'll be linked to them when they join."
     return {"message": message}
