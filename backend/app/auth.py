@@ -3,6 +3,7 @@ import secrets
 import threading
 import time
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr
@@ -108,6 +109,11 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Invalid credentials",
         )
 
+    if is_invited(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You have been invited but have not signed up yet. Please use Sign Up with this email.",
+        )
     if not user.hashed_password:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -134,6 +140,27 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             "role": user.role,
         },
     }
+
+# ---------------------------------------------------------------- invited by email only
+# "+ Add new user" asks only for an email. The person is saved as a normal `users` row
+# (no schema change) with a placeholder Employee ID and their email as the name, so they
+# can be assigned at once; Sign Up with that email then completes the SAME row, keeping
+# everything already assigned to them.
+INVITE_PREFIX = "INVITED-"
+
+
+def is_invited(user: models.User) -> bool:
+    """Added by email, has not signed up yet."""
+    return bool(user) and not user.hashed_password and (user.employee_id or "").startswith(INVITE_PREFIX)
+
+
+def send_signup_invite(user: models.User, inviter_name: str) -> bool:
+    link = f"{settings.frontend_url}/signup?email={quote(user.email)}"
+    sent = email_service.send_signup_invite_email(to_email=user.email, inviter_name=inviter_name, signup_link=link)
+    if not sent:
+        print(f"[users] Invitation email NOT sent to {user.email}. Sign-up link: {link}")
+    return sent
+
 
 # ---------------------------------------------------------------- new user / sign-up
 def send_set_password_link(db: Session, user: models.User):
@@ -195,8 +222,12 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     email = str(request.email).strip()
     if not employee_id or not name:
         raise HTTPException(400, "Name, email and employee id are required")
-    if db.query(User.id).filter(func.lower(User.email) == email.lower()).first():
+    # Someone added by email only ("+ Add new user") finishes that same account here.
+    invited = db.query(User).filter(func.lower(User.email) == email.lower()).first()
+    if invited is not None and not is_invited(invited):
         raise HTTPException(409, "An account with this email already exists. Please log in or use Forgot Password.")
+    if employee_id.upper().startswith(INVITE_PREFIX):
+        raise HTTPException(400, "Please enter your real Employee ID.")
     if db.query(User.id).filter(func.lower(User.employee_id) == employee_id.lower()).first():
         raise HTTPException(409, "An account with this Employee ID already exists. Please log in or use Forgot Password.")
 
@@ -240,19 +271,26 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
         else:
             pending_manager = manager_emp
 
-    user = User(
+    details = dict(
         employee_id=employee_id,
         name=name,
-        email=email,
         designation=(request.designation or "").strip() or None,
         company_id=request.company_id,
         function_id=function_id,
         department_id=department_id,
         reports_to_id=reports_to_id,
         pending_manager_employee_id=pending_manager,
-        role="employee",
     )
-    db.add(user)
+    if invited is not None:
+        if reports_to_id == invited.id:
+            raise HTTPException(400, "You cannot report to yourself.")
+        user = invited  # same row: tasks / projects already given to them stay theirs
+        for k, v in details.items():
+            setattr(user, k, v)
+        user.is_active = True
+    else:
+        user = User(email=email, role="employee", **details)
+        db.add(user)
     try:
         db.flush()
     except IntegrityError:
@@ -274,7 +312,10 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
 def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == request.email).first()
 
-    if user:
+    if user and is_invited(user):
+        # not signed up yet: the invitation again, not a password link
+        send_signup_invite(user, "Your colleague")
+    elif user:
         token = secrets.token_urlsafe(32)
         user.reset_token = token
         user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)

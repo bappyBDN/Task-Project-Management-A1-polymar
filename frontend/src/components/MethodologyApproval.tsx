@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { User } from '../types'
 import { label } from '../constants'
-import SignupForm from './SignupForm'
+import InviteUserModal from './InviteUserModal'
 import { fmtDateTime } from './CommentsPanel'
 
 // Methodology approval on the project page (server: app/routers/methodology.py).
@@ -298,16 +298,11 @@ function AssignForm({ slot, data, users, reloadUsers, onDone }: {
 
   const pool = (added && !users.some((u) => u.id === added.id) ? [...users, added] : users).filter((u) => u.is_active !== false) // the users API may omit is_active
 
-  const employeeAdded = async (message: string, employeeId: string) => {
+  const employeeAdded = (u: User) => {
     setAddingEmployee(false); setErr('')
-    try {
-      const list = await reloadUsers()
-      const u = list.find((x) => x.employee_id.trim().toLowerCase() === employeeId.toLowerCase())
-      if (u) { setAdded(u); setUserId(String(u.id)) }
-      setInfo(`${message}${u ? ` ${u.name} is selected - press Save to make them the ${slot.label} approver.` : ''}`)
-    } catch {
-      setInfo(`${message} Pick them from the list.`)
-    }
+    setAdded(u); setUserId(String(u.id))
+    setInfo(`${u.name} is selected - press Save to make them the ${slot.label} approver.`)
+    reloadUsers().catch(() => {})
   }
 
   const save = async (id: string | null) => {
@@ -338,17 +333,7 @@ function AssignForm({ slot, data, users, reloadUsers, onDone }: {
         <button className="btn sm primary" onClick={() => save(userId)} disabled={busy || !userId || userId === String(slot.approver_id ?? '')}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
 
-      {addingEmployee && (
-        <div className="modal-backdrop" onClick={() => setAddingEmployee(false)}>
-          <div className="modal" style={{ maxWidth: 620, maxHeight: '92vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <h2>Add New Employee</h2>
-            <div className="small muted mb">
-              Same as the Sign Up form: they get an email with a link to set their password, as an Employee (an admin can change the role).
-            </div>
-            <SignupForm forOther submitLabel="Create Employee" onSuccess={employeeAdded} onCancel={() => setAddingEmployee(false)} />
-          </div>
-        </div>
-      )}
+      {addingEmployee && <InviteUserModal onClose={() => setAddingEmployee(false)} onInvited={employeeAdded} />}
     </div>
   )
 }

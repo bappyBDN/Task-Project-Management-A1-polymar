@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import InviteUserModal from './InviteUserModal'
 import { RichTextEditor } from './RichText'
 import SbuSelect from './SbuSelect'
 import ProjectForm from './ProjectForm'
@@ -70,7 +71,7 @@ const initialForm = (task?: Task) =>
     ? Object.fromEntries(Object.entries({ ...EMPTY, ...task }).map(([k, v]) => [k, v ?? '']))
     : { ...EMPTY }
 
-export default function TaskForm({ projects, users, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockApprovers = false }: Props) {
+export default function TaskForm({ projects, users: listedUsers, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockApprovers = false }: Props) {
   const { user } = useAuth()
   const [form, setForm] = useState<any>(() => initialForm(task))
   const [error, setError] = useState('')
@@ -78,7 +79,11 @@ export default function TaskForm({ projects, users, companies = [], functions = 
 
   // inline create modals
   const [showProjectModal, setShowProjectModal] = useState(false)
-  const [showUserModal, setShowUserModal] = useState(false)
+  // which person field "+ Add new user" was opened from (null = closed)
+  const [showUserModal, setShowUserModal] = useState<'responsible_id' | 'accountable_id' | 'reviewer_id' | null>(null)
+  // people just added by email may not be in the parent's list yet
+  const [invited, setInvited] = useState<User[]>([])
+  const users = [...listedUsers, ...invited.filter((u) => !listedUsers.some((x) => x.id === u.id))]
   const [showOrgModal, setShowOrgModal] = useState<'company' | 'function' | 'department' | null>(null)
 
   // dynamic list options
@@ -243,12 +248,13 @@ export default function TaskForm({ projects, users, companies = [], functions = 
     onRefresh?.() // refresh parent lists WITHOUT closing the task form
   }
   const createdUser = async (u: User) => {
-    set('responsible_id', String(u.id))
-    if (!form.accountable_id) {
+    setInvited((l) => [...l.filter((x) => x.id !== u.id), u])
+    if (showUserModal) set(showUserModal, String(u.id))
+    if (showUserModal === 'responsible_id' && !form.accountable_id) {
       const managerId = u.reports_to_id != null ? String(u.reports_to_id) : ''
       if (managerId) set('accountable_id', managerId)
     }
-    setShowUserModal(false)
+    setShowUserModal(null)
     onRefresh?.() // refresh parent lists WITHOUT closing the task form
   }
 
@@ -426,7 +432,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
               items={userItems}
               onChange={onResponsibleChange}
               placeholder="Search user…"
-              onAddNew={() => setShowUserModal(true)}
+              onAddNew={() => setShowUserModal('responsible_id')}
               addLabel="new user"
               onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
             />
@@ -438,7 +444,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
               items={userItems}
               onChange={(v) => set('accountable_id', v)}
               placeholder="Search user…"
-              onAddNew={() => setShowUserModal(true)}
+              onAddNew={() => setShowUserModal('accountable_id')}
               addLabel="new user"
               onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
             />
@@ -453,7 +459,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
               items={userItems}
               onChange={(v) => set('reviewer_id', v)}
               placeholder="Search user…"
-              onAddNew={() => setShowUserModal(true)}
+              onAddNew={() => setShowUserModal('reviewer_id')}
               addLabel="new user"
               onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
             />
@@ -493,7 +499,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
           onSaved={createdProject}
         />
       )}
-      {showUserModal && <UserModal onClose={() => setShowUserModal(false)} onCreated={createdUser} isAdmin={user?.role === 'admin'} />}
+      {showUserModal && <InviteUserModal onClose={() => setShowUserModal(null)} onInvited={createdUser} />}
       {showOrgModal && <OrgModal kind={showOrgModal} onClose={() => setShowOrgModal(null)} onCreated={(o) => createdOrg(showOrgModal, o)} />}
     </div>
   )
@@ -532,49 +538,6 @@ function OrgModal({ kind, onClose, onCreated }: { kind: 'company' | 'function' |
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Create'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function UserModal({ onClose, onCreated, isAdmin }: { onClose: () => void; onCreated: (u: User) => void; isAdmin: boolean }) {
-  const [form, setForm] = useState({ employee_id: '', name: '', email: '', designation: '', role: 'employee' })
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
-
-  const submit = async () => {
-    if (!form.name.trim() || !form.email.trim() || !form.employee_id.trim()) { setErr('Employee ID, name and email are required'); return }
-    setBusy(true)
-    setErr('')
-    try {
-      const u = await api.post<User>('/organizations/users', form)
-      onCreated(u)
-    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
-  }
-
-  return (
-    <div className="modal-backdrop">
-      <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
-        <h2>New User</h2>
-        {!isAdmin && <div className="small muted mb" style={{ marginBottom: 12 }}>Only admins can create users.</div>}
-        {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
-        <div className="form-row">
-          <div><label>Employee ID *</label><input value={form.employee_id} onChange={(e) => set('employee_id', e.target.value)} autoFocus /></div>
-          <div><label>Name *</label><input value={form.name} onChange={(e) => set('name', e.target.value)} /></div>
-        </div>
-        <div className="form-row">
-          <div><label>Email *</label><input value={form.email} onChange={(e) => set('email', e.target.value)} /></div>
-          <div><label>Designation</label><input value={form.designation} onChange={(e) => set('designation', e.target.value)} /></div>
-        </div>
-        <label>Role</label>
-        <select value={form.role} onChange={(e) => set('role', e.target.value)}>
-          {['employee', 'team_lead', 'pm', 'pmo', 'reviewer', 'auditor', 'business_head', 'functional_head', 'sponsor', 'group_executive', 'admin'].map((r) => <option key={r} value={r}>{label(r)}</option>)}
-        </select>
-        <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy || !isAdmin}>{busy ? 'Saving…' : 'Create User'}</button>
         </div>
       </div>
     </div>

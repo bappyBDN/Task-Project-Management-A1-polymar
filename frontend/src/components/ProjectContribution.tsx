@@ -3,7 +3,7 @@ import { api } from '../api'
 import type { Project, ProjectAssociate, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
-import SignupForm from './SignupForm'
+import InviteUserModal from './InviteUserModal'
 
 // Who contributes to a project, and how much - shown as cards.
 // Task work is counted from the tasks: each person's share is the part of the
@@ -342,18 +342,13 @@ function AssociateModal({ projectId, existing, users, reloadUsers, onClose, onSa
   const person = users.find((u) => String(u.id) === userId) ?? (added && String(added.id) === userId ? added : undefined)
   const choices = added && !users.some((u) => u.id === added.id) ? [...users, added] : users
 
-  // new employee created with the sign-up form: pick them here right away
-  const employeeAdded = async (message: string, employeeId: string) => {
+  // new person added by email: pick them here right away
+  const employeeAdded = (u: User) => {
     setAddingEmployee(false)
     setErr('')
-    try {
-      const list = await reloadUsers()
-      const u = list.find((x) => x.employee_id.trim().toLowerCase() === employeeId.toLowerCase())
-      if (u) { setAdded(u); setUserId(String(u.id)) }
-      setInfo(`${message}${u ? ` ${u.name} is selected below - now describe their contribution.` : ''}`)
-    } catch {
-      setInfo(`${message} Pick them from the list.`)
-    }
+    setAdded(u); setUserId(String(u.id))
+    setInfo(`${u.name} is selected below - now describe their contribution.`)
+    reloadUsers().catch(() => {})
   }
 
   const save = async () => {
@@ -399,17 +394,7 @@ function AssociateModal({ projectId, existing, users, reloadUsers, onClose, onSa
         </div>
       </div>
 
-      {addingEmployee && (
-        <div className="modal-backdrop" onClick={(e) => { e.stopPropagation(); setAddingEmployee(false) }}>
-          <div className="modal" style={{ maxWidth: 620, maxHeight: '92vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <h2>Add New Employee</h2>
-            <div className="small muted mb">
-              Same as the Sign Up form: they get an email with a link to set their password, as an Employee (an admin can change the role).
-            </div>
-            <SignupForm forOther submitLabel="Create Employee" onSuccess={employeeAdded} onCancel={() => setAddingEmployee(false)} />
-          </div>
-        </div>
-      )}
+      {addingEmployee && <InviteUserModal onClose={() => setAddingEmployee(false)} onInvited={employeeAdded} />}
     </div>
   )
 }

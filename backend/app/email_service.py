@@ -307,6 +307,63 @@ def send_welcome_set_password_email(
     return _send([to_email], subject, html_body, text_body=text_body)
 
 
+# ---------------------------------------------------------------- Invitation to sign up
+def send_signup_invite_email(to_email: str, inviter_name: str, signup_link: str) -> bool:
+    """Sent when someone adds a person by email only ("+ Add new user"). The person
+    finishes their own account on the Sign Up page; the link carries their email."""
+    subject = "You have been added to Anwar Task Manager — please sign up now"
+
+    button_html = (
+        f'<p style="text-align:center;margin:24px 0;">'
+        f'<a href="{html.escape(signup_link)}" '
+        f'style="background:#0b1f3a;color:#fff;padding:12px 22px;border-radius:6px;'
+        f'text-decoration:none;font-weight:600;display:inline-block;">'
+        f'Sign Up Now</a></p>'
+    )
+    link_fallback = (
+        f'<p style="color:#666;font-size:12px;margin:16px 0 4px;">If the button does not work, copy this link:</p>'
+        f'<p style="word-break:break-all;font-size:12px;">'
+        f'<a href="{html.escape(signup_link)}" style="color:#0056b3;">{html.escape(signup_link)}</a></p>'
+    )
+
+    html_body = f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;">
+      <div style="background:#0b1f3a;padding:16px 20px;border-radius:8px 8px 0 0;">
+        <h2 style="color:#fff;margin:0;font-size:18px;">You have been added to Anwar Task Manager</h2>
+      </div>
+      <div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+        <p>Hello,</p>
+        <p>
+          <b>{html.escape(inviter_name)}</b> has added you to the
+          <b>Anwar Group Task &amp; Project Management System</b> and may already have
+          assigned work to you.
+        </p>
+        <p style="background:#fdf3d7;border-left:4px solid #e0a800;padding:10px 14px;
+                  border-radius:4px;font-size:13px;margin:14px 0;">
+          <b>Please sign up immediately</b> with this email address
+          (<b>{html.escape(to_email)}</b>) so you can see your tasks and projects.
+        </p>
+        {button_html}
+        {link_fallback}
+        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+        <p style="color:#888;font-size:12px;">
+          If you were not expecting this email, you can safely ignore it.
+        </p>
+      </div>
+    </div>
+    """
+
+    text_body = (
+        f"Hello,\n\n"
+        f"{inviter_name} has added you to the Anwar Group Task & Project Management System.\n"
+        f"Please sign up immediately with this email address ({to_email}):\n"
+        f"{signup_link}\n\n"
+        f"If you were not expecting this, ignore this email.\n"
+    )
+
+    return _send([to_email], subject, html_body, text_body=text_body)
+
+
 # ---------------------------------------------------------------- Meeting invitation
 MEETING_TZ_OFFSET_HOURS = 6       # Bangladesh Standard Time (UTC+6, no daylight saving)
 MEETING_TZ_LABEL = "Bangladesh Time"

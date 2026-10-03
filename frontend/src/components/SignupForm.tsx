@@ -24,7 +24,8 @@ interface Props {
 }
 
 export default function SignupForm({ onSuccess, forOther = false, submitLabel = 'Sign Up', onCancel }: Props) {
-  const [form, setForm] = useState(EMPTY)
+  // an invitation email links to /signup?email=... : start with that email filled in
+  const [form, setForm] = useState(() => (forOther ? EMPTY : { ...EMPTY, email: new URLSearchParams(window.location.search).get('email') ?? '' }))
   const [opts, setOpts] = useState<SignupOptions>({ companies: [], functions: [], departments: [], users: [] })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

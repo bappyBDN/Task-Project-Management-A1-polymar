@@ -1,8 +1,15 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models, schemas, services
-from app.auth import get_admin_user, get_current_user, send_set_password_link
+from app.auth import (
+    INVITE_PREFIX, get_admin_user, get_current_user, is_invited, send_set_password_link, send_signup_invite,
+)
 from app.database import get_db
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -91,6 +98,47 @@ def create_user(
         send_set_password_link(db, user)
 
     return user
+
+
+class InviteRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/users/invite")
+def invite_user(payload: InviteRequest, current_user: models.User = Depends(get_current_user),
+                db: Session = Depends(get_db)):
+    """"+ Add new user" with only an email (any signed-in user).
+
+    Saves the person as a user right away so they can be assigned, and emails them a
+    link to the Sign Up page; signing up with that email completes this same account
+    (see auth.signup). Uses the existing users table only - no schema change.
+    An email that already has an account is simply returned, nothing is sent."""
+    email = str(payload.email).strip()
+    if len(email) > 120:
+        raise HTTPException(400, "This email address is too long.")
+    user = db.query(models.User).filter(func.lower(models.User.email) == email.lower()).first()
+    if user is not None and not is_invited(user):
+        if not user.is_active:
+            raise HTTPException(409, "This person's account is deactivated. Ask an admin to activate it.")
+        return {"user": schemas.UserOut.model_validate(user), "email_sent": False, "already_registered": True}
+
+    if user is None:
+        user = models.User(
+            employee_id=f"{INVITE_PREFIX}{secrets.token_hex(5).upper()}",  # placeholder until they sign up
+            name=email, email=email, role="employee",
+        )
+        db.add(user)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()  # the same email invited twice at the same moment
+            raise HTTPException(409, "This person was just added. Please pick them from the list.")
+        services.audit(db, current_user.name, "user", user.id, "invited", new_value=email)
+        db.commit()
+        db.refresh(user)
+
+    sent = send_signup_invite(user, current_user.name)
+    return {"user": schemas.UserOut.model_validate(user), "email_sent": sent, "already_registered": False}
 
 
 @router.patch("/users/{user_id}", response_model=schemas.UserOut)

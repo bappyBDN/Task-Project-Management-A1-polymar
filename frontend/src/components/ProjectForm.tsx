@@ -5,6 +5,7 @@ import { METHODOLOGIES, PROJECT_STATUSES, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
 import { RichTextEditor } from './RichText'
 import SbuSelect from './SbuSelect'
+import InviteUserModal from './InviteUserModal'
 
 /**
  * "New Project" form, shared by the Projects page (+ Add Project) and the Task
@@ -70,7 +71,7 @@ export function errText(e: any): string {
 /** "Capital Project" -> "capital_project", the same style as the built-in values. */
 const toKey = (v: string) => v.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 
-export default function ProjectForm({ companies, users, types, onClose, onSaved, withTasks = false, project, limited = false }: {
+export default function ProjectForm({ companies, users: listedUsers, types, onClose, onSaved, withTasks = false, project, limited = false }: {
   companies: Company[]
   users: User[]
   types: string[] // project types already used by existing projects
@@ -94,6 +95,10 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [newTypes, setNewTypes] = useState<string[]>([])
+  // "+ Add new user" on Project Manager: people added by email aren't in the parent's list yet
+  const [inviting, setInviting] = useState(false)
+  const [invited, setInvited] = useState<User[]>([])
+  const users = [...listedUsers, ...invited.filter((u) => !listedUsers.some((x) => x.id === u.id))]
   const set = (k: keyof typeof EMPTY_FORM, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
   // ---- tasks added together with the project
@@ -303,7 +308,12 @@ export default function ProjectForm({ companies, users, types, onClose, onSaved,
           </div>
           <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
             <label>Project Manager *</label>
-            <SearchableSelect value={form.manager_id} items={users.map((u) => ({ value: String(u.id), label: u.name }))} onChange={(v) => set('manager_id', v)} placeholder="Search person…" />
+            <SearchableSelect value={form.manager_id} items={users.map((u) => ({ value: String(u.id), label: u.name }))} onChange={(v) => set('manager_id', v)} placeholder="Search person…"
+              onAddNew={() => setInviting(true)} addLabel="new user" />
+            {inviting && (
+              <InviteUserModal onClose={() => setInviting(false)}
+                onInvited={(u) => { setInvited((l) => [...l.filter((x) => x.id !== u.id), u]); set('manager_id', String(u.id)); setInviting(false) }} />
+            )}
           </fieldset>
         </div>
 
