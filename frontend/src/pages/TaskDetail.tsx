@@ -31,6 +31,7 @@ export default function TaskDetail() {
   const [successMsg, setSuccessMsg] = useState('')
   const [actionErr, setActionErr] = useState('')
   const [cooldown, setCooldown] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [loadErr, setLoadErr] = useState('')
   const isPrivileged = useIsPrivileged(user?.role)
 
@@ -77,8 +78,37 @@ export default function TaskDetail() {
 
   const isMine = user?.id === task.responsible_id || user?.id === task.accountable_id
   // Admin / PMO edit everything; the Responsible / Accountable person edits the task details (limited).
-  const isAccountable = user?.id === task.accountable_id
+  // The Responsible person also sets the task's people (Responsible, Accountable, Reviewer).
+  const isResponsible = user?.id === task.responsible_id
   const canEdit = isPrivileged || isMine
+
+  // An admin or the project's Manager deletes permanently. Anyone else sends a delete request:
+  // the task is hidden and the project's Manager restores it or deletes it permanently.
+  const isProjectManager = !!user && !!proj?.manager_id && proj.manager_id === user.id
+  const deletesNow = user?.role === 'admin' || isProjectManager
+  const canDelete = canEdit || isProjectManager
+  const removeTask = async () => {
+    if (deleting) return
+    let reason = ''
+    if (deletesNow) {
+      if (!confirm(`Delete task ${task.code} — "${task.title}"?\n\nThis permanently removes the task and its progress history. It cannot be undone.`)) return
+    } else {
+      const decider = users.find((u) => u.id === proj?.manager_id)?.name
+      const answer = prompt(`Delete task ${task.code} — "${task.title}"?\n\nThe task will be hidden and sent to ${decider ? `${decider} (Project Manager)` : 'an admin'}, who will restore it or delete it permanently.\n\nReason for deleting:`, '')
+      if (answer === null) return
+      reason = answer.trim()
+    }
+    setDeleting(true)
+    setActionErr('')
+    try {
+      const res = await api.del<{ status?: string } | undefined>(`/tasks/${task.id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`)
+      if (res?.status === 'pending_approval') alert('Delete request sent. You can follow it on the Approvals page.')
+      navigate('/tasks')
+    } catch (e: any) {
+      setActionErr(e.message || 'Could not delete the task. Please try again.')
+      setDeleting(false)
+    }
+  }
 
   const requestApproval = async (type: string, revisedDate?: string) => {
     if (cooldown) return // Prevent double clicks during cooldown
@@ -130,6 +160,7 @@ export default function TaskDetail() {
             {cooldown ? 'Submitted...' : 'Submit for Completion'}
           </button>
           {canEdit && <button className="btn sm" onClick={() => setShowEdit(true)}>✎ Edit Task</button>}
+          {canDelete && <button className="btn sm danger" onClick={removeTask} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete Task'}</button>}
         </div>
       </div>
 
@@ -247,7 +278,7 @@ export default function TaskDetail() {
           departments={departments}
           task={task}
           limited={!isPrivileged}
-          lockResponsible={!isPrivileged && !isAccountable}
+          lockApprovers={!isPrivileged && !isResponsible}
           onClose={() => setShowEdit(false)}
           onSaved={() => { setShowEdit(false); load() }}
         />

@@ -55,7 +55,8 @@ export default function ApprovalDetail() {
       .then((a) => {
         setApproval(a)
         if (a.entity_type === 'task') {
-          api.get<Task>(`/tasks/${a.entity_id}`).then(setTask).catch(() => setTask(null))
+          // include_deleted: a task waiting for a delete decision is hidden everywhere else
+          api.get<Task>(`/tasks/${a.entity_id}?include_deleted=true`).then(setTask).catch(() => setTask(null))
           api.get<DelayWithDate[]>(`/delays?task_id=${a.entity_id}`).then(setDelays).catch(() => setDelays([]))
           api.get<ProgressUpdate[]>(`/tasks/${a.entity_id}/progress`).then(setProgress).catch(() => setProgress([]))
         } else if (a.entity_type === 'project') {
@@ -84,6 +85,9 @@ export default function ApprovalDetail() {
   if (!approval) return <div className="empty">Loading…</div>
 
   const isRevision = approval.approval_type === 'revised_date'
+  // Delete request: "approved" deletes the task permanently, "rejected" restores it.
+  const isDeletion = approval.approval_type === 'deletion'
+  const outcome = (s: string) => (isDeletion && s !== 'pending' ? (s === 'approved' ? 'Deleted permanently' : 'Restored') : label(s))
 
   // The delay record that belongs to this revision request: the one with a
   // proposed date saved closest before the request (same click saves both).
@@ -102,18 +106,20 @@ export default function ApprovalDetail() {
   const taskProject = task ? projects.find((p) => p.id === task.project_id) : undefined
 
   const decide = async (status: 'approved' | 'rejected') => {
-    if (status === 'rejected' && !comment.trim()) {
+    if (status === 'rejected' && !isDeletion && !comment.trim()) {
       setMsg({ ok: false, text: 'Please write a reason before rejecting.' })
       return
     }
+    if (isDeletion && status === 'approved' && !confirm('Delete this task permanently? It cannot be undone.')) return
     setBusy(true)
     setMsg(null)
     try {
       await api.post(`/approvals/${approval.id}/decision`, {
         status,
-        reason: comment.trim() || (status === 'approved' ? 'Approved' : 'Rejected'),
+        reason: comment.trim() || (isDeletion ? (status === 'approved' ? 'Deleted permanently' : 'Restored') : status === 'approved' ? 'Approved' : 'Rejected'),
       })
-      setMsg({ ok: true, text: status === 'approved' ? 'Approved.' : 'Rejected.' })
+      setMsg({ ok: true, text: isDeletion ? (status === 'approved' ? 'Task deleted permanently.' : 'Task restored.') : status === 'approved' ? 'Approved.' : 'Rejected.' })
+      if (isDeletion && status === 'approved') setTask(null)
       setComment('')
       load()
     } catch (e: any) {
@@ -131,7 +137,7 @@ export default function ApprovalDetail() {
           <h1>{label(approval.approval_type)} request</h1>
           <div className="crumb">
             Approval #{approval.id} · {task ? `${task.code} — ${task.title}` : project ? `${project.code} — ${project.name}` : `${approval.entity_type} #${approval.entity_id}`}
-            {' · '}<span className={`badge ${statusBadge(approval.status)}`}>{label(approval.status)}</span>
+            {' · '}<span className={`badge ${statusBadge(approval.status)}`}>{outcome(approval.status)}</span>
           </div>
         </div>
       </div>
@@ -147,7 +153,7 @@ export default function ApprovalDetail() {
             <div className="section-title" style={{ marginTop: 0 }}>Request</div>
             <Grid>
               <Field name="Type">{label(approval.approval_type)}</Field>
-              <Field name="Status"><span className={`badge ${statusBadge(approval.status)}`}>{label(approval.status)}</span></Field>
+              <Field name="Status"><span className={`badge ${statusBadge(approval.status)}`}>{outcome(approval.status)}</span></Field>
               <Field name="Requested By">{nameOf(approval.requested_by_id)}</Field>
               <Field name="Approver">{nameOf(approval.approver_id)}</Field>
               <Field name="Requested On">{fmtDate(approval.created_at?.slice(0, 10))}</Field>
@@ -205,7 +211,9 @@ export default function ApprovalDetail() {
             <div className="card mt">
               <div className="spread">
                 <div className="section-title" style={{ marginTop: 0 }}>Task</div>
-                <Link to={`/tasks/${task.id}`} className="small">Open task page →</Link>
+                {isDeletion && approval.status === 'pending'
+                  ? <span className="badge red">Hidden — waiting for your decision</span>
+                  : <Link to={`/tasks/${task.id}`} className="small">Open task page →</Link>}
               </div>
               <Grid>
                 <Field name="Code">{task.code}</Field>
@@ -262,17 +270,24 @@ export default function ApprovalDetail() {
             <div className="section-title" style={{ marginTop: 0 }}>Decision</div>
             {approval.status !== 'pending' ? (
               <div className="small">
-                This request was <span className={`badge ${statusBadge(approval.status)}`}>{label(approval.status)}</span>
+                {isDeletion ? 'This task was' : 'This request was'} <span className={`badge ${statusBadge(approval.status)}`}>{outcome(approval.status)}</span>
                 {approval.decided_at ? ` on ${fmtDate(approval.decided_at.slice(0, 10))}` : ''}.
               </div>
             ) : approval.can_decide ? (
               <>
-                <label style={{ marginTop: 0 }}>Comment {`(required to reject)`}</label>
+                <label style={{ marginTop: 0 }}>Comment {isDeletion ? '(optional)' : '(required to reject)'}</label>
                 <textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write your decision note…" disabled={busy} />
-                <div className="row" style={{ marginTop: 12 }}>
-                  <button className="btn primary" disabled={busy} onClick={() => decide('approved')}>Approve</button>
-                  <button className="btn danger" disabled={busy} onClick={() => decide('rejected')}>Reject</button>
-                </div>
+                {isDeletion ? (
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <button className="btn primary" disabled={busy} onClick={() => decide('rejected')}>Restore task</button>
+                    <button className="btn danger" disabled={busy} onClick={() => decide('approved')}>Delete permanently</button>
+                  </div>
+                ) : (
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <button className="btn primary" disabled={busy} onClick={() => decide('approved')}>Approve</button>
+                    <button className="btn danger" disabled={busy} onClick={() => decide('rejected')}>Reject</button>
+                  </div>
+                )}
               </>
             ) : (
               <div className="small muted">Awaiting decision from {nameOf(approval.approver_id)}.</div>

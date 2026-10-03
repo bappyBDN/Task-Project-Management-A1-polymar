@@ -18,7 +18,8 @@ def individual_kpi(user_id: int, db: Session = Depends(get_db)):
     today = date.today()
     base = db.query(models.Task).filter(
         models.Task.is_deleted.is_(False),
-        (models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id),
+        (models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id)
+        | (models.Task.reviewer_id == user_id),
     )
     total = base.count()
     open_tasks = base.filter(models.Task.status.in_(OPEN_STATUSES)).count()
@@ -186,7 +187,8 @@ def individual_trends(user_id: int, days: int = 7, db: Session = Depends(get_db)
     today = date.today()
     tasks = db.query(models.Task).filter(
         models.Task.is_deleted.is_(False),
-        (models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id),
+        (models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id)
+        | (models.Task.reviewer_id == user_id),
     ).all()
 
     upd_by_day: dict[str, set] = {}

@@ -35,20 +35,26 @@ def list_tasks(
     project_id: int | None = None,
     responsible_id: int | None = None,
     accountable_id: int | None = None,
+    reviewer_id: int | None = None,
     status: str | None = None,
     priority: str | None = None,
     health: str | None = None,
     overdue: bool | None = None,
     blocker: bool | None = None,
+    include_deleted: bool = False,  # also tasks waiting for a delete decision (Approvals page names them)
     db: Session = Depends(get_db),
 ):
-    q = db.query(models.Task).filter(models.Task.is_deleted.is_(False))
+    q = db.query(models.Task)
+    if not include_deleted:
+        q = q.filter(models.Task.is_deleted.is_(False))
     if project_id:
         q = q.filter(models.Task.project_id == project_id)
     if responsible_id:
         q = q.filter(models.Task.responsible_id == responsible_id)
     if accountable_id:
         q = q.filter(models.Task.accountable_id == accountable_id)
+    if reviewer_id:
+        q = q.filter(models.Task.reviewer_id == reviewer_id)
     if status:
         q = q.filter(models.Task.status == status)
     if priority:
@@ -111,9 +117,9 @@ def create_task(payload: schemas.TaskBase, db: Session = Depends(get_db)):
 
 
 @router.get("/{task_id}", response_model=schemas.TaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)):
+def get_task(task_id: int, include_deleted: bool = False, db: Session = Depends(get_db)):
     task = db.get(models.Task, task_id)
-    if not task or task.is_deleted:
+    if not task or (task.is_deleted and not include_deleted):
         raise HTTPException(404, "Task not found")
     return task
 
@@ -160,18 +166,55 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
     return task
 
 
-@router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_db),
+@router.delete("/{task_id}")
+def delete_task(task_id: int, reason: str | None = None, db: Session = Depends(get_db),
                 current_user: models.User = Depends(get_current_user)):
+    """Delete a task.
+
+    An admin, or the Manager of the task's project, deletes it permanently straight away.
+    Anyone else allowed to delete (Responsible / Accountable / PMO) only hides the task and
+    a "deletion" approval goes to the project's Manager, who either deletes it permanently
+    (approve) or restores it (reject) - see routers/approvals.py. A task without a project
+    manager goes to the admins.
+    """
     task = db.get(models.Task, task_id)
-    if not task:
+    if not task or task.is_deleted:
         raise HTTPException(404, "Task not found")
+    project = db.get(models.Project, task.project_id) if task.project_id else None
+    manager_id = project.manager_id if project else None
+
+    if current_user.role == permissions.ADMIN_ROLE or current_user.id == manager_id:
+        services.audit(db, current_user.name, "task", task.id, "permanent_deleted", previous_value=task.title,
+                       reason=f"Hard-deleted by {current_user.name}")
+        services.hard_delete_task(db, task)
+        db.commit()
+        return {"status": "deleted"}
+
     permissions.check_task_delete(db, current_user, task)
     task.is_deleted = True
     if task.project_id:
         services.recalc_project_health(db, task.project_id)
-    services.audit(db, current_user.name, "task", task.id, "deleted", previous_value=task.title)
+    why = (reason or "").strip()
+    approval = models.Approval(
+        approval_type="deletion", entity_type="task", entity_id=task.id,
+        requested_by_id=current_user.id, approver_id=manager_id, status="pending",
+        # the task's code / title live here too: once deleted permanently the task itself is gone
+        reason=f"Delete task {task.code} - {task.title}." + (f" Reason: {why}" if why else ""),
+    )
+    db.add(approval)
+    db.flush()
+    if manager_id:
+        notify_ids = {manager_id}
+    else:
+        notify_ids = {r[0] for r in db.query(models.User.id).filter(
+            models.User.role == permissions.ADMIN_ROLE, models.User.is_active.is_(True)).all()}
+    for uid in notify_ids:
+        services.notify(db, uid, f"Delete requested: {task.code} - {task.title}",
+                        body=f"Requested by {current_user.name}. Restore the task or delete it permanently."
+                             + (f" Reason: {why}" if why else ""), kind="approval")
+    services.audit(db, current_user.name, "task", task.id, "delete_requested", previous_value=task.title, reason=why or None)
     db.commit()
+    return {"status": "pending_approval", "approval_id": approval.id, "approver_id": manager_id}
 
 
 @router.delete("/{task_id}/permanent", status_code=204)
@@ -180,34 +223,9 @@ def permanent_delete_task(task_id: int, admin: models.User = Depends(get_admin_u
     task = db.get(models.Task, task_id)
     if not task:
         raise HTTPException(404, "Task not found")
-    title, project_id = task.title, task.project_id
-    # Remove / detach dependent records first (FK safety)
-    db.query(models.TaskDependency).filter(
-        (models.TaskDependency.task_id == task_id) | (models.TaskDependency.depends_on_task_id == task_id)
-    ).delete(synchronize_session=False)
-    db.query(models.RaciEntry).filter(models.RaciEntry.task_id == task_id).delete(synchronize_session=False)
-    db.query(models.ProgressUpdate).filter(models.ProgressUpdate.task_id == task_id).delete(synchronize_session=False)
-    db.query(models.DelayRca).filter(models.DelayRca.task_id == task_id).delete(synchronize_session=False)
-    db.query(models.Approval).filter(
-        models.Approval.entity_type == "task", models.Approval.entity_id == task_id
-    ).delete(synchronize_session=False)
-    db.query(models.EmailLog).filter(
-        models.EmailLog.entity_type == "task", models.EmailLog.entity_id == task_id
-    ).delete(synchronize_session=False)
-    db.query(models.BacklogItem).filter(models.BacklogItem.converted_task_id == task_id).update(
-        {"converted_task_id": None}, synchronize_session=False)
-    db.query(models.ManagementAction).filter(models.ManagementAction.converted_task_id == task_id).update(
-        {"converted_task_id": None}, synchronize_session=False)
-    db.query(models.Task).filter(models.Task.parent_id == task_id).update(
-        {"parent_id": None}, synchronize_session=False)
-    db.query(models.Comment).filter(models.Comment.task_id == task_id).update(
-        {"task_id": None}, synchronize_session=False)  # comments keep the task's code / name
-    services.audit(db, admin.name, "task", task_id, "permanent_deleted", previous_value=title,
+    services.audit(db, admin.name, "task", task_id, "permanent_deleted", previous_value=task.title,
                    reason=f"Hard-deleted by admin {admin.name}")
-    db.delete(task)
-    db.flush()
-    if project_id:
-        services.recalc_project_health(db, project_id)
+    services.hard_delete_task(db, task)
     db.commit()
 
 

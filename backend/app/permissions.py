@@ -8,7 +8,10 @@ Tasks
   admin / privileged role -> every field
   Accountable             -> task details + progress (not Accountable, Reviewer,
                              approved due date, a baseline date already set, code)
-  Responsible             -> the same, except they can't reassign the Responsible person
+  Responsible             -> the same, plus Accountable and Reviewer (they own the task's
+                             people: Responsible, Accountable, Reviewer)
+  Deleting: Responsible / Accountable / PMO may ask; the project's Manager then deletes it
+  permanently or restores it (routers/tasks.py delete_task, routers/approvals.py).
   Reviewer / anyone else  -> no edits (the Reviewer approves; editing would mean
                              approving their own changes)
   Nobody but admin / privileged sets a task to completed/closed directly:
@@ -41,7 +44,7 @@ TASK_ACCOUNTABLE_FIELDS = TASK_PROGRESS_FIELDS | {
     "responsible_id", "planned_start_date", "acceptance_criteria",
     "project_id", "milestone_id", "parent_id", "company_id", "function_id", "department_id",
 }
-TASK_RESPONSIBLE_FIELDS = TASK_ACCOUNTABLE_FIELDS - {"responsible_id"}
+TASK_RESPONSIBLE_FIELDS = TASK_ACCOUNTABLE_FIELDS | {"accountable_id", "reviewer_id"}
 
 def is_privileged(db: Session, user: models.User) -> bool:
     if user.role == ADMIN_ROLE:
@@ -85,10 +88,11 @@ def check_task_edit(db: Session, user: models.User, task: models.Task, data: dic
     if not changed:
         return data
 
-    if user.id == task.accountable_id:
-        allowed, who = set(TASK_ACCOUNTABLE_FIELDS), "Accountable"
-    elif user.id == task.responsible_id:
+    # Responsible first: it is the wider set, and one person can be both.
+    if user.id == task.responsible_id:
         allowed, who = set(TASK_RESPONSIBLE_FIELDS), "Responsible"
+    elif user.id == task.accountable_id:
+        allowed, who = set(TASK_ACCOUNTABLE_FIELDS), "Accountable"
     else:
         raise HTTPException(403, "Only the task's Responsible or Accountable person (or an admin / PMO) can edit this task.")
 
@@ -112,9 +116,9 @@ def check_task_progress(db: Session, user: models.User, task: models.Task, new_s
 
 
 def check_task_delete(db: Session, user: models.User, task: models.Task):
-    if is_privileged(db, user) or user.id == task.accountable_id:
+    if is_privileged(db, user) or user.id in (task.responsible_id, task.accountable_id):
         return
-    raise HTTPException(403, "Only the task's Accountable person (or an admin / PMO) can delete this task.")
+    raise HTTPException(403, "Only the task's Responsible or Accountable person, the project's Manager or an admin / PMO can delete this task.")
 
 
 def is_project_ra(db: Session, user: models.User, project: models.Project) -> bool:

@@ -56,7 +56,7 @@ export default function Kanban() {
 
   const visibleTasks = useMemo(() => {
     let list = user && !canSeeAll
-      ? tasks.filter((t) => t.responsible_id === user.id || t.accountable_id === user.id)
+      ? tasks.filter((t) => [t.responsible_id, t.accountable_id, t.reviewer_id].includes(user.id))
       : tasks
     if (filter.project_id) list = list.filter((t) => String(t.project_id) === String(filter.project_id))
     if (filter.company_id) list = list.filter((t) => inSbu(companies, t.company_id, filter.company_id))

@@ -17,6 +17,11 @@ Date revision requests (approval_type "revised_date" on a task) are special:
   - only the Reviewer (or an Admin) may approve / reject
   - the outcome is sent to the requester and the task's Responsible person
 
+Delete requests (approval_type "deletion" on a task, created by DELETE /tasks/{id}):
+  - the task is already hidden; the approval goes to the Manager of the task's project
+  - only that Manager (or an Admin) decides
+  - approved = the task is deleted permanently, rejected = the task is restored
+
 No database schema change: this only uses existing columns.
 """
 from datetime import datetime, date
@@ -71,10 +76,16 @@ def _is_date_revision(approval: models.Approval) -> bool:
     return approval.approval_type == "revised_date" and approval.entity_type == "task"
 
 
+def _is_deletion(approval: models.Approval) -> bool:
+    return approval.approval_type == "deletion" and approval.entity_type == "task"
+
+
 def _decider_ids(approval: models.Approval, entity) -> set:
     """Non-admin users allowed to approve / reject."""
     if _is_date_revision(approval):
         ids = {entity.reviewer_id} if entity is not None else set()
+    elif _is_deletion(approval):
+        ids = {approval.approver_id}  # the project's Manager
     else:
         ids = {approval.approver_id}
         if entity is not None and approval.entity_type == "task":
@@ -182,6 +193,8 @@ def create_approval(
     current_user: models.User = Depends(get_current_user),
 ):
     data = payload.model_dump()
+    if data.get("approval_type") == "deletion":
+        raise HTTPException(400, "Use the Delete Task button on the task page to request a deletion.")
     # The requester is always the logged-in user (admins may file on someone's
     # behalf). Before, anyone could name another requester and themselves as
     # approver, then approve their own work.
@@ -241,6 +254,9 @@ def decide_approval(
     entity = _entity(db, approval)
     if not _is_admin(current_user) and current_user.id not in _decider_ids(approval, entity):
         raise HTTPException(403, "Only the assigned approver, the task's reviewer/accountable or an admin can decide this approval")
+    # taken now: a delete request that is approved removes the task itself below
+    entity_label = _entity_label(approval, entity)
+    related = _related_ids(approval, entity)
 
     approval.status = payload.status
     # Keep the requester's original reason and add the decision note under it
@@ -254,7 +270,17 @@ def decide_approval(
     # Apply side effects
     if approval.entity_type == "task":
         task = db.get(models.Task, approval.entity_id)
-        if task:
+        if task and _is_deletion(approval):
+            if payload.status == "approved":
+                services.audit(db, current_user.name, "task", task.id, "permanent_deleted", previous_value=task.title,
+                               reason=f"Delete request approved by {current_user.name}")
+                services.hard_delete_task(db, task, keep_approval_id=approval.id)
+            else:
+                task.is_deleted = False  # restored
+                services.recalc_task_health(db, task)
+                if task.project_id:
+                    services.recalc_project_health(db, task.project_id)
+        elif task:
             if approval.approval_type == "completion" and payload.status == "approved":
                 task.status = "completed"
                 task.actual_due_date = date.today()
@@ -277,8 +303,11 @@ def decide_approval(
 
     services.audit(db, current_user.name, approval.entity_type, approval.entity_id,
                    f"approval_{payload.status}", reason=payload.reason)
-    title = f"{_type_label(approval)} {payload.status}: {_entity_label(approval, entity)}"
+    title = f"{_type_label(approval)} {payload.status}: {entity_label}"
     body = f"{payload.status.title()} by {current_user.name}. {payload.reason or ''}".strip()
+    if _is_deletion(approval):
+        title = f"Task {'deleted permanently' if payload.status == 'approved' else 'restored'}: {entity_label}"
+        body = f"By {current_user.name}. {payload.reason or ''}".strip()
     if _is_date_revision(approval):
         # Outcome goes to whoever asked and the task's Responsible person.
         outcome_ids = {approval.requested_by_id}
@@ -286,7 +315,7 @@ def decide_approval(
             outcome_ids.add(entity.responsible_id)
         _notify_users(db, outcome_ids, title, body, exclude_user_id=current_user.id)
     else:
-        _notify_related(db, approval, entity, title, body, exclude_user_id=current_user.id)
+        _notify_users(db, related | _admin_ids(db), title, body, exclude_user_id=current_user.id)
     db.commit()
     db.refresh(approval)
     return approval

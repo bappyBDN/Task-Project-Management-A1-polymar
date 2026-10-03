@@ -1,4 +1,4 @@
-import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react'
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -36,7 +36,10 @@ color:var(--ink);font-family:inherit;font-size:13px}
 .ad-live{border:1px solid #bfe8cf;background:#effaf3;color:#12a150;border-radius:99px;padding:3px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
 .ad-live i{width:8px;height:8px;border:2px solid #12a150;border-radius:50%}
 .ad-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-bottom:22px}
-.ad-kpi{border-radius:12px;padding:16px 16px 12px;border:1px solid;min-height:136px;display:flex;flex-direction:column;min-width:0}
+.ad-kpi{border-radius:12px;padding:16px 16px 12px;border:1px solid;min-height:136px;display:flex;flex-direction:column;min-width:0;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:box-shadow .15s,transform .15s}
+.ad-kpi:hover{box-shadow:0 4px 14px rgba(11,31,58,.12);transform:translateY(-1px)}
+.ad-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.ad-kpi.on{box-shadow:0 0 0 2px var(--navy)}
 .ad-kpi .h{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#3a475c;min-width:0}
 .ad-kpi .ib{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}
 .ad-kpi .v{font-size:30px;font-weight:700;color:var(--navy);margin-top:10px;line-height:1}
@@ -129,14 +132,25 @@ const PR: Record<string, [string, string]> = { critical: ['#fdeaea', '#c62828'],
 const stTone = (s: string): [string, string] => DONE.includes(s) ? ['#e6f8ee', '#12a150'] : s === 'blocked' ? ['#fdeaea', '#e23b3b'] : ['#eaf2ff', '#1d6bff']
 const HEALTH_HEX: Record<string, string> = { green: '#12a150', amber: '#f59e0b', red: '#ef4444', black: '#1a1a1a' }
 // key = field on TaskKpi and series in /trends; bad = a rise is bad news
-const KPIS = [
+type KpiKey = 'total' | 'open' | 'due_today' | 'overdue' | 'critical' | 'blocked'
+const OPEN = ['backlog', 'ready', 'in_progress', 'in_review', 'blocked', 'on_hold']
+// Which of my tasks a KPI card counts - the same rules as /dashboards/individual on the server.
+const KPI_MATCH: Record<KpiKey, (t: Task, today: string) => boolean> = {
+  total: () => true,
+  open: (t) => OPEN.includes(t.status),
+  due_today: (t, today) => t.approved_due_date === today,
+  overdue: (t, today) => OPEN.includes(t.status) && !!t.approved_due_date && t.approved_due_date < today,
+  critical: (t) => t.priority === 'critical' && OPEN.includes(t.status),
+  blocked: (t) => t.blocker && OPEN.includes(t.status),
+}
+const KPIS: { l: string; k: KpiKey; c: string; bg: string; bd: string; ic: string; bad?: boolean }[] = [
   { l: 'TOTAL TASKS', k: 'total', c: '#1d6bff', bg: '#eef4ff', bd: '#cfe0ff', ic: 'check' },
   { l: 'OPEN', k: 'open', c: '#12a150', bg: '#eefaf3', bd: '#c9ecd8', ic: 'box' },
   { l: 'DUE TODAY', k: 'due_today', c: '#7c4dff', bg: '#f5f1ff', bd: '#ddd2fb', ic: 'cal' },
   { l: 'OVERDUE', k: 'overdue', c: '#f59e0b', bg: '#fff5ee', bd: '#fbdcc8', ic: 'warn', bad: true },
   { l: 'CRITICAL', k: 'critical', c: '#ef4444', bg: '#fff1f1', bd: '#fbd2d2', ic: 'alert', bad: true },
   { l: 'BLOCKED', k: 'blocked', c: '#5b6b82', bg: '#f4f6f9', bd: '#dfe4ec', ic: 'ban', bad: true },
-] as const
+]
 
 // ---------------------------------------------------------------- icons
 const P: Record<string, string> = {
@@ -520,6 +534,8 @@ export default function Dashboard() {
   const [profileMsg, setProfileMsg] = useState('')
   const [trends, setTrends] = useState<Trends | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
+  const [kpi, setKpi] = useState<KpiKey | null>(null) // KPI card clicked: My Tasks shows only those tasks
+  const myTasksRef = useRef<HTMLDivElement>(null)
 
   // "Live": bump `tick` every minute (and when the user comes back to the tab)
   // so every widget reloads; `now` keeps "today" correct past midnight.
@@ -566,15 +582,16 @@ export default function Dashboard() {
       .catch(fail)
     // Trends are optional: an older backend without this route just shows flat sparklines.
     api.get<Trends>(`/dashboards/individual/${userId}/trends?days=7`).then(ok(setTrends)).catch(() => {})
-    // The KPI cards count tasks where you are Responsible OR Accountable, so the
-    // list loads both - otherwise "Total Tasks: 1" could sit next to an empty list.
+    // The KPI cards count tasks where you are Responsible, Accountable OR Reviewer, so the
+    // list loads all three - otherwise "Total Tasks: 1" could sit next to an empty list.
     Promise.all([
       api.get<Task[]>(`/tasks?responsible_id=${userId}`),
       api.get<Task[]>(`/tasks?accountable_id=${userId}`),
+      api.get<Task[]>(`/tasks?reviewer_id=${userId}`),
     ])
-      .then(([resp, acc]) => {
+      .then((lists) => {
         const byId = new Map<number, Task>()
-        ;[...(resp ?? []), ...(acc ?? [])].forEach((t) => byId.set(t.id, t))
+        lists.forEach((l) => (l ?? []).forEach((t) => byId.set(t.id, t)))
         const list = [...byId.values()].sort((a, b) => (dueOf(a) || '9999').localeCompare(dueOf(b) || '9999'))
         if (!cancelled) setMyTasks(list)
       })
@@ -583,7 +600,13 @@ export default function Dashboard() {
   }, [userId, tick])
 
   const todayIso = isoOf(now)
-  const rows = useMemo(() => (picked ? myTasks.filter((t) => dueOf(t) === picked) : myTasks), [myTasks, picked])
+  const rows = useMemo(() => myTasks.filter((t) => (!picked || dueOf(t) === picked) && (!kpi || KPI_MATCH[kpi](t, todayIso))), [myTasks, picked, kpi, todayIso])
+  const kpiLabel = kpi ? label(KPIS.find((k) => k.k === kpi)!.l.toLowerCase()) : ''
+  // click a KPI card: list those tasks in My Tasks (click it again to show all)
+  const pickKpi = (k: KpiKey) => {
+    setKpi((cur) => (cur === k ? null : k))
+    myTasksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   const dots = useMemo(() => {
     const m: Record<string, string> = {}
     myTasks.forEach((t) => { const d = dueOf(t); if (d) m[d] = !DONE.includes(t.status) && d < todayIso ? '#ef4444' : m[d] ?? '#f59e0b' })
@@ -642,17 +665,19 @@ export default function Dashboard() {
 
         <div className="ad-kpis">
           {KPIS.map((k, i) => {
-            const d = delta(k.k, 'bad' in k ? k.bad : false)
+            const d = delta(k.k, k.bad)
             const pts = trends?.series?.[k.k] ?? [0, 0]
             return (
-              <div key={k.l} className="ad-kpi" style={{ background: `linear-gradient(160deg,${k.bg},#fff)`, borderColor: k.bd }}>
-                <div className="h"><span className="ib" style={{ background: k.c }}><Ic n={k.ic} s={17} c="#fff" /></span>{k.l}</div>
-                <div className="v">{taskKpi ? taskKpi[k.k as keyof TaskKpi] : '—'}</div>
-                <div className="f">
+              <button key={k.l} type="button" className={`ad-kpi${kpi === k.k ? ' on' : ''}`} aria-pressed={kpi === k.k} onClick={() => pickKpi(k.k)}
+                title={kpi === k.k ? 'Show all my tasks' : 'Show these tasks in My Tasks'}
+                style={{ background: `linear-gradient(160deg,${k.bg},#fff)`, borderColor: k.bd }}>
+                <span className="h"><span className="ib" style={{ background: k.c }}><Ic n={k.ic} s={17} c="#fff" /></span>{k.l}</span>
+                <span className="v">{taskKpi ? taskKpi[k.k] : '—'}</span>
+                <span className="f">
                   <span className="d"><span style={{ color: d.c }}>{d.t}</span><s>vs. last week</s></span>
                   <Spark pts={pts} c={k.c} id={`sp${i}`} />
-                </div>
-              </div>
+                </span>
+              </button>
             )
           })}
         </div>
@@ -674,10 +699,13 @@ export default function Dashboard() {
               <div className="ad-card"><h3><Ic n="bars" s={17} />Task Progress</h3><Progress data={trends?.chart ?? []} /></div>
             </div>
 
-            <div className="ad-card">
+            <div className="ad-card" ref={myTasksRef} style={{ scrollMarginTop: 12 }}>
               <div className="ad-head">
-                <h3 style={{ margin: 0, flexWrap: 'wrap' }}><Ic n="cal" />My Tasks{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}</h3>
-                {picked && <button className="ad-btn" onClick={() => setPicked(null)}>Clear date filter</button>}
+                <h3 style={{ margin: 0, flexWrap: 'wrap' }}><Ic n="cal" />My Tasks{kpi && kpi !== 'total' && <span style={{ fontWeight: 400 }}>— {kpiLabel}</span>}{picked && <span style={{ fontWeight: 400 }}>— due {fmt(picked)}</span>}<span style={{ fontWeight: 400, color: 'var(--mut)' }}>({rows.length})</span></h3>
+                <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {kpi && <button className="ad-btn" onClick={() => setKpi(null)}>Show all tasks</button>}
+                  {picked && <button className="ad-btn" onClick={() => setPicked(null)}>Clear date filter</button>}
+                </span>
               </div>
               <div className="ad-scroll"><table className="ad-t">
                 <thead><tr>{['CODE', 'TASK', 'PRIORITY', 'STATUS', 'PROGRESS', 'DUE'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
@@ -687,7 +715,7 @@ export default function Dashboard() {
                     return (
                       <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)}>
                         <td>{t.code}</td>
-                        <td>{t.title}{t.blocker && <span className="pill" style={{ background: '#fdeaea', color: '#e23b3b', marginLeft: 8 }}>Blocked</span>}</td>
+                        <td>{t.title}{t.blocker && <span className="pill" style={{ background: '#fdeaea', color: '#e23b3b', marginLeft: 8 }}>Blocked</span>}{t.reviewer_id === userId && t.responsible_id !== userId && t.accountable_id !== userId && <span className="pill" style={{ background: '#f5f1ff', color: '#7c4dff', marginLeft: 8 }}>To review</span>}</td>
                         <td><span className="pill" style={{ background: p[0], color: p[1] }}><Ic n="star" s={10} />{label(t.priority)}</span></td>
                         <td><span className="pill" style={{ background: s[0], color: s[1] }}>{done ? '✓' : '›'} {label(t.status)}</span></td>
                         <td><span className="pb"><span style={{ width: `${t.progress_pct}%`, background: done || t.progress_pct >= 50 ? '#12a150' : '#1d6bff' }} /></span>{Math.round(t.progress_pct)}%</td>
@@ -697,7 +725,7 @@ export default function Dashboard() {
                   })}
                 </tbody>
               </table></div>
-              {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked ? 'No tasks due on this date.' : 'No tasks assigned to you.'}</div>}
+              {!rows.length && <div style={{ textAlign: 'center', color: 'var(--mut)', padding: 20 }}>{picked || kpi ? 'No tasks match this filter.' : 'No tasks assigned to you.'}</div>}
             </div>
 
 

@@ -34,8 +34,6 @@ export default function Tasks() {
   const canSeeAll = useIsPrivileged(user?.role)
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState('')
-  const isAdmin = user?.role === 'admin'   // only admins get a Delete button (the API enforces this too)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const reload = () => {
     setLoadErr('')
@@ -55,26 +53,10 @@ export default function Tasks() {
     api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
   }, [])
 
-  // Admin-only. Uses the existing DELETE /tasks/{id}/permanent route, which removes the task's
-  // dependent rows first (dependencies, RACI, progress, RCA, approvals) so no foreign key breaks.
-  const removeTask = async (t: Task) => {
-    if (!isAdmin || deletingId !== null) return
-    if (!confirm(`Delete task ${t.code} — "${t.title}"?\n\nThis permanently removes the task and its progress history. It cannot be undone.`)) return
-    setDeletingId(t.id)
-    try {
-      await api.del(`/tasks/${t.id}/permanent`)
-      await reload()
-    } catch (e: any) {
-      alert(`Could not delete the task: ${errText(e)}`)
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
   const visibleTasks = useMemo(() => {
     if (!user || canSeeAll) return tasks
-    // Regular users see only their own tasks (responsible or accountable)
-    return tasks.filter((t) => t.responsible_id === user.id || t.accountable_id === user.id)
+    // Regular users see only their own tasks (responsible, accountable or reviewer)
+    return tasks.filter((t) => [t.responsible_id, t.accountable_id, t.reviewer_id].includes(user.id))
   }, [tasks, user, canSeeAll])
 
   const filtered = useMemo(() => {
@@ -174,7 +156,7 @@ export default function Tasks() {
           <thead>
             <tr>
               <th>Code</th><th>Task</th><th>SBU</th><th>Project</th><th>Responsible</th>
-              <th>Priority</th><th>Status</th><th>Health</th><th>Progress</th><th>Due</th>{isAdmin && <th></th>}
+              <th>Priority</th><th>Status</th><th>Health</th><th>Progress</th><th>Due</th>
             </tr>
           </thead>
           <tbody>
@@ -206,17 +188,6 @@ export default function Tasks() {
                     <span className="small muted">{t.progress_pct}%</span>
                   </td>
                   <td className="small">{fmtDate(t.approved_due_date || t.baseline_due_date)}</td>
-                  {isAdmin && (
-                    <td>
-                      <button
-                        className="btn sm danger"
-                        disabled={deletingId !== null}
-                        onClick={(e) => { e.stopPropagation(); removeTask(t) }}
-                      >
-                        {deletingId === t.id ? 'Deleting…' : 'Delete'}
-                      </button>
-                    </td>
-                  )}
                 </tr>
               )
             })}

@@ -149,14 +149,15 @@ export default function App() {
       {/* Phone / small screens: the sidebar is hidden and opens from this bar */}
       <header className="mobile-bar">
         <button className="btn sm" aria-label="Open menu" aria-expanded={navOpen} onClick={() => setNavOpen(true)}>☰</button>
-        <img className="mobile-logo" src={logo} alt="Anwar Group" />
+        <a href="/" aria-label="Anwar Group - refresh"><img className="mobile-logo" src={logo} alt="Anwar Group" /></a>
         <span className="mobile-title">Task &amp; Project Management</span>
       </header>
       <aside className={`sidebar${navOpen ? ' open' : ''}`}>
-        <Link to="/" className="brand" aria-label="Anwar Group - My Dashboard">
+        {/* a plain link, not a router <Link>: clicking the logo reloads the app with fresh data */}
+        <a href="/" className="brand" aria-label="Anwar Group - refresh and go to My Dashboard">
           <img className="brand-logo" src={logo} alt="Anwar Group" />
           <div className="sub">Task &amp; Project Management</div>
-        </Link>
+        </a>
         <nav className="nav">
           {sections.map((s) => (
             <div key={s.section}>

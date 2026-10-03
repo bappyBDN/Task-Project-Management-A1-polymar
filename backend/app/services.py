@@ -24,6 +24,38 @@ def notify(db: Session, user_id: Optional[int], title: str, body: Optional[str] 
     db.add(models.Notification(user_id=user_id, title=title, body=body, kind=kind))
 
 
+def hard_delete_task(db: Session, task: models.Task, keep_approval_id: Optional[int] = None):
+    """Permanently remove a task. Dependent records are removed / detached first (FK safety).
+    `keep_approval_id`: the delete request being approved stays as the record of who decided."""
+    task_id, project_id = task.id, task.project_id
+    db.query(models.TaskDependency).filter(
+        (models.TaskDependency.task_id == task_id) | (models.TaskDependency.depends_on_task_id == task_id)
+    ).delete(synchronize_session=False)
+    db.query(models.RaciEntry).filter(models.RaciEntry.task_id == task_id).delete(synchronize_session=False)
+    db.query(models.ProgressUpdate).filter(models.ProgressUpdate.task_id == task_id).delete(synchronize_session=False)
+    db.query(models.DelayRca).filter(models.DelayRca.task_id == task_id).delete(synchronize_session=False)
+    approvals = db.query(models.Approval).filter(
+        models.Approval.entity_type == "task", models.Approval.entity_id == task_id)
+    if keep_approval_id is not None:
+        approvals = approvals.filter(models.Approval.id != keep_approval_id)
+    approvals.delete(synchronize_session=False)
+    db.query(models.EmailLog).filter(
+        models.EmailLog.entity_type == "task", models.EmailLog.entity_id == task_id
+    ).delete(synchronize_session=False)
+    db.query(models.BacklogItem).filter(models.BacklogItem.converted_task_id == task_id).update(
+        {"converted_task_id": None}, synchronize_session=False)
+    db.query(models.ManagementAction).filter(models.ManagementAction.converted_task_id == task_id).update(
+        {"converted_task_id": None}, synchronize_session=False)
+    db.query(models.Task).filter(models.Task.parent_id == task_id).update(
+        {"parent_id": None}, synchronize_session=False)
+    db.query(models.Comment).filter(models.Comment.task_id == task_id).update(
+        {"task_id": None}, synchronize_session=False)  # comments keep the task's code / name
+    db.delete(task)
+    db.flush()
+    if project_id:
+        recalc_project_health(db, project_id)
+
+
 def compute_task_health(status: str, progress_pct: float, due: Optional[date],
                         blocker: bool, today: Optional[date] = None) -> str:
     today = today or date.today()

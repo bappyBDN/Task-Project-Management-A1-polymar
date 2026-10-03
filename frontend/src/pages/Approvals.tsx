@@ -23,7 +23,8 @@ export default function Approvals() {
 
   useEffect(() => {
     load()
-    api.get<Task[]>('/tasks').then(setTasks).catch(() => {})
+    // include_deleted: a task waiting for a delete decision is hidden but still needs its name here
+    api.get<Task[]>('/tasks?include_deleted=true').then(setTasks).catch(() => {})
     api.get<User[]>('/organizations/users').then(setUsers).catch(() => {})
   }, [])
 
@@ -54,6 +55,8 @@ export default function Approvals() {
     // Date revisions: only the task's Reviewer decides.
     if (a.approval_type === 'revised_date' && a.entity_type === 'task') return !!t && t.reviewer_id === user.id
     if (a.approver_id === user.id) return true
+    // Delete requests: only the project's Manager (the assigned approver) decides.
+    if (a.approval_type === 'deletion') return false
     return !!t && (t.reviewer_id === user.id || t.accountable_id === user.id)
   }
 
@@ -66,7 +69,7 @@ export default function Approvals() {
       <div className="topbar">
         <div>
           <h1>Approvals</h1>
-          <div className="crumb">Completion, revised-date and project approvals</div>
+          <div className="crumb">Completion, revised-date, task deletion and project approvals</div>
         </div>
       </div>
 
@@ -98,14 +101,26 @@ export default function Approvals() {
                   <td className="small">{nameOf(a.requested_by_id) ?? '—'}</td>
                   <td className="small">{nameOf(a.approver_id) ?? '—'}</td>
                   <td>
-                    <span className={`badge ${a.status === 'approved' ? 'green' : a.status === 'rejected' ? 'red' : 'amber'}`}>{label(a.status)}</span>
+                    <span className={`badge ${a.status === 'approved' ? 'green' : a.status === 'rejected' ? 'red' : 'amber'}`}>
+                      {a.approval_type === 'deletion' && a.status !== 'pending' ? (a.status === 'approved' ? 'Deleted' : 'Restored') : label(a.status)}
+                    </span>
                   </td>
                   <td className="small">{fmtDate(a.created_at?.slice(0, 10))}</td>
                   <td>
                     {a.status === 'pending' && canDecide(a) ? (
                       <div className="row">
-                        <button className="btn sm" disabled={busyId === a.id} onClick={() => decide(a, 'approved')}>Approve</button>
-                        <button className="btn sm danger" disabled={busyId === a.id} onClick={() => decide(a, 'rejected')}>Reject</button>
+                        {a.approval_type === 'deletion' ? (
+                          <>
+                            <button className="btn sm" disabled={busyId === a.id} onClick={() => decide(a, 'rejected')}>Restore</button>
+                            <button className="btn sm danger" disabled={busyId === a.id}
+                              onClick={() => { if (confirm('Delete this task permanently? It cannot be undone.')) decide(a, 'approved') }}>Delete permanently</button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="btn sm" disabled={busyId === a.id} onClick={() => decide(a, 'approved')}>Approve</button>
+                            <button className="btn sm danger" disabled={busyId === a.id} onClick={() => decide(a, 'rejected')}>Reject</button>
+                          </>
+                        )}
                       </div>
                     ) : a.status === 'pending' ? (
                       <span className="small muted">Awaiting {nameOf(a.approver_id) ?? 'approver'}</span>

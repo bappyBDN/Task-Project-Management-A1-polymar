@@ -18,11 +18,11 @@ interface Props {
   onSaved: () => void
   onRefresh?: () => void
   task?: Task
-  // Responsible / Accountable person (not admin / PMO) editing their own task: Accountable, Reviewer,
-  // an already-set due date and Completed/Closed are locked (the server enforces the same).
+  // Responsible / Accountable person (not admin / PMO) editing their own task: an already-set
+  // due date and Completed/Closed are locked (the server enforces the same).
   limited?: boolean
-  // Responsible person (not Accountable): they also can't reassign the Responsible person.
-  lockResponsible?: boolean
+  // Accountable person (not Responsible): they also can't change the Accountable person or the Reviewer.
+  lockApprovers?: boolean
 }
 
 const DONE_STATUSES = ['completed', 'closed']
@@ -70,7 +70,7 @@ const initialForm = (task?: Task) =>
     ? Object.fromEntries(Object.entries({ ...EMPTY, ...task }).map(([k, v]) => [k, v ?? '']))
     : { ...EMPTY }
 
-export default function TaskForm({ projects, users, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockResponsible = false }: Props) {
+export default function TaskForm({ projects, users, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockApprovers = false }: Props) {
   const { user } = useAuth()
   const [form, setForm] = useState<any>(() => initialForm(task))
   const [error, setError] = useState('')
@@ -215,11 +215,9 @@ export default function TaskForm({ projects, users, companies = [], functions = 
     if (limited && task) {
       // fields this person may not change are left exactly as they are
       delete payload.code
-      delete payload.accountable_id
-      delete payload.reviewer_id
       delete payload.approved_due_date
       if (task.baseline_due_date) delete payload.baseline_due_date
-      if (lockResponsible) delete payload.responsible_id
+      if (lockApprovers) { delete payload.accountable_id; delete payload.reviewer_id }
     }
     try {
       if (task) await api.patch(`/tasks/${task.id}`, payload)
@@ -303,8 +301,8 @@ export default function TaskForm({ projects, users, companies = [], functions = 
         <h2>{task ? `Edit ${task.code}` : 'New Task'}</h2>
         {limited && (
           <div className="alert info">
-            You are editing as the task's <strong>{lockResponsible ? 'Responsible' : 'Accountable'}</strong> person.
-            {lockResponsible ? ' Responsible, ' : ' '}Accountable, Reviewer and the due date can only be changed by an admin / PMO;
+            You are editing as the task's <strong>{lockApprovers ? 'Accountable' : 'Responsible'}</strong> person.
+            {lockApprovers ? ' Accountable, Reviewer and the due date' : ' The due date'} can only be changed by an admin / PMO;
             use "Request Date Revision" for a new date and "Submit for Completion" to finish the task.
           </div>
         )}
@@ -421,7 +419,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
         <RichTextEditor rows={2} value={form.expected_deliverable} onChange={(v) => set('expected_deliverable', v)} placeholder="What will be delivered when this task is done?" />
 
         <div className="form-row three">
-          <fieldset disabled={lockResponsible} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockResponsible ? 'Only the Accountable person or an admin / PMO can change this' : undefined}>
+          <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <label>Responsible (R) *</label>
             <SearchableSelect
               value={str(form.responsible_id)}
@@ -433,7 +431,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
               onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
             />
           </fieldset>
-          <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
+          <fieldset disabled={lockApprovers} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockApprovers ? 'Only the Responsible person or an admin / PMO can change this' : undefined}>
             <label>Accountable (A) *</label>
             <SearchableSelect
               value={str(form.accountable_id)}
@@ -448,7 +446,7 @@ export default function TaskForm({ projects, users, companies = [], functions = 
               <div className="small muted" style={{ marginTop: 4 }}>Auto-suggested: Responsible's immediate senior. Change it anytime.</div>
             )}
           </fieldset>
-          <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
+          <fieldset disabled={lockApprovers} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockApprovers ? 'Only the Responsible person or an admin / PMO can change this' : undefined}>
             <label>Reviewer *</label>
             <SearchableSelect
               value={str(form.reviewer_id)}
