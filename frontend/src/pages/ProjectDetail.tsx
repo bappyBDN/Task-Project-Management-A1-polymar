@@ -4,11 +4,12 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { useIsPrivileged } from '../usePrivileged'
 import ProjectForm from '../components/ProjectForm'
+import TaskForm from '../components/TaskForm'
 import ProjectContribution from '../components/ProjectContribution'
 import ProjectRaci from '../components/ProjectRaci'
 import MethodologyApproval from '../components/MethodologyApproval'
 import CommentsPanel from '../components/CommentsPanel'
-import { Company, Project, Task, User } from '../types'
+import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { RichTextView } from '../components/RichText'
 import { sbuName } from '../org'
@@ -22,6 +23,11 @@ export default function ProjectDetail() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [loadErr, setLoadErr] = useState('')
   const [showEdit, setShowEdit] = useState(false)
+  // "+ New Task": the same form as the Tasks page, with this project already chosen
+  const [showTask, setShowTask] = useState(false)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [functions, setFunctions] = useState<Function[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [savedMsg, setSavedMsg] = useState('')
   const { user } = useAuth()
   const isPrivileged = useIsPrivileged(user?.role)
@@ -31,7 +37,17 @@ export default function ProjectDetail() {
   useEffect(() => {
     reloadUsers().catch(() => {})
     api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
+    // lists for the New Task form
+    api.get<Project[]>('/projects').then(setProjects).catch(() => {})
+    api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
+    api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
   }, [])
+  // after a task is added: the task list, and the project's own completion / health
+  const reloadTasks = () => {
+    if (!id) return
+    api.get<Task[]>(`/tasks?project_id=${id}`).then(setTasks).catch(() => {})
+    api.get<Project>(`/projects/${id}`).then(setProject).catch(() => {})
+  }
 
   useEffect(() => {
     if (!id) return
@@ -95,6 +111,27 @@ export default function ProjectDetail() {
       </div>
 
       {savedMsg && <div className="alert success" role="status">{savedMsg}</div>}
+      {showTask && (
+        <TaskForm
+          // this project is always in the list, even before the full project list has loaded
+          projects={projects.some((p) => p.id === project.id) ? projects : [project, ...projects]}
+          users={users}
+          companies={companies}
+          functions={functions}
+          departments={departments}
+          defaultProjectId={project.id}
+          onClose={() => setShowTask(false)}
+          onSaved={() => { setShowTask(false); reloadTasks() }}
+          onRefresh={() => {
+            // something was added from inside the form (project, user, SBU, function, department)
+            api.get<Project[]>('/projects').then(setProjects).catch(() => {})
+            api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
+            api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
+            api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
+            reloadUsers().catch(() => {})
+          }}
+        />
+      )}
       {showEdit && (
         <ProjectForm
           project={project}
@@ -185,7 +222,10 @@ export default function ProjectDetail() {
       <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} reloadUsers={reloadUsers} />
 
           <div className="card mt">
-            <div className="section-title" style={{ marginTop: 0 }}>Tasks ({tasks.length})</div>
+            <div className="spread">
+              <div className="section-title" style={{ marginTop: 0 }}>Tasks ({tasks.length})</div>
+              <button className="btn sm primary" onClick={() => setShowTask(true)}>+ New Task</button>
+            </div>
             <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>

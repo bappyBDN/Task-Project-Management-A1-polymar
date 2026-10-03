@@ -25,6 +25,8 @@ interface Props {
   limited?: boolean
   // Accountable person (not Responsible): they also can't change the Accountable person or the Reviewer.
   lockApprovers?: boolean
+  // New task opened from a project's page: that project is already chosen (it can still be changed)
+  defaultProjectId?: number
 }
 
 const DONE_STATUSES = ['completed', 'closed']
@@ -68,14 +70,18 @@ function errText(e: any): string {
 
 // null -> '' so <input>/<textarea> stay controlled when editing an existing task.
 // A new task starts with the signed-in user's own SBU / function / department (they can change them).
-const initialForm = (task?: Task, me?: User | null) =>
+// Opened from a project's page, the project is chosen and the SBU is the project's.
+const initialForm = (task?: Task, me?: User | null, project?: Project) =>
   task
     ? Object.fromEntries(Object.entries({ ...EMPTY, ...task }).map(([k, v]) => [k, v ?? '']))
-    : { ...EMPTY, company_id: me?.company_id ?? '', function_id: me?.function_id ?? '', department_id: me?.department_id ?? '' }
+    : {
+      ...EMPTY, project_id: project?.id ?? '',
+      company_id: project?.company_id ?? me?.company_id ?? '', function_id: me?.function_id ?? '', department_id: me?.department_id ?? '',
+    }
 
-export default function TaskForm({ projects, users: listedUsers, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockApprovers = false }: Props) {
+export default function TaskForm({ projects, users: listedUsers, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockApprovers = false, defaultProjectId }: Props) {
   const { user } = useAuth()
-  const [form, setForm] = useState<any>(() => initialForm(task, user))
+  const [form, setForm] = useState<any>(() => initialForm(task, user, projects.find((p) => p.id === defaultProjectId)))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
