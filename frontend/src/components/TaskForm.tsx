@@ -5,6 +5,7 @@ import { Company, Department, Function, Project, Task, User } from '../types'
 import { label } from '../constants'
 import SearchableSelect from './SearchableSelect'
 import InviteUserModal from './InviteUserModal'
+import OrgModal from './OrgModal'
 import { RichTextEditor } from './RichText'
 import SbuSelect from './SbuSelect'
 import ProjectForm from './ProjectForm'
@@ -65,15 +66,16 @@ function errText(e: any): string {
   return raw || 'Could not save the task'
 }
 
-// null -> '' so <input>/<textarea> stay controlled when editing an existing task
-const initialForm = (task?: Task) =>
+// null -> '' so <input>/<textarea> stay controlled when editing an existing task.
+// A new task starts with the signed-in user's own SBU / function / department (they can change them).
+const initialForm = (task?: Task, me?: User | null) =>
   task
     ? Object.fromEntries(Object.entries({ ...EMPTY, ...task }).map(([k, v]) => [k, v ?? '']))
-    : { ...EMPTY }
+    : { ...EMPTY, company_id: me?.company_id ?? '', function_id: me?.function_id ?? '', department_id: me?.department_id ?? '' }
 
 export default function TaskForm({ projects, users: listedUsers, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockApprovers = false }: Props) {
   const { user } = useAuth()
-  const [form, setForm] = useState<any>(() => initialForm(task))
+  const [form, setForm] = useState<any>(() => initialForm(task, user))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -240,6 +242,16 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
   const functionItems = functions.map((f) => ({ value: String(f.id), label: f.name }))
   const departmentItems = departments.map((dp) => ({ value: String(dp.id), label: dp.name }))
 
+  // SBU / function / department still exactly as filled in from the user's profile
+  const fromProfile = !task && !!user && (['company_id', 'function_id', 'department_id'] as const)
+    .some((k) => user[k] != null && str(form[k]) === str(user[k]))
+  // A task belongs to its project's SBU: follow the project unless the user picked another SBU themselves.
+  const onProjectChange = (v: string) => {
+    set('project_id', v)
+    const p = projects.find((x) => String(x.id) === v)
+    if (!task && p?.company_id && (!form.company_id || str(form.company_id) === str(user?.company_id))) set('company_id', String(p.company_id))
+  }
+
   const createdProject = async (p: Project) => {
     set('project_id', String(p.id))
     // the new project always has an SBU - use it for the task if none picked yet
@@ -323,7 +335,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
             <SearchableSelect
               value={str(form.project_id)}
               items={projectItems}
-              onChange={(v) => set('project_id', v)}
+              onChange={onProjectChange}
               placeholder="Search project…"
               onAddNew={() => setShowProjectModal(true)}
               addLabel="new project"
@@ -381,6 +393,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
             />
           </div>
         </div>
+        {fromProfile && <div className="small muted" style={{ marginTop: 4 }}>SBU, function and department are filled in from your profile - change them if this task belongs elsewhere.</div>}
 
         <div className="form-row three">
           <div>
@@ -500,46 +513,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
         />
       )}
       {showUserModal && <InviteUserModal onClose={() => setShowUserModal(null)} onInvited={createdUser} />}
-      {showOrgModal && <OrgModal kind={showOrgModal} onClose={() => setShowOrgModal(null)} onCreated={(o) => createdOrg(showOrgModal, o)} />}
-    </div>
-  )
-}
-
-function OrgModal({ kind, onClose, onCreated }: { kind: 'company' | 'function' | 'department'; onClose: () => void; onCreated: (o: any) => void }) {
-  const [name, setName] = useState('')
-  const [code, setCode] = useState('')
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const titles = { company: 'New SBU', function: 'New Function', department: 'New Department' }
-
-  const submit = async () => {
-    if (!name.trim()) { setErr(`${titles[kind]} name is required`); return }
-    setBusy(true)
-    setErr('')
-    try {
-      const payload: any = { name: name.trim() }
-      if (kind !== 'department') payload.code = code.trim() || name.trim().slice(0, 3).toUpperCase()
-      let o
-      if (kind === 'company') o = await api.post('/organizations/companies', payload)
-      else if (kind === 'function') o = await api.post('/organizations/functions', payload)
-      else o = await api.post('/organizations/departments', payload)
-      onCreated(o)
-    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
-  }
-
-  return (
-    <div className="modal-backdrop">
-      <div className="modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
-        <h2>{titles[kind]}</h2>
-        {err && <div className="badge red" style={{ marginBottom: 12 }}>{err}</div>}
-        <label>Name *</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-        {kind !== 'department' && <><label>Code</label><input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. ACS" /></>}
-        <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Create'}</button>
-        </div>
-      </div>
+      {showOrgModal && <OrgModal kind={showOrgModal} functionId={form.function_id ? Number(form.function_id) : null} onClose={() => setShowOrgModal(null)} onCreated={(o) => createdOrg(showOrgModal, o)} />}
     </div>
   )
 }

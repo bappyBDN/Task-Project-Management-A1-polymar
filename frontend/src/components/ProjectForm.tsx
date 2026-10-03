@@ -6,6 +6,8 @@ import SearchableSelect from './SearchableSelect'
 import { RichTextEditor } from './RichText'
 import SbuSelect from './SbuSelect'
 import InviteUserModal from './InviteUserModal'
+import OrgModal from './OrgModal'
+import { useAuth } from '../auth'
 
 /**
  * "New Project" form, shared by the Projects page (+ Add Project) and the Task
@@ -84,6 +86,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
 }) {
   const editing = !!project
   if (editing) withTasks = false
+  const { user: me } = useAuth()
   const [form, setForm] = useState(() => project ? {
     name: project.name ?? '', company_id: project.company_id ? String(project.company_id) : '',
     manager_id: project.manager_id ? String(project.manager_id) : '',
@@ -91,19 +94,27 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
     status: project.status || 'planning', priority: project.priority || 'medium',
     start_date: project.start_date || '', baseline_due_date: project.baseline_due_date || '',
     objective: project.objective || '',
-  } : { ...EMPTY_FORM })
+    // a new project starts in the signed-in user's own SBU (they can change it)
+  } : { ...EMPTY_FORM, company_id: me?.company_id != null ? String(me.company_id) : '' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [newTypes, setNewTypes] = useState<string[]>([])
-  // "+ Add new user" on Project Manager: people added by email aren't in the parent's list yet
-  const [inviting, setInviting] = useState(false)
+  // "+ Add new user" on Project Manager (true) or on a task row's person field:
+  // people added by email aren't in the parent's list yet
+  const [inviting, setInviting] = useState<true | { key: number; field: 'responsible_id' | 'accountable_id' | 'reviewer_id' } | false>(false)
   const [invited, setInvited] = useState<User[]>([])
   const users = [...listedUsers, ...invited.filter((u) => !listedUsers.some((x) => x.id === u.id))]
   const set = (k: keyof typeof EMPTY_FORM, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
   // ---- tasks added together with the project
   const [drafts, setDrafts] = useState<TaskDraft[]>([])
-  const [common, setCommon] = useState({ function_id: '', department_id: '', category: 'operational', status: 'backlog' })
+  // the tasks start with the signed-in user's own function / department (they can change them)
+  const [common, setCommon] = useState({
+    function_id: me?.function_id != null ? String(me.function_id) : '',
+    department_id: me?.department_id != null ? String(me.department_id) : '',
+    category: 'operational', status: 'backlog',
+  })
+  const [addingOrg, setAddingOrg] = useState<'function' | 'department' | null>(null)
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [categories, setCategories] = useState<string[]>([])
@@ -138,6 +149,28 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
     if (!d.accountable_id) miss.push('Accountable')
     if (!d.reviewer_id) miss.push('Reviewer')
     return miss
+  }
+
+  // "+ Add new function / department" from the tasks section: add to the list and select it
+  const createdOrg = (kind: 'function' | 'department', o: any) => {
+    if (kind === 'function') { setFunctions((l) => [...l, o]); setCommon((c) => ({ ...c, function_id: String(o.id), department_id: '' })) }
+    else { setDepartments((l) => [...l, o]); setCommon((c) => ({ ...c, department_id: String(o.id) })) }
+    setAddingOrg(null)
+  }
+  // Category: pick one or type a new one - a new one is saved to the list, as in the Task form
+  const onCategory = (v: string) => {
+    const value = v.trim()
+    setCommon((c) => ({ ...c, category: value || 'operational' }))
+    if (value && !['operational', ...categories].includes(value)) {
+      setCategories((l) => [...l, value])
+      api.post(`/list-options?kind=category&value=${encodeURIComponent(value)}`).catch(() => {})
+    }
+  }
+  const invitedUser = (u: User) => {
+    setInvited((l) => [...l.filter((x) => x.id !== u.id), u])
+    if (inviting === true) set('manager_id', String(u.id))
+    else if (inviting) setDraft(inviting.key, inviting.field, String(u.id))
+    setInviting(false)
   }
 
   const typeList = Array.from(new Set([...DEFAULT_TYPES, ...types.filter(Boolean), ...newTypes]))
@@ -282,7 +315,8 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
   // once the project is saved, closing must still refresh the list
   const close = (e?: { stopPropagation: () => void }) => { e?.stopPropagation(); if (created) onSaved(created, doneCount); else onClose() }
   const userItems = users.map((u) => ({ value: String(u.id), label: u.name }))
-  const deptList = departments.filter((d) => !common.function_id || !d.function_id || String(d.function_id) === common.function_id)
+  // the chosen one always stays listed (e.g. the user's own department filed under another function)
+  const deptList = departments.filter((d) => !common.function_id || !d.function_id || String(d.function_id) === common.function_id || String(d.id) === common.department_id)
   const lock = !!created // project fields can't change after the project is saved
 
   return (
@@ -310,10 +344,6 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
             <label>Project Manager *</label>
             <SearchableSelect value={form.manager_id} items={users.map((u) => ({ value: String(u.id), label: u.name }))} onChange={(v) => set('manager_id', v)} placeholder="Search person…"
               onAddNew={() => setInviting(true)} addLabel="new user" />
-            {inviting && (
-              <InviteUserModal onClose={() => setInviting(false)}
-                onInvited={(u) => { setInvited((l) => [...l.filter((x) => x.id !== u.id), u]); set('manager_id', String(u.id)); setInviting(false) }} />
-            )}
           </fieldset>
         </div>
 
@@ -366,23 +396,28 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                 <div className="form-row" style={{ marginTop: 10 }}>
                   <div>
                     <label>Function (all tasks)</label>
-                    <SearchableSelect value={common.function_id} items={functions.map((f) => ({ value: String(f.id), label: f.name }))} onChange={(v) => setCommon((c) => ({ ...c, function_id: v, department_id: '' }))} placeholder="Search function…" />
+                    <SearchableSelect value={common.function_id} items={functions.map((f) => ({ value: String(f.id), label: f.name }))} onChange={(v) => setCommon((c) => ({ ...c, function_id: v, department_id: '' }))} placeholder="Search function…"
+                      onAddNew={() => setAddingOrg('function')} addLabel="new function" />
                   </div>
                   <div>
                     <label>Department (all tasks)</label>
-                    <SearchableSelect value={common.department_id} items={deptList.map((d) => ({ value: String(d.id), label: d.name }))} onChange={(v) => setCommon((c) => ({ ...c, department_id: v }))} placeholder="Search department…" />
+                    <SearchableSelect value={common.department_id} items={deptList.map((d) => ({ value: String(d.id), label: d.name }))} onChange={(v) => setCommon((c) => ({ ...c, department_id: v }))} placeholder="Search department…"
+                      onAddNew={() => setAddingOrg('department')} addLabel="new department" />
                   </div>
                 </div>
                 <div className="form-row">
                   <div>
                     <label>Category (all tasks)</label>
-                    <SearchableSelect value={common.category} items={opts(Array.from(new Set(['operational', ...categories])))} onChange={(v) => setCommon((c) => ({ ...c, category: v || 'operational' }))} placeholder="Category…" />
+                    <SearchableSelect value={common.category} items={opts(Array.from(new Set(['operational', ...categories])))} onChange={onCategory} placeholder="Select or type a new category…" allowCustom />
                   </div>
                   <div>
                     <label>Status (all tasks)</label>
                     <SearchableSelect value={common.status} items={opts(Array.from(new Set(['backlog', ...statuses])))} onChange={(v) => setCommon((c) => ({ ...c, status: v || 'backlog' }))} placeholder="Status…" />
                   </div>
                 </div>
+                {(me?.function_id != null || me?.department_id != null) && (
+                  <div className="small muted" style={{ marginTop: 4 }}>Function and department start from your profile - change them if these tasks belong elsewhere.</div>
+                )}
               </>
             )}
 
@@ -398,15 +433,18 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                 <div className="form-row three">
                   <div>
                     <label>Responsible (R) *</label>
-                    <SearchableSelect value={d.responsible_id} items={userItems} onChange={(v) => onDraftResponsible(d, v)} placeholder="Search person…" />
+                    <SearchableSelect value={d.responsible_id} items={userItems} onChange={(v) => onDraftResponsible(d, v)} placeholder="Search person…"
+                      onAddNew={() => setInviting({ key: d.key, field: 'responsible_id' })} addLabel="new user" />
                   </div>
                   <div>
                     <label>Accountable (A) *</label>
-                    <SearchableSelect value={d.accountable_id} items={userItems} onChange={(v) => setDraft(d.key, 'accountable_id', v)} placeholder="Search person…" />
+                    <SearchableSelect value={d.accountable_id} items={userItems} onChange={(v) => setDraft(d.key, 'accountable_id', v)} placeholder="Search person…"
+                      onAddNew={() => setInviting({ key: d.key, field: 'accountable_id' })} addLabel="new user" />
                   </div>
                   <div>
                     <label>Reviewer *</label>
-                    <SearchableSelect value={d.reviewer_id} items={userItems} onChange={(v) => setDraft(d.key, 'reviewer_id', v)} placeholder="Search person…" />
+                    <SearchableSelect value={d.reviewer_id} items={userItems} onChange={(v) => setDraft(d.key, 'reviewer_id', v)} placeholder="Search person…"
+                      onAddNew={() => setInviting({ key: d.key, field: 'reviewer_id' })} addLabel="new user" />
                   </div>
                 </div>
                 <div className="form-row three">
@@ -431,6 +469,12 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
               <button type="button" className="btn" style={{ marginTop: 10 }} onClick={addDraft} disabled={saving}>+ Add Another Task</button>
             )}
           </div>
+        )}
+
+        {inviting && <InviteUserModal onClose={() => setInviting(false)} onInvited={invitedUser} />}
+        {addingOrg && (
+          <OrgModal kind={addingOrg} functionId={common.function_id ? Number(common.function_id) : null}
+            onClose={() => setAddingOrg(null)} onCreated={(o) => createdOrg(addingOrg, o)} />
         )}
 
         <div className="modal-actions">

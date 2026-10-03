@@ -70,7 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storage.set('token', response.access_token)
       storage.set('user', JSON.stringify(response.user)) // ঐচ্ছিক
       setCurrentUserId(response.user.id)
-      setUser(response.user)
+      // the login reply has only id / name / email / role: load the full profile too
+      // (SBU, function, department, manager - the forms use them as defaults)
+      setUser(await api.get<User>('/organizations/users/me').catch(() => response.user))
     }
   }
 
