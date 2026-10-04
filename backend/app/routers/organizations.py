@@ -192,7 +192,7 @@ def permanent_delete_user(user_id: int, admin: models.User = Depends(get_admin_u
     # Null out FKs referencing this user
     for model, cols in [
         (models.Project, ["sponsor_id", "manager_id", "owner_id"]),
-        (models.Task, ["responsible_id", "accountable_id", "reviewer_id"]),
+        (models.Task, ["responsible_id", "accountable_id", "reviewer_id", "informed_id"]),
         (models.DelayRca, ["recovery_owner_id"]),
         (models.BacklogItem, ["requested_by_id"]),
         (models.Approval, ["requested_by_id", "approver_id"]),

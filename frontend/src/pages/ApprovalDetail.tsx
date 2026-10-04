@@ -229,6 +229,7 @@ export default function ApprovalDetail() {
                 <Field name="Responsible">{nameOf(task.responsible_id)}</Field>
                 <Field name="Accountable">{nameOf(task.accountable_id)}</Field>
                 <Field name="Reviewer">{nameOf(task.reviewer_id)}</Field>
+                <Field name="Informed">{nameOf(task.informed_id)}</Field>
                 <Field name="Baseline Due">{fmtDate(task.baseline_due_date)}</Field>
                 <Field name="Approved Due">{fmtDate(task.approved_due_date)}</Field>
                 <Field name="Forecast">{fmtDate(task.forecast_due_date)}</Field>

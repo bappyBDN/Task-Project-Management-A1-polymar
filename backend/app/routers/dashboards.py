@@ -16,13 +16,14 @@ DONE_STATUSES = ["completed", "closed"]
 
 def _mine(user_id: int):
     """The tasks the personal dashboard tracks for a user: the ones they are Responsible /
-    Accountable / Reviewer on, plus every task of the projects they lead (Manager, Sponsor
+    Accountable / Reviewer / Informed on, plus every task of the projects they lead (Manager, Sponsor
     or Owner) - so a project manager follows the whole project from the dashboard."""
     led = select(models.Project.id).where(
         (models.Project.manager_id == user_id) | (models.Project.sponsor_id == user_id)
         | (models.Project.owner_id == user_id))
     return ((models.Task.responsible_id == user_id) | (models.Task.accountable_id == user_id)
-            | (models.Task.reviewer_id == user_id) | models.Task.project_id.in_(led))
+            | (models.Task.reviewer_id == user_id) | (models.Task.informed_id == user_id)
+            | models.Task.project_id.in_(led))
 
 
 @router.get("/individual/{user_id}", response_model=schemas.TaskKpiOut)

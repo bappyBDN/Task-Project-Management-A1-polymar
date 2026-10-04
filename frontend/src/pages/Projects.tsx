@@ -56,7 +56,7 @@ export default function Projects() {
   // Most projects were created without a Company / Manager; that information
   // lives on their tasks. So a project belongs to a company if the project OR
   // any of its tasks is in that company, and involves an employee if they are
-  // its PM / Sponsor / Owner OR Responsible / Accountable / Reviewer on a task.
+  // its PM / Sponsor / Owner OR Responsible / Accountable / Reviewer / Informed on a task.
   const tasksByProject = useMemo(() => {
     const m = new Map<number, Task[]>()
     tasks.forEach((t) => { if (t.project_id) { const l = m.get(t.project_id) ?? []; l.push(t); m.set(t.project_id, l) } })
@@ -71,7 +71,7 @@ export default function Projects() {
   const projectPeopleIds = (p: Project) => {
     const s = new Set<number>()
     ;[p.manager_id, p.sponsor_id, p.owner_id].forEach((id) => { if (id) s.add(id) })
-    ;(tasksByProject.get(p.id) ?? []).forEach((t) => [t.responsible_id, t.accountable_id, t.reviewer_id].forEach((id) => { if (id) s.add(id) }))
+    ;(tasksByProject.get(p.id) ?? []).forEach((t) => [t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id].forEach((id) => { if (id) s.add(id) }))
     return s
   }
 
@@ -82,7 +82,7 @@ export default function Projects() {
     return (tasksByProject.get(p.id) ?? []).filter((t) => {
       if (filter.company_id && !inSbu(companies, t.company_id ?? p.company_id, filter.company_id)) return false
       // a PM / Sponsor / Owner sees all the project's tasks; others only the ones they are on
-      if (uid !== null && !leadsProject && ![t.responsible_id, t.accountable_id, t.reviewer_id].includes(uid)) return false
+      if (uid !== null && !leadsProject && ![t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id].includes(uid)) return false
       return true
     })
   }
@@ -239,7 +239,7 @@ export default function Projects() {
           <div className="card" style={{ padding: 0 }}>
             <table>
               <thead>
-                <tr><th>Code</th><th>Task</th><th>Project</th><th>Responsible</th><th>Accountable</th><th>Reviewer</th><th>Status</th><th>Progress</th><th>Due</th></tr>
+                <tr><th>Code</th><th>Task</th><th>Project</th><th>Responsible</th><th>Accountable</th><th>Reviewer</th><th>Informed</th><th>Status</th><th>Progress</th><th>Due</th></tr>
               </thead>
               <tbody>
                 {shownTasks.map(({ t, p }) => (
@@ -250,6 +250,7 @@ export default function Projects() {
                     <td className="small">{userName(t.responsible_id)}</td>
                     <td className="small">{userName(t.accountable_id)}</td>
                     <td className="small">{userName(t.reviewer_id)}</td>
+                    <td className="small">{userName(t.informed_id)}</td>
                     <td><span className="badge gray">{label(t.status)}</span></td>
                     <td style={{ minWidth: 90 }}>
                       <div className="progress"><span style={{ width: `${t.progress_pct}%` }} /></div>

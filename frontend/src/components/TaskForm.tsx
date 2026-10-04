@@ -23,7 +23,7 @@ interface Props {
   // Responsible / Accountable person (not admin / PMO) editing their own task: an already-set
   // due date and Completed/Closed are locked (the server enforces the same).
   limited?: boolean
-  // Accountable person (not Responsible): they also can't change the Accountable person or the Reviewer.
+  // Accountable person (not Responsible): they also can't change the Accountable, Reviewer or Informed person.
   lockApprovers?: boolean
   // New task opened from a project's page: that project is already chosen (it can still be changed)
   defaultProjectId?: number
@@ -46,6 +46,7 @@ const EMPTY = {
   responsible_id: '',
   accountable_id: '',
   reviewer_id: '',
+  informed_id: '',
   planned_start_date: '',
   baseline_due_date: '',
   status: '',
@@ -88,7 +89,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
   // inline create modals
   const [showProjectModal, setShowProjectModal] = useState(false)
   // which person field "+ Add new user" was opened from (null = closed)
-  const [showUserModal, setShowUserModal] = useState<'responsible_id' | 'accountable_id' | 'reviewer_id' | null>(null)
+  const [showUserModal, setShowUserModal] = useState<'responsible_id' | 'accountable_id' | 'reviewer_id' | 'informed_id' | null>(null)
   // people just added by email may not be in the parent's list yet
   const [invited, setInvited] = useState<User[]>([])
   const users = [...listedUsers, ...invited.filter((u) => !listedUsers.some((x) => x.id === u.id))]
@@ -216,6 +217,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
       responsible_id: form.responsible_id ? Number(form.responsible_id) : null,
       accountable_id: form.accountable_id ? Number(form.accountable_id) : null,
       reviewer_id: form.reviewer_id ? Number(form.reviewer_id) : null,
+      informed_id: form.informed_id ? Number(form.informed_id) : null,
       planned_start_date: form.planned_start_date || null,
       baseline_due_date: form.baseline_due_date || null,
       approved_due_date: keepApproved ? t.approved_due_date : form.baseline_due_date,
@@ -230,7 +232,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
       delete payload.code
       delete payload.approved_due_date
       if (task.baseline_due_date) delete payload.baseline_due_date
-      if (lockApprovers) { delete payload.accountable_id; delete payload.reviewer_id }
+      if (lockApprovers) { delete payload.accountable_id; delete payload.reviewer_id; delete payload.informed_id }
     }
     try {
       if (task) await api.patch(`/tasks/${task.id}`, payload)
@@ -289,6 +291,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
     if (str(form.responsible_id) === value) set('responsible_id', '')
     if (str(form.accountable_id) === value) set('accountable_id', '')
     if (str(form.reviewer_id) === value) set('reviewer_id', '')
+    if (str(form.informed_id) === value) set('informed_id', '')
     onRefresh?.()
   }
 
@@ -326,7 +329,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
         {limited && (
           <div className="alert info">
             You are editing as the task's <strong>{lockApprovers ? 'Accountable' : 'Responsible'}</strong> person.
-            {lockApprovers ? ' Accountable, Reviewer and the due date' : ' The due date'} can only be changed by an admin / PMO;
+            {lockApprovers ? ' Accountable, Reviewer, Informed and the due date' : ' The due date'} can only be changed by an admin / PMO;
             use "Request Date Revision" for a new date and "Submit for Completion" to finish the task.
           </div>
         )}
@@ -484,6 +487,20 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
             />
           </fieldset>
         </div>
+
+        <fieldset disabled={lockApprovers} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockApprovers ? 'Only the Responsible person or an admin / PMO can change this' : undefined}>
+          <label>Informed (I)</label>
+          <SearchableSelect
+            value={str(form.informed_id)}
+            items={userItems}
+            onChange={(v) => set('informed_id', v)}
+            placeholder="Search user…"
+            onAddNew={() => setShowUserModal('informed_id')}
+            addLabel="new user"
+            onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
+          />
+          <div className="small muted" style={{ marginTop: 4 }}>Optional. This person can see the task and its project and is notified of updates; they can't edit or approve.</div>
+        </fieldset>
 
         <div className="form-row three">
           <div>

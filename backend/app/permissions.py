@@ -6,14 +6,15 @@ list_options (kind='privileged_role'). Read-only: nothing here writes to the DB.
 
 Tasks
   admin / privileged role -> every field
-  Accountable             -> task details + progress (not Accountable, Reviewer,
+  Accountable             -> task details + progress (not Accountable, Reviewer, Informed,
                              approved due date, a baseline date already set, code)
-  Responsible             -> the same, plus Accountable and Reviewer (they own the task's
-                             people: Responsible, Accountable, Reviewer)
+  Responsible             -> the same, plus Accountable, Reviewer and Informed (they own the
+                             task's people: Responsible, Accountable, Reviewer, Informed)
   Deleting: Responsible / Accountable / PMO may ask; the project's Manager then deletes it
   permanently or restores it (routers/tasks.py delete_task, routers/approvals.py).
   Reviewer / anyone else  -> no edits (the Reviewer approves; editing would mean
                              approving their own changes)
+  Informed                -> no edits (they only see the task and are notified)
   Nobody but admin / privileged sets a task to completed/closed directly:
   that goes through "Submit for Completion" -> approval.
 
@@ -44,7 +45,7 @@ TASK_ACCOUNTABLE_FIELDS = TASK_PROGRESS_FIELDS | {
     "responsible_id", "planned_start_date", "acceptance_criteria",
     "project_id", "milestone_id", "parent_id", "company_id", "function_id", "department_id",
 }
-TASK_RESPONSIBLE_FIELDS = TASK_ACCOUNTABLE_FIELDS | {"accountable_id", "reviewer_id"}
+TASK_RESPONSIBLE_FIELDS = TASK_ACCOUNTABLE_FIELDS | {"accountable_id", "reviewer_id", "informed_id"}
 
 def privileged_roles(db: Session) -> set:
     """Roles that see and edit everything: admin plus the list set in the Admin Panel."""

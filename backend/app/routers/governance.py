@@ -38,7 +38,7 @@ logger = logging.getLogger("app.governance")
 
 # Meeting invitation EMAILS go only to invitees who hold one of these roles on
 # the project's tasks (in-app notifications still go to every invitee).
-EMAIL_ROLES = {"Responsible", "Accountable", "Reviewer"}
+EMAIL_ROLES = {"Responsible", "Accountable", "Reviewer", "Informed"}
 
 ADMIN_ROLE = "admin"
 MEETING_DETAILS = "meeting_scheduled"
@@ -94,6 +94,7 @@ def _project_people(db: Session, project_id: int) -> dict:
         add(t.responsible_id, "Responsible")
         add(t.accountable_id, "Accountable")
         add(t.reviewer_id, "Reviewer")
+        add(t.informed_id, "Informed")
     if not people:
         return {}
     active = {uid for (uid,) in db.query(models.User.id).filter(
@@ -176,7 +177,8 @@ def schedulable_projects(db: Session = Depends(get_db), current_user: models.Use
         task_project_ids = {pid for (pid,) in db.query(models.Task.project_id).filter(
             models.Task.is_deleted.is_(False),
             models.Task.project_id.isnot(None),
-            (models.Task.responsible_id == uid) | (models.Task.accountable_id == uid) | (models.Task.reviewer_id == uid),
+            (models.Task.responsible_id == uid) | (models.Task.accountable_id == uid) | (models.Task.reviewer_id == uid)
+            | (models.Task.informed_id == uid),
         ).distinct().all()}
         q = q.filter(
             (models.Project.id.in_(task_project_ids)) | (models.Project.manager_id == uid)
@@ -218,7 +220,7 @@ def create_meeting(payload: MeetingCreate, background_tasks: BackgroundTasks, db
         raise HTTPException(404, "Project not found")
     people = _project_people(db, project.id)
     if not _is_admin(current_user) and current_user.id not in people:
-        raise HTTPException(403, "Only an admin or someone who is Responsible, Accountable or Reviewer on this project can schedule its meetings")
+        raise HTTPException(403, "Only an admin or someone who is Responsible, Accountable, Reviewer or Informed on this project can schedule its meetings")
 
     if payload.attendee_ids is None:
         attendees = set(people)
@@ -234,7 +236,7 @@ def create_meeting(payload: MeetingCreate, background_tasks: BackgroundTasks, db
     db.add(meeting)
     db.flush()
 
-    # Email only invitees who are Responsible / Accountable / Reviewer on the project.
+    # Email only invitees who are Responsible / Accountable / Reviewer / Informed on the project.
     emailed_ids = sorted(uid for uid in attendees - {current_user.id} if people.get(uid, set()) & EMAIL_ROLES)
 
     details = {

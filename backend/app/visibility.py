@@ -5,9 +5,9 @@ delays, the dashboard's portfolio widgets). Read-only, existing columns only.
 
   admin / privileged role  -> everything
   on a project             -> its Manager / Sponsor / Owner, an associated person, or
-                              Responsible / Accountable / Reviewer on any of its tasks:
+                              Responsible / Accountable / Reviewer / Informed on any of its tasks:
                               the project and ALL its tasks
-  on a task                -> its Responsible / Accountable / Reviewer: that task
+  on a task                -> its Responsible / Accountable / Reviewer / Informed: that task
   SBU head (business_head)          -> every project and task of their SBU
   Function head (functional_head)   -> every project and task of their SBU + Function
   Department head (department_head) -> every task of their SBU + Department, and the
@@ -95,7 +95,7 @@ class Scope:
         P, T = models.Project, models.Task
         projects = db.query(P.id, P.company_id, P.function_id, P.manager_id, P.sponsor_id, P.owner_id).all()
         tasks = db.query(T.id, T.project_id, T.company_id, T.function_id, T.department_id,
-                         T.responsible_id, T.accountable_id, T.reviewer_id).filter(T.is_deleted.is_(False)).all()
+                         T.responsible_id, T.accountable_id, T.reviewer_id, T.informed_id).filter(T.is_deleted.is_(False)).all()
         self._project_company = {p.id: p.company_id for p in projects}
         self._project_function = {p.id: p.function_id for p in projects}
 
@@ -104,7 +104,7 @@ class Scope:
         full |= {r[0] for r in db.query(models.ProjectAssociate.project_id)
                  .filter(models.ProjectAssociate.user_id == uid).all()}
         full |= {t.project_id for t in tasks if t.project_id
-                 and uid in (t.responsible_id, t.accountable_id, t.reviewer_id)}
+                 and uid in (t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id)}
         # ---- projects of the SBU / Function this person heads
         if self._level == "sbu":
             full |= {p.id for p in projects if p.company_id in self._companies}
@@ -138,7 +138,7 @@ class Scope:
 
     def sees_task(self, t) -> bool:
         return (self.all
-                or self.user_id in (t.responsible_id, t.accountable_id, t.reviewer_id)
+                or self.user_id in (t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id)
                 or (t.project_id is not None and t.project_id in self._full_projects)
                 or self._heads_task(t)
                 or t.id in self._approval_tasks)

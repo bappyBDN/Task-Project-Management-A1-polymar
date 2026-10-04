@@ -24,6 +24,13 @@ _PRIORITY_RANK = case(
 )
 
 
+def _notify_informed(db: Session, task: models.Task, title: str, body: str, actor_id: int | None = None):
+    """Tell the task's Informed person (never the one who just did the action).
+    The text names the task code, so the notification opens the task (routers/audit.py)."""
+    if task.informed_id and task.informed_id != actor_id:
+        services.notify(db, task.informed_id, title[:240], body=body, kind="info")
+
+
 def _normalize(db: Session, task: models.Task):
     """Rules that must hold on every create/update, whatever the client sent."""
     task.progress_pct = max(0.0, min(100.0, float(task.progress_pct or 0.0)))
@@ -37,6 +44,7 @@ def list_tasks(
     responsible_id: int | None = None,
     accountable_id: int | None = None,
     reviewer_id: int | None = None,
+    informed_id: int | None = None,
     led_by_id: int | None = None,  # tasks of the projects this user leads (Manager / Sponsor / Owner)
     status: str | None = None,
     priority: str | None = None,
@@ -59,6 +67,8 @@ def list_tasks(
         q = q.filter(models.Task.accountable_id == accountable_id)
     if reviewer_id:
         q = q.filter(models.Task.reviewer_id == reviewer_id)
+    if informed_id:
+        q = q.filter(models.Task.informed_id == informed_id)
     if led_by_id:
         q = q.filter(models.Task.project_id.in_(select(models.Project.id).where(
             (models.Project.manager_id == led_by_id) | (models.Project.sponsor_id == led_by_id)
@@ -82,7 +92,8 @@ def list_tasks(
 
 
 @router.post("", response_model=schemas.TaskOut, status_code=201)
-def create_task(payload: schemas.TaskBase, db: Session = Depends(get_db)):
+def create_task(payload: schemas.TaskBase, db: Session = Depends(get_db),
+                current_user: models.User = Depends(get_current_user)):
     data = payload.model_dump()
     data["title"] = (data.get("title") or "").strip()
     if not data["title"]:
@@ -119,6 +130,9 @@ def create_task(payload: schemas.TaskBase, db: Session = Depends(get_db)):
     services.audit(db, "system", "task", task.id, "created", new_value=task.title)
     services.notify(db, task.responsible_id, f"Task assigned: {task.title}",
                     body=f"You are responsible for {task.code}.", kind="assignment")
+    _notify_informed(db, task, f"You are Informed on: {task.title}",
+                     f"{current_user.name} added you as the Informed person of {task.code}. "
+                     "You can follow the task and its project.", actor_id=current_user.id)
     db.commit()
     db.refresh(task)
     return task
@@ -162,9 +176,18 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
 
     previous = task.title
     old_project_id = task.project_id
+    old_informed_id, old_status = task.informed_id, task.status
     for k, v in data.items():
         setattr(task, k, v)
     _normalize(db, task)
+    if task.informed_id != old_informed_id:
+        _notify_informed(db, task, f"You are Informed on: {task.title}",
+                         f"{current_user.name} added you as the Informed person of {task.code}. "
+                         "You can follow the task and its project.", actor_id=current_user.id)
+    elif task.status != old_status:
+        _notify_informed(db, task, f"Task status changed: {task.code}",
+                         f"'{task.title}' is now {task.status.replace('_', ' ')} (by {current_user.name}).",
+                         actor_id=current_user.id)
     for pid in {old_project_id, task.project_id} - {None}:
         services.recalc_project_health(db, pid)
     services.audit(db, current_user.name, "task", task.id, "updated", previous_value=previous, new_value=task.title)
@@ -263,6 +286,9 @@ def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session 
         services.recalc_project_health(db, task.project_id)
     db.add(update)
     services.audit(db, current_user.name, "task", task.id, "progress_updated", new_value=str(task.progress_pct))
+    _notify_informed(db, task, f"Progress update: {task.code}",
+                     f"'{task.title}' is at {task.progress_pct:g}% ({task.status.replace('_', ' ')}), updated by {current_user.name}."
+                     + (f" {payload.remarks}" if payload.remarks else ""), actor_id=current_user.id)
     db.commit()
     db.refresh(update)
     return update

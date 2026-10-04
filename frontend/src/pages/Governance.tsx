@@ -106,7 +106,7 @@ export default function Governance() {
           className="btn primary"
           onClick={() => setShowSchedule(true)}
           disabled={schedulable.length === 0}
-          title={schedulable.length === 0 ? 'Only admins and people who are Responsible, Accountable or Reviewer on a project can schedule its meetings' : ''}
+          title={schedulable.length === 0 ? 'Only admins and people who are Responsible, Accountable, Reviewer or Informed on a project can schedule its meetings' : ''}
         >
           + Schedule Meeting
         </button>
@@ -354,7 +354,7 @@ function ScheduleMeetingModal({ projects, myId, onClose, onSaved }: {
 
   const toggle = (id: number) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const notifyCount = [...picked].filter((id) => id !== myId).length
-  const EMAIL_ROLES = ['Responsible', 'Accountable', 'Reviewer']
+  const EMAIL_ROLES = ['Responsible', 'Accountable', 'Reviewer', 'Informed']
   const emailCount = people.filter((p) => picked.has(p.id) && p.id !== myId && p.roles.some((r) => EMAIL_ROLES.includes(r))).length
 
   const submit = async () => {
@@ -439,8 +439,8 @@ function ScheduleMeetingModal({ projects, myId, onClose, onSaved }: {
             {notifyCount} {notifyCount === 1 ? 'person' : 'people'} will get a notification with the date, time and purpose. Nobody outside this project is notified.
             <br />
             {emailCount > 0
-              ? `${emailCount} of them (Responsible / Accountable / Reviewer) will also receive a professional email invitation with a calendar file.`
-              : 'No email will be sent: none of the invited people is Responsible, Accountable or Reviewer on this project.'}
+              ? `${emailCount} of them (Responsible / Accountable / Reviewer / Informed) will also receive a professional email invitation with a calendar file.`
+              : 'No email will be sent: none of the invited people is Responsible, Accountable, Reviewer or Informed on this project.'}
           </div>
         )}
 

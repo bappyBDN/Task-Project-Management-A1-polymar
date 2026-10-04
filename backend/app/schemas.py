@@ -238,6 +238,7 @@ class TaskBase(BaseModel):
     responsible_id: Optional[int] = None
     accountable_id: Optional[int] = None
     reviewer_id: Optional[int] = None
+    informed_id: Optional[int] = None
     planned_start_date: Optional[date] = None
     baseline_due_date: Optional[date] = None
     approved_due_date: Optional[date] = None
@@ -270,6 +271,7 @@ class TaskUpdate(BaseModel):
     responsible_id: Optional[int] = None
     accountable_id: Optional[int] = None
     reviewer_id: Optional[int] = None
+    informed_id: Optional[int] = None
     planned_start_date: Optional[date] = None
     baseline_due_date: Optional[date] = None
     approved_due_date: Optional[date] = None

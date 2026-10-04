@@ -361,7 +361,7 @@ export const store = {
     db.users = db.users.filter((x) => x.id !== id)
     const nullRefs = (arr: any[], keys: string[]) => arr.forEach((o) => keys.forEach((k) => { if (o[k] === id) o[k] = undefined }))
     nullRefs(db.projects, ['sponsor_id', 'manager_id', 'owner_id'])
-    nullRefs(db.tasks, ['responsible_id', 'accountable_id', 'reviewer_id'])
+    nullRefs(db.tasks, ['responsible_id', 'accountable_id', 'reviewer_id', 'informed_id'])
     nullRefs(db.delays, ['recovery_owner_id'])
     nullRefs(db.backlog, ['requested_by_id'])
     nullRefs(db.approvals, ['requested_by_id', 'approver_id'])
@@ -418,13 +418,14 @@ export const store = {
   },
 
   // tasks
-  tasks: (filter?: { project_id?: number; responsible_id?: number; accountable_id?: number; reviewer_id?: number; led_by_id?: number; status?: string; priority?: string; health?: string; overdue?: boolean; blocker?: boolean }) => {
+  tasks: (filter?: { project_id?: number; responsible_id?: number; accountable_id?: number; reviewer_id?: number; informed_id?: number; led_by_id?: number; status?: string; priority?: string; health?: string; overdue?: boolean; blocker?: boolean }) => {
     let list = db.tasks.filter((t) => !(t as any).is_deleted)
     if (!filter) return list
     if (filter.project_id) list = list.filter((t) => t.project_id === filter.project_id)
     if (filter.responsible_id) list = list.filter((t) => t.responsible_id === filter.responsible_id)
     if (filter.accountable_id) list = list.filter((t) => t.accountable_id === filter.accountable_id)
     if (filter.reviewer_id) list = list.filter((t) => t.reviewer_id === filter.reviewer_id)
+    if (filter.informed_id) list = list.filter((t) => t.informed_id === filter.informed_id)
     if (filter.led_by_id) {
       const led = new Set(db.projects.filter((p) => [p.manager_id, p.sponsor_id, p.owner_id].includes(filter.led_by_id)).map((p) => p.id))
       list = list.filter((t) => t.project_id != null && led.has(t.project_id))
@@ -580,7 +581,7 @@ export const store = {
     const taskIds = new Set(tasks.map((t) => t.id))
     const entries = db.raci.filter((r) => r.task_id != null && taskIds.has(r.task_id))
     const userIds = new Set<number>()
-    tasks.forEach((t) => { [t.responsible_id, t.accountable_id, t.reviewer_id].forEach((id) => id && userIds.add(id)) })
+    tasks.forEach((t) => { [t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id].forEach((id) => id && userIds.add(id)) })
     entries.forEach((e) => userIds.add(e.user_id))
     const users = db.users.filter((u) => userIds.has(u.id))
     const cells: Record<string, string[]> = {}
@@ -588,6 +589,7 @@ export const store = {
       if (t.responsible_id) { (cells[`${t.id}:${t.responsible_id}`] ||= []).push('R') }
       if (t.accountable_id) { (cells[`${t.id}:${t.accountable_id}`] ||= []).push('A') }
       if (t.reviewer_id) { (cells[`${t.id}:${t.reviewer_id}`] ||= []).push('C') }
+      if (t.informed_id) { (cells[`${t.id}:${t.informed_id}`] ||= []).push('I') }
     })
     entries.forEach((e) => { if (e.task_id != null) (cells[`${e.task_id}:${e.user_id}`] ||= []).push(e.raci_type) })
     const rows = tasks.map((t) => ({
@@ -673,7 +675,7 @@ export const store = {
   individualKpi: (userId: number): TaskKpi => {
     const t0 = today()
     const led = new Set(db.projects.filter((p) => [p.manager_id, p.sponsor_id, p.owner_id].includes(userId)).map((p) => p.id))
-    const base = db.tasks.filter((t) => !(t as any).is_deleted && ([t.responsible_id, t.accountable_id, t.reviewer_id].includes(userId) || (t.project_id != null && led.has(t.project_id))))
+    const base = db.tasks.filter((t) => !(t as any).is_deleted && ([t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id].includes(userId) || (t.project_id != null && led.has(t.project_id))))
     const total = base.length
     const open = base.filter((t) => OPEN_STATUSES.includes(t.status)).length
     const completed = base.filter((t) => DONE_STATUSES.includes(t.status)).length

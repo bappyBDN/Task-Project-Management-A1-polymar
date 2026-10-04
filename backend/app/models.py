@@ -166,6 +166,8 @@ class Task(Base, TimestampMixin):
     responsible_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     accountable_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Informed (I): kept up to date - sees the task and its project, is notified, never edits or approves
+    informed_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     planned_start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     baseline_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     approved_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)

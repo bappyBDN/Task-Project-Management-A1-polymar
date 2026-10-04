@@ -124,6 +124,7 @@ export interface Task {
   responsible_id?: number
   accountable_id?: number
   reviewer_id?: number
+  informed_id?: number
   planned_start_date?: string
   baseline_due_date?: string
   approved_due_date?: string

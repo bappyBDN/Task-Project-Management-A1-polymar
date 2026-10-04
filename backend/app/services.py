@@ -209,7 +209,7 @@ def get_hierarchical_stakeholders(db: Session, task: models.Task) -> List[int]:
     """
     Finds and returns unique user IDs for ONLY:
     1. Accountable user (task.accountable_id)
-    2. Reviewer user (task.reviewer_id)
+    2. Reviewer user (task.reviewer_id) and Informed user (task.informed_id)
     3. Line Managers of Accountable & Responsible users (reports_to_id)
     """
     stakeholder_ids: Set[int] = set()
@@ -218,6 +218,8 @@ def get_hierarchical_stakeholders(db: Session, task: models.Task) -> List[int]:
         stakeholder_ids.add(task.accountable_id)
     if task.reviewer_id:
         stakeholder_ids.add(task.reviewer_id)
+    if task.informed_id:
+        stakeholder_ids.add(task.informed_id)
 
     for uid in [task.responsible_id, task.accountable_id]:
         if uid:

@@ -65,7 +65,7 @@ def _related_ids(approval: models.Approval, entity) -> set:
     ids = {approval.requested_by_id, approval.approver_id}
     if entity is not None:
         if approval.entity_type == "task":
-            ids |= {entity.responsible_id, entity.accountable_id, entity.reviewer_id}
+            ids |= {entity.responsible_id, entity.accountable_id, entity.reviewer_id, entity.informed_id}
         elif approval.entity_type == "project":
             ids |= {entity.manager_id, entity.sponsor_id, entity.owner_id}
     ids.discard(None)
@@ -313,6 +313,7 @@ def decide_approval(
         outcome_ids = {approval.requested_by_id}
         if entity is not None:
             outcome_ids.add(entity.responsible_id)
+            outcome_ids.add(entity.informed_id)  # Informed: told about the new date, never decides
         _notify_users(db, outcome_ids, title, body, exclude_user_id=current_user.id)
     else:
         _notify_users(db, related | _admin_ids(db), title, body, exclude_user_id=current_user.id)

@@ -78,7 +78,7 @@ export default function TaskDetail() {
 
   const isMine = user?.id === task.responsible_id || user?.id === task.accountable_id
   // Admin / PMO edit everything; the Responsible / Accountable person edits the task details (limited).
-  // The Responsible person also sets the task's people (Responsible, Accountable, Reviewer).
+  // The Responsible person also sets the task's people (Responsible, Accountable, Reviewer, Informed).
   const isResponsible = user?.id === task.responsible_id
   const canEdit = isPrivileged || isMine
 
@@ -226,6 +226,7 @@ export default function TaskDetail() {
             <div className="small" style={{ padding: '4px 0' }}><strong>R</strong> — {owner?.name ?? '—'}</div>
             <div className="small" style={{ padding: '4px 0' }}><strong>A</strong> — {acc?.name ?? '—'}</div>
             <div className="small" style={{ padding: '4px 0' }}><strong>Reviewer</strong> — {users.find((u) => u.id === task.reviewer_id)?.name ?? '—'}</div>
+            <div className="small" style={{ padding: '4px 0' }}><strong>I</strong> — {users.find((u) => u.id === task.informed_id)?.name ?? '—'}</div>
           </div>
 
           <div className="card mt">

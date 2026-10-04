@@ -69,7 +69,7 @@ class _Access:
         mine = db.query(models.Task.id, models.Task.project_id).filter(
             models.Task.is_deleted.is_(False),
             or_(models.Task.responsible_id == user.id, models.Task.accountable_id == user.id,
-                models.Task.reviewer_id == user.id),
+                models.Task.reviewer_id == user.id, models.Task.informed_id == user.id),
         ).all()
         self.task_ids = {tid for tid, _ in mine}
         self.project_ids = {pid for _, pid in mine if pid is not None} | {
@@ -86,7 +86,7 @@ class _Access:
             return project is not None and project.manager_id == self.uid
         task = self.db.get(models.Task, root.task_id) if root.task_id else None
         return (task is not None and not task.is_deleted
-                and self.uid in (task.responsible_id, task.accountable_id, task.reviewer_id))
+                and self.uid in (task.responsible_id, task.accountable_id, task.reviewer_id, task.informed_id))
 
 
 def _out(row: models.Comment, replies: list[models.Comment] | None = None, access: _Access | None = None) -> dict:
@@ -261,7 +261,7 @@ def reply_to_comment(comment_id: int, payload: schemas.CommentIn, background_tas
     if not access.can_view(root):
         raise HTTPException(404, "Comment not found")
     if not access.can_reply(root):
-        who = "Project Manager" if root.entity_type == "project" else "task's Responsible, Accountable or Reviewer"
+        who = "Project Manager" if root.entity_type == "project" else "task's Responsible, Accountable, Reviewer or Informed person"
         raise HTTPException(403, f"Only the {who} can reply to this comment.")
     text = _comment_text(payload.comment)
 

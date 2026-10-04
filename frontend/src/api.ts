@@ -114,6 +114,7 @@ function local<T>(path: string, options?: { method?: string; body?: unknown }): 
         responsible_id: q.get('responsible_id') ? Number(q.get('responsible_id')) : undefined,
         accountable_id: q.get('accountable_id') ? Number(q.get('accountable_id')) : undefined,
         reviewer_id: q.get('reviewer_id') ? Number(q.get('reviewer_id')) : undefined,
+        informed_id: q.get('informed_id') ? Number(q.get('informed_id')) : undefined,
         led_by_id: q.get('led_by_id') ? Number(q.get('led_by_id')) : undefined,
         status: q.get('status') || undefined,
         priority: q.get('priority') || undefined,

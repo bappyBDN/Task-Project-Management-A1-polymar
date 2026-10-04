@@ -72,6 +72,8 @@ def _build_matrix(db: Session, scope: Scope, project_id: int | None, company_id:
             cells.setdefault((t.id, t.accountable_id), set()).add("A")
         if t.reviewer_id:
             cells.setdefault((t.id, t.reviewer_id), set()).add("C")
+        if t.informed_id:
+            cells.setdefault((t.id, t.informed_id), set()).add("I")
     for e in entries:
         if e.raci_type:
             cells.setdefault((e.task_id, e.user_id), set()).add(e.raci_type)

@@ -9,6 +9,8 @@ def get_hierarchical_stakeholders(db: Session, task: models.Task) -> List[int]:
         stakeholder_ids.add(task.accountable_id)
     if task.reviewer_id:
         stakeholder_ids.add(task.reviewer_id)
+    if task.informed_id:
+        stakeholder_ids.add(task.informed_id)
 
     for uid in [task.responsible_id, task.accountable_id]:
         if uid:

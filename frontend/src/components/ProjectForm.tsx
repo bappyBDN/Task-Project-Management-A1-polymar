@@ -45,6 +45,7 @@ interface TaskDraft {
   responsible_id: string
   accountable_id: string
   reviewer_id: string
+  informed_id: string
   planned_start_date: string
   baseline_due_date: string
   priority: string
@@ -55,8 +56,8 @@ interface TaskDraft {
 let draftKey = 0
 const newDraft = (prev?: TaskDraft): TaskDraft => ({
   key: ++draftKey, title: '', responsible_id: '',
-  // Accountable / Reviewer are usually the same across a project's tasks - copy them from the last row
-  accountable_id: prev?.accountable_id ?? '', reviewer_id: prev?.reviewer_id ?? '',
+  // Accountable / Reviewer / Informed are usually the same across a project's tasks - copy them from the last row
+  accountable_id: prev?.accountable_id ?? '', reviewer_id: prev?.reviewer_id ?? '', informed_id: prev?.informed_id ?? '',
   planned_start_date: '', baseline_due_date: '', priority: 'medium', description: '', expected_deliverable: '',
 })
 
@@ -102,7 +103,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
   const [newTypes, setNewTypes] = useState<string[]>([])
   // "+ Add new user" on Project Manager (true) or on a task row's person field:
   // people added by email aren't in the parent's list yet
-  const [inviting, setInviting] = useState<true | { key: number; field: 'responsible_id' | 'accountable_id' | 'reviewer_id' } | false>(false)
+  const [inviting, setInviting] = useState<true | { key: number; field: 'responsible_id' | 'accountable_id' | 'reviewer_id' | 'informed_id' } | false>(false)
   const [invited, setInvited] = useState<User[]>([])
   const users = [...listedUsers, ...invited.filter((u) => !listedUsers.some((x) => x.id === u.id))]
   const set = (k: keyof typeof EMPTY_FORM, v: string) => setForm((f) => ({ ...f, [k]: v }))
@@ -263,6 +264,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
       responsible_id: Number(d.responsible_id),
       accountable_id: Number(d.accountable_id),
       reviewer_id: Number(d.reviewer_id),
+      informed_id: d.informed_id ? Number(d.informed_id) : null,
       planned_start_date: d.planned_start_date || form.start_date || null,
       baseline_due_date: due,
       approved_due_date: due,
@@ -448,6 +450,9 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                       onAddNew={() => setInviting({ key: d.key, field: 'reviewer_id' })} addLabel="new user" />
                   </div>
                 </div>
+                <label>Informed (I)</label>
+                <SearchableSelect value={d.informed_id} items={userItems} onChange={(v) => setDraft(d.key, 'informed_id', v)} placeholder="Search person… (optional)"
+                  onAddNew={() => setInviting({ key: d.key, field: 'informed_id' })} addLabel="new user" />
                 <div className="form-row three">
                   <div>
                     <label>Planned Start</label>

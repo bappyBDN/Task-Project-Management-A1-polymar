@@ -25,6 +25,7 @@ _NEW_COLUMNS = [
     ("users", "reset_token_expires", "DATETIME"),
     ("users", "reports_to_id", "INTEGER REFERENCES users(id)"),
     ("users", "pending_manager_employee_id", "VARCHAR(32)"),
+    ("tasks", "informed_id", "INTEGER REFERENCES users(id)"),
 ]
 
 

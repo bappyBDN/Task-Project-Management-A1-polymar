@@ -615,8 +615,8 @@ export default function Dashboard() {
       .catch(fail)
     // Trends are optional: an older backend without this route just shows flat sparklines.
     api.get<Trends>(`/dashboards/individual/${userId}/trends?days=7`).then(ok(setTrends)).catch(() => {})
-    // The KPI cards count tasks where you are Responsible, Accountable OR Reviewer, plus every
-    // task of the projects you lead (Manager / Sponsor / Owner), so the list loads all four -
+    // The KPI cards count tasks where you are Responsible, Accountable, Reviewer OR Informed, plus every
+    // task of the projects you lead (Manager / Sponsor / Owner), so the list loads all five -
     // otherwise "Total Tasks: 1" could sit next to an empty list.
     api.get<Project[]>('/projects').then(ok(setProjects)).catch(() => {})
     api.get<User[]>('/organizations/users').then(ok(setPeople)).catch(() => {})
@@ -624,6 +624,7 @@ export default function Dashboard() {
       api.get<Task[]>(`/tasks?responsible_id=${userId}`),
       api.get<Task[]>(`/tasks?accountable_id=${userId}`),
       api.get<Task[]>(`/tasks?reviewer_id=${userId}`),
+      api.get<Task[]>(`/tasks?informed_id=${userId}`),
       api.get<Task[]>(`/tasks?led_by_id=${userId}`),
     ])
       .then((lists) => {
@@ -876,11 +877,11 @@ export default function Dashboard() {
                 <tbody>
                   {rows.map((t) => {
                     const p = PR[t.priority] ?? PR.medium, s = stTone(t.status), d = dueOf(t), done = DONE.includes(t.status)
-                    const proj = projectOf(t), onTask = [t.responsible_id, t.accountable_id, t.reviewer_id].includes(userId)
+                    const proj = projectOf(t), onTask = [t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id].includes(userId)
                     return (
                       <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)}>
                         <td>{t.code}</td>
-                        <td>{t.title}{t.blocker && <span className="pill" style={{ background: '#fdeaea', color: '#e23b3b', marginLeft: 8 }}>Blocked</span>}{t.reviewer_id === userId && t.responsible_id !== userId && t.accountable_id !== userId && <span className="pill" style={{ background: '#f5f1ff', color: '#7c4dff', marginLeft: 8 }}>To review</span>}{!onTask && <span className="pill" style={{ background: '#fdf3d7', color: '#8a6d1f', marginLeft: 8 }}>My project</span>}</td>
+                        <td>{t.title}{t.blocker && <span className="pill" style={{ background: '#fdeaea', color: '#e23b3b', marginLeft: 8 }}>Blocked</span>}{t.reviewer_id === userId && t.responsible_id !== userId && t.accountable_id !== userId && <span className="pill" style={{ background: '#f5f1ff', color: '#7c4dff', marginLeft: 8 }}>To review</span>}{t.informed_id === userId && t.responsible_id !== userId && t.accountable_id !== userId && t.reviewer_id !== userId && <span className="pill" style={{ background: '#eef1f5', color: '#5b6577', marginLeft: 8 }}>Informed</span>}{!onTask && <span className="pill" style={{ background: '#fdf3d7', color: '#8a6d1f', marginLeft: 8 }}>My project</span>}</td>
                         <td style={{ minWidth: 140 }}>
                           {proj
                             ? <><Link to={`/projects/${proj.id}`} onClick={(e) => e.stopPropagation()}>{proj.name}</Link><span className="sub">PM: {personName(proj.manager_id) || '—'}</span></>

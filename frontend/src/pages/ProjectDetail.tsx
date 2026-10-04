@@ -89,7 +89,7 @@ export default function ProjectDetail() {
   }).length
   const openCount = tasks.filter((t) => !isClosed(t)).length
   const people = new Set([project.manager_id,
-    ...tasks.flatMap((t) => [t.responsible_id, t.accountable_id, t.reviewer_id])].filter(Boolean)).size
+    ...tasks.flatMap((t) => [t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id])].filter(Boolean)).size
   const dueDate = project.approved_due_date || project.baseline_due_date
   const daysLeft = dueDate && !project.actual_due_date
     ? Math.round((new Date(dueDate).getTime() - new Date(todayStr).getTime()) / 86400000)
