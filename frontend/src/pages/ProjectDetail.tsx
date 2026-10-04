@@ -12,6 +12,7 @@ import CommentsPanel from '../components/CommentsPanel'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { RichTextView } from '../components/RichText'
+import SearchableSelect from '../components/SearchableSelect'
 import { overseesSbu, sbuName } from '../org'
 
 export default function ProjectDetail() {
@@ -29,6 +30,8 @@ export default function ProjectDetail() {
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [savedMsg, setSavedMsg] = useState('')
+  // task list filter: the Responsible employee ('' = everyone)
+  const [employeeId, setEmployeeId] = useState('')
   const { user } = useAuth()
   const isPrivileged = useIsPrivileged(user?.role)
 
@@ -95,6 +98,15 @@ export default function ProjectDetail() {
   const daysLeft = dueDate && !project.actual_due_date
     ? Math.round((new Date(dueDate).getTime() - new Date(todayStr).getTime()) / 86400000)
     : null
+
+  // task list: filter by the Responsible employee (only people responsible for a task here are listed)
+  const employeeItems = [{ value: '', label: 'All employees' },
+    ...[...new Set(tasks.map((t) => t.responsible_id).filter((x): x is number => x != null))]
+      .map((uid) => ({ value: String(uid), label: userName(uid) ?? `User #${uid}` }))
+      .sort((a, b) => a.label.localeCompare(b.label))]
+  // a filter left on someone who no longer has a task here shows everything again
+  const activeEmployee = employeeItems.some((i) => i.value === employeeId) ? employeeId : ''
+  const shownTasks = activeEmployee ? tasks.filter((t) => String(t.responsible_id) === activeEmployee) : tasks
 
   return (
     <div>
@@ -224,8 +236,16 @@ export default function ProjectDetail() {
 
           <div className="card mt">
             <div className="spread">
-              <div className="section-title" style={{ marginTop: 0 }}>Tasks ({tasks.length})</div>
-              <button className="btn sm primary" onClick={() => setShowTask(true)}>+ New Task</button>
+              <div className="section-title" style={{ marginTop: 0 }}>
+                Tasks ({activeEmployee ? `${shownTasks.length} of ${tasks.length}` : tasks.length})
+              </div>
+              <div className="row" style={{ alignItems: 'end' }}>
+                <div className="field" style={{ minWidth: 200 }}>
+                  <label>Employee</label>
+                  <SearchableSelect value={activeEmployee} items={employeeItems} onChange={setEmployeeId} placeholder="Type to search employee…" />
+                </div>
+                <button className="btn sm primary" onClick={() => setShowTask(true)}>+ New Task</button>
+              </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
             <table>
@@ -236,7 +256,7 @@ export default function ProjectDetail() {
                 </tr>
               </thead>
               <tbody>
-                {tasks.map((t) => (
+                {shownTasks.map((t) => (
                   <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
                     <td className="muted small">{t.code}</td>
                     <td><Link to={`/tasks/${t.id}`}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
