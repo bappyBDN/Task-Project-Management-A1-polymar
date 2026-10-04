@@ -433,7 +433,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                 {d.error && <div className="badge red" style={{ margin: '8px 0' }}>{d.error}</div>}
                 <label>Task Title *</label>
                 <input value={d.title} onChange={(e) => setDraft(d.key, 'title', e.target.value)} placeholder="e.g. Install vibration sensors" disabled={saving} />
-                <div className="form-row three">
+                <div className="form-row four">
                   <div>
                     <label>Responsible (R) *</label>
                     <SearchableSelect value={d.responsible_id} items={userItems} onChange={(v) => onDraftResponsible(d, v)} placeholder="Search person…"
@@ -449,10 +449,12 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                     <SearchableSelect value={d.reviewer_id} items={userItems} onChange={(v) => setDraft(d.key, 'reviewer_id', v)} placeholder="Search person…"
                       onAddNew={() => setInviting({ key: d.key, field: 'reviewer_id' })} addLabel="new user" />
                   </div>
+                  <div>
+                    <label>Informed (I)</label>
+                    <SearchableSelect value={d.informed_id} items={userItems} onChange={(v) => setDraft(d.key, 'informed_id', v)} placeholder="Search person…"
+                      onAddNew={() => setInviting({ key: d.key, field: 'informed_id' })} addLabel="new user" />
+                  </div>
                 </div>
-                <label>Informed (I)</label>
-                <SearchableSelect value={d.informed_id} items={userItems} onChange={(v) => setDraft(d.key, 'informed_id', v)} placeholder="Search person… (optional)"
-                  onAddNew={() => setInviting({ key: d.key, field: 'informed_id' })} addLabel="new user" />
                 <div className="form-row three">
                   <div>
                     <label>Planned Start</label>

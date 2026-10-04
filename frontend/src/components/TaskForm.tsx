@@ -446,7 +446,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
         <label>Expected Deliverable *</label>
         <RichTextEditor rows={2} value={form.expected_deliverable} onChange={(v) => set('expected_deliverable', v)} placeholder="What will be delivered when this task is done?" />
 
-        <div className="form-row three">
+        <div className="form-row four">
           <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <label>Responsible (R) *</label>
             <SearchableSelect
@@ -486,21 +486,19 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
               onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
             />
           </fieldset>
+          <fieldset disabled={lockApprovers} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockApprovers ? 'Only the Responsible person or an admin / PMO can change this' : undefined}>
+            <label>Informed (I)</label>
+            <SearchableSelect
+              value={str(form.informed_id)}
+              items={userItems}
+              onChange={(v) => set('informed_id', v)}
+              placeholder="Search user…"
+              onAddNew={() => setShowUserModal('informed_id')}
+              addLabel="new user"
+              onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
+            />
+          </fieldset>
         </div>
-
-        <fieldset disabled={lockApprovers} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockApprovers ? 'Only the Responsible person or an admin / PMO can change this' : undefined}>
-          <label>Informed (I)</label>
-          <SearchableSelect
-            value={str(form.informed_id)}
-            items={userItems}
-            onChange={(v) => set('informed_id', v)}
-            placeholder="Search user…"
-            onAddNew={() => setShowUserModal('informed_id')}
-            addLabel="new user"
-            onRemove={user?.role === 'admin' ? (v) => removeUser(v) : undefined}
-          />
-          <div className="small muted" style={{ marginTop: 4 }}>Optional. This person can see the task and its project and is notified of updates; they can't edit or approve.</div>
-        </fieldset>
 
         <div className="form-row three">
           <div>
