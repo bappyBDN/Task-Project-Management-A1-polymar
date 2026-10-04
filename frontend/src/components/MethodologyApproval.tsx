@@ -7,7 +7,7 @@ import { fmtDateTime } from './CommentsPanel'
 
 // Methodology approval on the project page (server: app/routers/methodology.py).
 // The Project Manager adds the methodology document (a Google Drive / Docs link) and
-// picks the Group Executive, Function Head and Team Lead approvers. Each approver opens
+// picks the Group Executive, Team Lead and Function Head approvers. Each approver opens
 // the document and records Approve / Under Review / Reject with a note. Only the
 // approvers, the Project Manager and admin / PMO can open the document or read the
 // notes; everyone else sees who approves and the status.
@@ -139,7 +139,7 @@ export default function MethodologyApproval({ projectId, users, reloadUsers }: {
       <div className="mth-steps" aria-hidden>
         {data.approvals.map((a) => <span key={a.role} style={{ background: DECISION[a.decision].color }} title={`${a.label}: ${DECISION[a.decision].text}`} />)}
       </div>
-      <div className="small muted">{data.approved_count} of {data.total} approved · Group Executive, Function Head and Team Lead</div>
+      <div className="small muted">{data.approved_count} of {data.total} approved · Group Executive, Team Lead and Function Head</div>
 
       {msg && <div className="alert success mt" role="status">{msg}</div>}
 

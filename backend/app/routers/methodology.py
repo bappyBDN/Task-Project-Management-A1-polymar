@@ -1,8 +1,8 @@
 """Methodology approval on the project page.
 
 The Project Manager adds the project's methodology document (a Google Drive /
-Docs link) and picks three approvers: the Group Executive, the Function Head
-and the Team Lead (any employee can fill a slot; someone not in the system is
+Docs link) and picks three approvers: the Group Executive, the Team Lead
+and the Function Head (any employee can fill a slot; someone not in the system is
 added with the normal sign-up form first). Each approver opens the document and
 records Approved / Rejected / Under Review with a note or findings.
 
@@ -33,8 +33,8 @@ logger = logging.getLogger("app.methodology")
 
 ROLES = {
     "group_executive": "Group Executive",
-    "function_head": "Function Head",
     "team_lead": "Team Lead",
+    "function_head": "Function Head",
 }
 DECISIONS = {"approved": "Approved", "rejected": "Rejected", "review": "Under Review"}
 MAX_NOTE_LENGTH = 2000
