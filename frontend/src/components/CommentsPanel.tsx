@@ -34,8 +34,8 @@ export const REPLY_CSS = `
 `
 
 /** A comment's replies plus a "Reply" box, shown only when the server says this user
- *  may reply (project: the Project Manager; task: its Responsible, Accountable or Reviewer).
- *  The server emails the comment's author and the Project Manager / Responsible person. */
+ *  may reply (project: the Project Manager; task: its Responsible or Accountable).
+ *  The server emails the comment's author and the Project Manager / Responsible and Accountable. */
 export function CommentReplies({ comment, onReplied }: { comment: Comment; onReplied: (reply: Comment) => void }) {
   const replies = comment.replies ?? []
   const [open, setOpen] = useState(false)
@@ -132,15 +132,20 @@ const CSS = `
 @media(max-width:600px){.cm-fab{right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:11px 16px}}
 ${REPLY_CSS}`
 
-/** Comments on a project or task. Any employee can comment; the Project Manager
- *  (project) or the Responsible person (task) is emailed. */
-export default function CommentsPanel({ kind, id, recipientId, recipientName }: {
-  kind: 'project' | 'task'; id: number; recipientId?: number | null; recipientName?: string
+/** Comments on a project or task. Any employee can comment; only the Project Manager
+ *  (project) or the Responsible and Accountable persons (task) are emailed and see it.
+ *  `recipients`: those people. */
+export default function CommentsPanel({ kind, id, recipients }: {
+  kind: 'project' | 'task'; id: number; recipients: { id?: number | null; name?: string }[]
 }) {
-  const role = kind === 'project' ? 'Project Manager' : 'Responsible person'
+  const role = kind === 'project' ? 'Project Manager' : 'Responsible / Accountable person'
   const { user } = useAuth()
-  const isRecipient = !!user && user.id === recipientId // nobody is emailed about their own comment
-  const notifyName = recipientId && !isRecipient ? (recipientName ?? `The ${role}`) : undefined
+  const assigned = recipients.filter((r, i, a) => r.id != null && a.findIndex((x) => x.id === r.id) === i)
+  const isRecipient = !!user && assigned.some((r) => r.id === user.id) // nobody is emailed about their own comment
+  const others = assigned.filter((r) => r.id !== user?.id)
+  const notifyName = others.length > 0
+    ? (others.every((r) => r.name) ? others.map((r) => r.name).join(' and ') : `The ${role}`)
+    : undefined
   const [comments, setComments] = useState<Comment[]>([])
   const [text, setText] = useState('')
   const [loadErr, setLoadErr] = useState('')
@@ -211,8 +216,8 @@ export default function CommentsPanel({ kind, id, recipientId, recipientName }: 
               disabled={sending}
             />
             <div className="small muted" style={{ marginTop: 6 }}>
-              {isRecipient ? `You are the ${role} — no email is sent for your own comments.`
-                : notifyName ? `${notifyName}${recipientName ? ` (${role})` : ''} will get an email.`
+              {notifyName ? `Only ${notifyName} (${role}) will get an email and see this comment.`
+                : isRecipient ? `You are the ${role} — no email is sent for your own comments.`
                 : `No ${role} assigned — nobody will be emailed.`}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>

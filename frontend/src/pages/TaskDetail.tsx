@@ -267,7 +267,7 @@ export default function TaskDetail() {
         </div>
       </div>
 
-      <CommentsPanel kind="task" id={task.id} recipientId={task.responsible_id} recipientName={owner?.name} />
+      <CommentsPanel kind="task" id={task.id} recipients={[{ id: task.responsible_id, name: owner?.name }, { id: task.accountable_id, name: acc?.name }]} />
 
       {showRca && <RcaForm task={task} users={users} onClose={() => setShowRca(false)} onSaved={() => { setShowRca(false); load() }} />}
       {showProgress && <ProgressForm task={task} canComplete={isPrivileged} onClose={() => setShowProgress(false)} onSaved={() => { setShowProgress(false); load() }} />}

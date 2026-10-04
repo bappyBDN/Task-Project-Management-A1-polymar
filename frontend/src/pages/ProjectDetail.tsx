@@ -257,7 +257,7 @@ export default function ProjectDetail() {
             </div>
           </div>
 
-      <CommentsPanel kind="project" id={project.id} recipientId={project.manager_id} recipientName={userName(project.manager_id)} />
+      <CommentsPanel kind="project" id={project.id} recipients={[{ id: project.manager_id, name: userName(project.manager_id) }]} />
     </div>
   )
 }

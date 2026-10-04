@@ -580,8 +580,8 @@ def send_comment_email(to_email: str, recipient_name: str, recipient_role: str, 
                        subject_label: str, project_label: str, commenter_name: str,
                        commenter_employee_id: Optional[str], comment: str, sent_at: datetime,
                        link: str, reply_to: Optional[str] = None) -> bool:
-    """Tells the Project Manager (project comment) or the task's Responsible person
-    (task comment) that someone commented. With `reply_to` (the original comment's
+    """Tells the Project Manager (project comment) or the task's Responsible and
+    Accountable persons (task comment) that someone commented. With `reply_to` (the original comment's
     text) it is a reply notice instead; recipient_role "comment author" means the
     recipient wrote that original comment."""
     e = html.escape

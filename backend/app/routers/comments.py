@@ -3,28 +3,28 @@
 Any logged-in employee can comment on any project or task. Each comment is
 emailed (after the response is sent) to:
   - a project comment -> the project's Project Manager
-  - a task comment    -> the task's Responsible person
-never to the commenter themself.
+  - a task comment    -> the task's Responsible and Accountable persons
+never to the commenter themself. Nobody else is notified.
 
-Who sees a comment and its replies: admin / privileged roles (everything), the
-comment's author, and the project's people - its Project Manager and the
-Responsible / Accountable / Reviewer of any live task in that project (a task
-comment is also visible to that task's R / A / Reviewer, e.g. a task with no
-project). Everyone else gets nothing - the comment text is not written to the
-(open) audit log either.
+Who sees a comment and its replies: the comment's author and the same people who
+are told about it - a project comment: the project's Project Manager; a task
+comment: that task's Responsible and Accountable persons. An admin sees
+everything. Everyone else (other people on the project or task, PMO and the
+other privileged roles, heads) gets nothing - the comment text is not written
+to the (open) audit log either.
 
 Who can reply: a project comment -> only the project's Project Manager; a task
-comment -> only the task's Responsible, Accountable or Reviewer.
+comment -> only the task's Responsible or Accountable person.
 
 Replies: POST /comments/{id}/reply. The comments table
 has no parent column, so a reply is an ordinary row whose entity_type is
 "reply:<root comment id>" (fits the existing VARCHAR(16)); it copies the root's
 project / task. Replies are flat under the root comment (a reply to a reply goes
 under the same root). A reply is emailed to the root comment's author and to the
-current Project Manager / Responsible person, never to the replier.
+current Project Manager / Responsible and Accountable persons, never to the replier.
 
 The dashboard "Comments" box (GET /comments/inbox) lists every thread you can
-see by the rules above (all of them for admin / privileged), so a newly assigned
+see by the rules above (all of them for an admin), so a newly assigned
 manager / task person also sees the earlier ones.
 """
 import logging
@@ -65,28 +65,24 @@ class _Access:
 
     def __init__(self, db: Session, user: models.User):
         self.db, self.uid = db, user.id
-        self.privileged = permissions.is_privileged(db, user)
-        mine = db.query(models.Task.id, models.Task.project_id).filter(
+        self.admin = user.role == permissions.ADMIN_ROLE
+        # tasks where they are Responsible / Accountable, projects they manage
+        self.task_ids = {tid for (tid,) in db.query(models.Task.id).filter(
             models.Task.is_deleted.is_(False),
-            or_(models.Task.responsible_id == user.id, models.Task.accountable_id == user.id,
-                models.Task.reviewer_id == user.id, models.Task.informed_id == user.id),
-        ).all()
-        self.task_ids = {tid for tid, _ in mine}
-        self.project_ids = {pid for _, pid in mine if pid is not None} | {
-            pid for (pid,) in db.query(models.Project.id).filter(models.Project.manager_id == user.id).all()}
+            or_(models.Task.responsible_id == user.id, models.Task.accountable_id == user.id),
+        ).all()}
+        self.project_ids = {pid for (pid,) in db.query(models.Project.id).filter(
+            models.Project.manager_id == user.id).all()}
 
     def can_view(self, root: models.Comment) -> bool:
-        return (self.privileged or root.commenter_id == self.uid
-                or (root.project_id is not None and root.project_id in self.project_ids)
+        return (self.admin or root.commenter_id == self.uid
+                or (root.entity_type == "project" and root.project_id in self.project_ids)
                 or (root.entity_type == "task" and root.task_id in self.task_ids))
 
     def can_reply(self, root: models.Comment) -> bool:
         if root.entity_type == "project":
-            project = self.db.get(models.Project, root.project_id) if root.project_id else None
-            return project is not None and project.manager_id == self.uid
-        task = self.db.get(models.Task, root.task_id) if root.task_id else None
-        return (task is not None and not task.is_deleted
-                and self.uid in (task.responsible_id, task.accountable_id, task.reviewer_id, task.informed_id))
+            return root.project_id in self.project_ids
+        return root.task_id in self.task_ids
 
 
 def _out(row: models.Comment, replies: list[models.Comment] | None = None, access: _Access | None = None) -> dict:
@@ -149,7 +145,15 @@ def _send_comment_email(comment_id: int, mail: dict) -> None:
 
 def _save(db: Session, background_tasks: BackgroundTasks, author: models.User, text: str,
           entity_type: str, project: models.Project | None, task: models.Task | None,
-          recipient: models.User | None, recipient_role: str, link: str) -> models.Comment:
+          recipients: list[tuple[models.User | None, str]], link: str) -> models.Comment:
+    """`recipients`: (person, their role) to tell - the Project Manager, or the task's
+    Responsible and Accountable. The first one is recorded on the comment."""
+    recipient = next((u for u, _ in recipients if u is not None), None)
+    # one notice each: not the author, not twice when one person holds both roles
+    targets: list[tuple[models.User, str]] = []
+    for u, role in recipients:
+        if u is not None and u.id != author.id and u.is_active and all(u.id != t.id for t, _ in targets):
+            targets.append((u, role))
     row = models.Comment(
         entity_type=entity_type,
         comment=text,
@@ -171,19 +175,20 @@ def _save(db: Session, background_tasks: BackgroundTasks, author: models.User, t
 
     subject_label = f"{task.code} - {task.title}" if task else f"{project.code} - {project.name}"
     project_label = f"{project.code} - {project.name}" if project else ""
-    notify_recipient = recipient is not None and recipient.id != author.id and recipient.is_active
-    if notify_recipient:
-        services.notify(db, recipient.id, f"New comment on {entity_type} {subject_label}"[:240],
+    for u, _ in targets:
+        services.notify(db, u.id, f"New comment on {entity_type} {subject_label}"[:240],
                         body=f"{author.name}: {text}"[:1000], kind="comment")
     services.audit(db, author.name, entity_type, task.id if task else project.id, "commented")
     db.commit()
     db.refresh(row)
 
-    if notify_recipient and recipient.email:
+    for u, role in targets:
+        if not u.email:
+            continue
         background_tasks.add_task(_send_comment_email, row.id, {
-            "to_email": recipient.email,
-            "recipient_name": recipient.name,
-            "recipient_role": recipient_role,
+            "to_email": u.email,
+            "recipient_name": u.name,
+            "recipient_role": role,
             "entity_type": entity_type,
             "subject_label": subject_label,
             "project_label": project_label,
@@ -216,7 +221,7 @@ def add_project_comment(project_id: int, payload: schemas.CommentIn, background_
     text = _comment_text(payload.comment)
     manager = db.get(models.User, project.manager_id) if project.manager_id else None
     row = _save(db, background_tasks, current_user, text, "project", project, None,
-                manager, "Project Manager", f"/projects/{project.id}")
+                [(manager, "Project Manager")], f"/projects/{project.id}")
     return _out(row, access=_Access(db, current_user))
 
 
@@ -241,8 +246,9 @@ def add_task_comment(task_id: int, payload: schemas.CommentIn, background_tasks:
     text = _comment_text(payload.comment)
     project = db.get(models.Project, task.project_id) if task.project_id else None
     responsible = db.get(models.User, task.responsible_id) if task.responsible_id else None
+    accountable = db.get(models.User, task.accountable_id) if task.accountable_id else None
     row = _save(db, background_tasks, current_user, text, "task", project, task,
-                responsible, "Responsible person", f"/tasks/{task.id}")
+                [(responsible, "Responsible person"), (accountable, "Accountable person")], f"/tasks/{task.id}")
     return _out(row, access=_Access(db, current_user))
 
 
@@ -261,7 +267,7 @@ def reply_to_comment(comment_id: int, payload: schemas.CommentIn, background_tas
     if not access.can_view(root):
         raise HTTPException(404, "Comment not found")
     if not access.can_reply(root):
-        who = "Project Manager" if root.entity_type == "project" else "task's Responsible, Accountable, Reviewer or Informed person"
+        who = "Project Manager" if root.entity_type == "project" else "task's Responsible or Accountable person"
         raise HTTPException(403, f"Only the {who} can reply to this comment.")
     text = _comment_text(payload.comment)
 
@@ -270,17 +276,16 @@ def reply_to_comment(comment_id: int, payload: schemas.CommentIn, background_tas
     task = db.get(models.Task, root.task_id) if root.task_id else None
     if task and task.is_deleted:
         task = None
-    # the current owner; the comment's original recipient if the project / task is gone
-    subject = task if kind == "task" else project
-    if subject is None:
-        owner_id = root.recipient_id
+    # the current owners; the comment's original recipient if the project / task is gone
+    if kind == "task":
+        owners = ([(task.responsible_id, "Responsible person"), (task.accountable_id, "Accountable person")]
+                  if task else [(root.recipient_id, "Responsible person")])
     else:
-        owner_id = task.responsible_id if kind == "task" else project.manager_id
-    owner_role = "Responsible person" if kind == "task" else "Project Manager"
+        owners = [(project.manager_id if project else root.recipient_id, "Project Manager")]
 
-    # who hears about it: the root comment's author, then the owner - never the replier
+    # who hears about it: the root comment's author, then the owners - never the replier
     targets: list[tuple[models.User, str]] = []
-    for uid, role in ((root.commenter_id, "comment author"), (owner_id, owner_role)):
+    for uid, role in ((root.commenter_id, "comment author"), *owners):
         if uid is None or uid == current_user.id or any(u.id == uid for u, _ in targets):
             continue
         u = db.get(models.User, uid)
@@ -351,10 +356,10 @@ def comment_inbox(db: Session = Depends(get_db), current_user: models.User = Dep
     says whether the box is relevant to you at all."""
     access = _Access(db, current_user)
     q = db.query(models.Comment).filter(models.Comment.entity_type.in_(("project", "task")))
-    if not access.privileged:
+    if not access.admin:
         visible = [models.Comment.commenter_id == access.uid]
         if access.project_ids:
-            visible.append(models.Comment.project_id.in_(access.project_ids))
+            visible.append(and_(models.Comment.entity_type == "project", models.Comment.project_id.in_(access.project_ids)))
         if access.task_ids:
             visible.append(and_(models.Comment.entity_type == "task", models.Comment.task_id.in_(access.task_ids)))
         q = q.filter(or_(*visible))
@@ -366,5 +371,5 @@ def comment_inbox(db: Session = Depends(get_db), current_user: models.User = Dep
         return max([t["created_at"] or datetime.min] + [r["created_at"] or datetime.min for r in t["replies"]])
 
     threads.sort(key=last_activity, reverse=True)
-    eligible = bool(access.privileged or access.project_ids or access.task_ids or threads)
+    eligible = bool(access.admin or access.project_ids or access.task_ids or threads)
     return {"eligible": eligible, "comments": threads}
