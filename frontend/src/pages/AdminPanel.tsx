@@ -3,13 +3,16 @@ import { api } from '../api'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
-import SbuSelect from '../components/SbuSelect'
+import SbuSelect, { sbuKey } from '../components/SbuSelect'
+import { sbuName } from '../org'
 import DuplicatesPanel from '../components/DuplicatesPanel'
 import { clearPrivilegedCache } from '../usePrivileged'
 
-const ROLES = ['group_executive', 'business_head', 'functional_head', 'department_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
+const ROLES = ['group_executive', 'coo', 'business_head', 'functional_head', 'department_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
 
 interface UserForm {
+  /** COO: the SBUs they oversee */
+  sbu_ids: number[]
   employee_id: string
   name: string
   email: string
@@ -33,7 +36,7 @@ export interface EmailLog {
   recipients?: string | null
 }
 
-const EMPTY_USER: UserForm = { employee_id: '', name: '', email: '', designation: '', role: 'employee', company_id: null, function_id: null, department_id: null, reports_to_id: null }
+const EMPTY_USER: UserForm = { employee_id: '', name: '', email: '', designation: '', role: 'employee', company_id: null, function_id: null, department_id: null, reports_to_id: null, sbu_ids: [] }
 
 // ---------------------------------------------------------------- Hierarchy helpers
 function groupByManager(users: User[]): Map<number | null, User[]> {
@@ -146,6 +149,18 @@ export default function AdminPanel() {
   const projectName = (id?: number) => projects.find((p) => p.id === id)?.name ?? '—'
   const set = (k: keyof UserForm, v: string | number | null) => setForm((f) => ({ ...f, [k]: v }))
 
+  // COO: add an SBU to the overseen list (a copy of one already there counts as the same SBU)
+  const addSbu = (v: string) => {
+    if (!v) return
+    const id = Number(v)
+    // an SBU picked for the first time was just created: reload the list so its name shows
+    api.get<Company[]>('/organizations/companies').then(setCompanies).catch(() => {})
+    setForm((f) => {
+      const key = (cid: number) => { const c = companies.find((x) => x.id === cid); return c ? sbuKey(c.name) : `#${cid}` }
+      return f.sbu_ids.some((x) => x === id || key(x) === key(id)) ? f : { ...f, sbu_ids: [...f.sbu_ids, id] }
+    })
+  }
+
   const openCreate = () => { setEditing(null); setForm(EMPTY_USER); setErr(''); setShowForm(true) }
   const openEdit = (u: User) => {
     setEditing(u)
@@ -153,6 +168,7 @@ export default function AdminPanel() {
       employee_id: u.employee_id, name: u.name, email: u.email, designation: u.designation ?? '',
       role: u.role, company_id: u.company_id ?? null, function_id: u.function_id ?? null,
       department_id: u.department_id ?? null, reports_to_id: u.reports_to_id ?? null,
+      sbu_ids: u.sbu_ids ?? [],
     })
     setErr('')
     setShowForm(true)
@@ -162,10 +178,14 @@ export default function AdminPanel() {
     setErr('')
     if (!form.name || !form.email || !form.employee_id) { setErr('Name, email and employee id are required'); return }
     if (editing && form.reports_to_id === editing.id) { setErr('A user cannot report to themselves'); return }
+    if (form.role === 'coo' && form.sbu_ids.length === 0) { setErr('Choose at least one SBU this COO oversees'); return }
+    // the overseen SBUs belong to the COO role only
+    const sbu_ids = form.role === 'coo' ? form.sbu_ids : []
     try {
       if (editing) {
         await api.patch(`/organizations/users/${editing.id}`, {
           ...form,
+          sbu_ids,
           company_id: form.company_id ?? null,
           function_id: form.function_id ?? null,
           department_id: form.department_id ?? null,
@@ -173,7 +193,7 @@ export default function AdminPanel() {
         })
         setMsg(`Updated ${form.name}`)
       } else {
-        await api.post('/organizations/users', form)
+        await api.post('/organizations/users', { ...form, sbu_ids })
         setMsg(`Created ${form.name}`)
       }
       setShowForm(false)
@@ -420,7 +440,12 @@ export default function AdminPanel() {
                     </td>
                     <td className="small">{u.email}</td>
                     <td className="small">{u.designation ?? '—'}</td>
-                    <td><span className={`badge ${u.role === 'admin' ? 'gold' : 'gray'}`}>{label(u.role)}</span></td>
+                    <td>
+                      <span className={`badge ${u.role === 'admin' ? 'gold' : 'gray'}`}>{label(u.role)}</span>
+                      {u.role === 'coo' && (
+                        <div className="small muted">{(u.sbu_ids ?? []).map((id) => sbuName(companies, id) ?? `SBU #${id}`).join(', ') || 'No SBU assigned'}</div>
+                      )}
+                    </td>
                     <td>{u.is_active ? <span className="badge green">Active</span> : <span className="badge red">Inactive</span>}</td>
                     <td>
                       <div className="row">
@@ -533,6 +558,29 @@ export default function AdminPanel() {
             <select value={form.role} onChange={(e) => set('role', e.target.value)}>
               {allRoles.map((r) => <option key={r} value={r}>{label(r)}</option>)}
             </select>
+            {form.role === 'coo' && (
+              <>
+                <label>SBUs overseen *</label>
+                <div className="small muted" style={{ marginBottom: 6 }}>
+                  The COO sees and manages every project and task of these SBUs, and can approve their requests.
+                </div>
+                <div className="row" style={{ flexWrap: 'wrap', marginBottom: 6 }}>
+                  {form.sbu_ids.map((id) => (
+                    <span key={id} className="badge gold" style={{ padding: '6px 12px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      {sbuName(companies, id) ?? `SBU #${id}`}
+                      <span style={{ cursor: 'pointer', fontWeight: 700 }} title="Remove"
+                        onClick={() => setForm((f) => ({ ...f, sbu_ids: f.sbu_ids.filter((x) => x !== id) }))}>✕</span>
+                    </span>
+                  ))}
+                </div>
+                <SbuSelect
+                  value=""
+                  companies={companies}
+                  onChange={addSbu}
+                  placeholder="Add an SBU…"
+                />
+              </>
+            )}
             <div className="modal-actions">
               <button className="btn" onClick={() => setShowForm(false)}>Cancel</button>
               <button className="btn primary" onClick={saveUser}>{editing ? 'Save Changes' : 'Create User'}</button>

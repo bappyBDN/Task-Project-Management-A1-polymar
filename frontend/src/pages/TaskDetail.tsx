@@ -8,7 +8,7 @@ import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDat
 import { RichTextView } from '../components/RichText'
 import TaskForm from '../components/TaskForm'
 import CommentsPanel from '../components/CommentsPanel'
-import { sbuName } from '../org'
+import { overseesSbu, sbuName } from '../org'
 
 export default function TaskDetail() {
   const { id } = useParams()
@@ -33,7 +33,7 @@ export default function TaskDetail() {
   const [cooldown, setCooldown] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [loadErr, setLoadErr] = useState('')
-  const isPrivileged = useIsPrivileged(user?.role)
+  const hasPrivilegedRole = useIsPrivileged(user?.role)
 
   const load = () => {
     if (!id) return
@@ -77,6 +77,8 @@ export default function TaskDetail() {
     .sort((a, b) => b.id - a.id)[0]
 
   const isMine = user?.id === task.responsible_id || user?.id === task.accountable_id
+  // the COO of the task's SBU (its own, or its project's) manages it like an admin / PMO
+  const isPrivileged = hasPrivilegedRole || overseesSbu(user, companies, task.company_id ?? proj?.company_id)
   // Admin / PMO edit everything; the Responsible / Accountable person edits the task details (limited).
   // The Responsible person also sets the task's people (Responsible, Accountable, Reviewer, Informed).
   const isResponsible = user?.id === task.responsible_id

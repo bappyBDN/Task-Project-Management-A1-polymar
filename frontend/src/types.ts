@@ -30,6 +30,8 @@ export interface User {
   reports_to_id?: number | null
   /** named a manager by Employee ID at sign-up who has no account yet */
   pending_manager_employee_id?: string | null
+  /** COO only: the SBUs (company ids) they oversee, set by an admin */
+  sbu_ids?: number[]
   is_active: boolean
 }
 
@@ -186,6 +188,8 @@ export interface Approval {
   reason?: string
   created_at: string
   decided_at?: string
+  /** from the server: may the signed-in user approve / reject it? */
+  can_decide?: boolean | null
 }
 
 export interface TaskKpi {

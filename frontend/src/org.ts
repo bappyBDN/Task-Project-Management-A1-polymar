@@ -33,6 +33,16 @@ export function inSbu(companies: Named[], id: number | null | undefined, key: st
   return !!c && sbuKey(c.name) === key
 }
 
+/** Is company `id` one of the SBUs this COO oversees? They manage its projects and tasks
+ *  like an admin (same rule as app/permissions.py on the server). */
+export function overseesSbu(user: { role: string; sbu_ids?: number[] } | null | undefined, companies: Named[], id?: number | null): boolean {
+  if (user?.role !== 'coo' || id == null) return false
+  const mine = user.sbu_ids ?? []
+  if (mine.includes(id)) return true
+  const c = companies.find((x) => x.id === id)
+  return !!c && companies.some((x) => mine.includes(x.id) && sbuKey(x.name) === sbuKey(c.name))
+}
+
 /** The company id to send to the server for an SBU filter value (the copy the forms use). */
 export function sbuIdFor(companies: Named[], key: string): number | undefined {
   return pickSbu(companies.filter((c) => sbuKey(c.name) === key))?.id

@@ -6,7 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
-import { inName, inSbu, nameFilterItems, sbuFilterItems, sbuName } from '../org'
+import { inName, inSbu, nameFilterItems, overseesSbu, sbuFilterItems, sbuName } from '../org'
 
 const COLUMNS = [
   { key: 'backlog', label: 'Backlog' },
@@ -67,8 +67,11 @@ export default function Kanban() {
 
   // Responsible / Accountable move their own cards; only admin / PMO can drop into Completed
   // (everyone else finishes a task with "Submit for Completion" on the task page).
-  const canMove = (t: Task) => canSeeAll || t.responsible_id === user?.id || t.accountable_id === user?.id
-  const canMoveTo = (t: Task, status: string) => canMove(t) && (canSeeAll || status !== 'completed')
+  // A COO manages the tasks of the SBUs they oversee like an admin / PMO.
+  const manages = (t: Task) => canSeeAll
+    || overseesSbu(user, companies, t.company_id ?? projects.find((p) => p.id === t.project_id)?.company_id)
+  const canMove = (t: Task) => manages(t) || t.responsible_id === user?.id || t.accountable_id === user?.id
+  const canMoveTo = (t: Task, status: string) => canMove(t) && (manages(t) || status !== 'completed')
 
   const move = async (task: Task, status: string) => {
     if (!status || status === task.status || movingId !== null) return

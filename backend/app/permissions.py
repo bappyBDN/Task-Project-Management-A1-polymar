@@ -4,6 +4,9 @@ Uses only existing columns (tasks.responsible_id / accountable_id / reviewer_id 
 project_id / is_deleted) and the existing privileged-role list stored in
 list_options (kind='privileged_role'). Read-only: nothing here writes to the DB.
 
+A COO (role "coo") counts as admin / privileged for the tasks and projects of the SBUs
+they oversee (user_sbus, set by an admin) - and only for those.
+
 Tasks
   admin / privileged role -> every field
   Accountable             -> task details + progress (not Accountable, Reviewer, Informed,
@@ -30,6 +33,7 @@ from sqlalchemy.orm import Session
 from app import models
 
 ADMIN_ROLE = "admin"
+COO_ROLE = "coo"
 DEFAULT_PRIVILEGED = ("admin", "group_executive", "pmo")  # same fallback as routers/privileged.py
 DONE_STATUSES = ("completed", "closed")
 
@@ -60,6 +64,40 @@ def is_privileged(db: Session, user: models.User) -> bool:
     return user.role in privileged_roles(db)
 
 
+def managed_company_ids(db: Session, user: models.User) -> set:
+    """The SBUs a COO oversees (user_sbus, set by an admin), with every copy of the same
+    SBU (other spellings) counted. Empty for anyone who is not a COO."""
+    if user.role != COO_ROLE:
+        return set()
+    from app.visibility import sbu_key  # here: visibility imports this module
+    assigned = {r[0] for r in db.query(models.UserSbu.company_id).filter(models.UserSbu.user_id == user.id).all()}
+    if not assigned:
+        return set()
+    companies = db.query(models.Company.id, models.Company.name).all()
+    keys = {sbu_key(c.name) for c in companies if c.id in assigned}
+    return {c.id for c in companies if sbu_key(c.name) in keys}
+
+
+def company_of(db: Session, entity) -> int | None:
+    """A project's SBU; a task's own, or its project's when the task has none."""
+    company = entity.company_id
+    if company is None and getattr(entity, "project_id", None):
+        project = db.get(models.Project, entity.project_id)
+        company = project.company_id if project else None
+    return company
+
+
+def oversees(db: Session, user: models.User, entity) -> bool:
+    """True if this task / project belongs to an SBU `user` oversees as COO."""
+    sbus = managed_company_ids(db, user)
+    return bool(sbus) and company_of(db, entity) in sbus
+
+
+def can_manage(db: Session, user: models.User, entity) -> bool:
+    """Edits every field of this task / project: admin / privileged role, or its SBU's COO."""
+    return is_privileged(db, user) or oversees(db, user, entity)
+
+
 def _changed(obj, data: dict) -> set:
     """Fields whose value really differs from what is stored (clients often resend the whole object)."""
     out = set()
@@ -84,7 +122,7 @@ def _deny(fields: set, who: str):
 def check_task_edit(db: Session, user: models.User, task: models.Task, data: dict) -> dict:
     """Raise 403 if `user` may not make these changes. Returns the data to apply
     (for non-privileged users, server-computed fields like health are dropped)."""
-    if is_privileged(db, user):
+    if can_manage(db, user, task):
         return data
     data = {k: v for k, v in data.items() if k not in _ALWAYS_IGNORED}
     changed = _changed(task, data)
@@ -110,7 +148,7 @@ def check_task_edit(db: Session, user: models.User, task: models.Task, data: dic
 
 
 def check_task_progress(db: Session, user: models.User, task: models.Task, new_status: str | None):
-    if is_privileged(db, user):
+    if can_manage(db, user, task):
         return
     if user.id not in (task.responsible_id, task.accountable_id):
         raise HTTPException(403, "Only the task's Responsible or Accountable person (or an admin / PMO) can update progress.")
@@ -119,7 +157,7 @@ def check_task_progress(db: Session, user: models.User, task: models.Task, new_s
 
 
 def check_task_delete(db: Session, user: models.User, task: models.Task):
-    if is_privileged(db, user) or user.id in (task.responsible_id, task.accountable_id):
+    if can_manage(db, user, task) or user.id in (task.responsible_id, task.accountable_id):
         return
     raise HTTPException(403, "Only the task's Responsible or Accountable person, the project's Manager or an admin / PMO can delete this task.")
 
@@ -134,7 +172,7 @@ def is_project_ra(db: Session, user: models.User, project: models.Project) -> bo
 
 
 def can_edit_project(db: Session, user: models.User, project: models.Project) -> bool:
-    return is_privileged(db, user) or is_project_ra(db, user, project)
+    return can_manage(db, user, project) or is_project_ra(db, user, project)
 
 
 def can_manage_associates(db: Session, user: models.User, project: models.Project) -> bool:

@@ -9,6 +9,8 @@ Related people for an approval (the only ones who see it and get notified):
 Who may approve / reject:
   - an Admin, or
   - the assigned approver, or the task's Reviewer / Accountable
+  - the COO of the task's / project's SBU (every kind of approval below; they also
+    see all approvals of the SBUs they oversee - app/permissions.py)
   - never the person who requested it (unless that person is an Admin)
 
 Date revision requests (approval_type "revised_date" on a task) are special:
@@ -29,7 +31,7 @@ from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app import models, schemas, services
+from app import models, permissions, schemas, services
 from app.auth import get_current_user
 from app.database import get_db
 
@@ -95,6 +97,17 @@ def _decider_ids(approval: models.Approval, entity) -> set:
     return ids
 
 
+def _oversees(db: Session, user, entity) -> bool:
+    """The task / project is in an SBU this user oversees as COO."""
+    return entity is not None and permissions.oversees(db, user, entity)
+
+
+def _may_decide(db: Session, user, approval: models.Approval, entity) -> bool:
+    if _is_admin(user) or user.id in _decider_ids(approval, entity):
+        return True
+    return approval.requested_by_id != user.id and _oversees(db, user, entity)
+
+
 def _type_label(approval: models.Approval) -> str:
     return (approval.approval_type or "approval").replace("_", " ").title()
 
@@ -143,14 +156,13 @@ def list_approvals(
         q = q.filter(models.Approval.status == status)
     rows = q.order_by(models.Approval.created_at.desc()).all()
 
-    if _is_admin(current_user):
-        return rows
-
-    # Non-admins only see approvals they are related to.
+    # Non-admins only see approvals they are related to; a COO also those of their SBUs.
     task_ids = {a.entity_id for a in rows if a.entity_type == "task"}
     project_ids = {a.entity_id for a in rows if a.entity_type == "project"}
     tasks = {t.id: t for t in db.query(models.Task).filter(models.Task.id.in_(task_ids)).all()} if task_ids else {}
     projects = {p.id: p for p in db.query(models.Project).filter(models.Project.id.in_(project_ids)).all()} if project_ids else {}
+    admin = _is_admin(current_user)
+    sbus = permissions.managed_company_ids(db, current_user)
 
     visible = []
     for a in rows:
@@ -160,7 +172,11 @@ def list_approvals(
             entity = projects.get(a.entity_id)
         else:
             entity = None
-        if current_user.id in _related_ids(a, entity):
+        oversees = bool(sbus) and entity is not None and permissions.company_of(db, entity) in sbus
+        if admin or oversees or current_user.id in _related_ids(a, entity):
+            a.can_decide = a.status == "pending" and (
+                admin or current_user.id in _decider_ids(a, entity)
+                or (oversees and a.requested_by_id != current_user.id))
             visible.append(a)
     return visible
 
@@ -177,12 +193,11 @@ def get_approval(
     if not approval:
         raise HTTPException(404, "Approval not found")
     entity = _entity(db, approval)
-    if not _is_admin(current_user) and current_user.id not in _related_ids(approval, entity):
+    if (not _is_admin(current_user) and current_user.id not in _related_ids(approval, entity)
+            and not _oversees(db, current_user, entity)):
         raise HTTPException(403, "You are not involved in this approval")
     data = schemas.ApprovalOut.model_validate(approval).model_dump()
-    data["can_decide"] = approval.status == "pending" and (
-        _is_admin(current_user) or current_user.id in _decider_ids(approval, entity)
-    )
+    data["can_decide"] = approval.status == "pending" and _may_decide(db, current_user, approval, entity)
     return data
 
 
@@ -252,8 +267,8 @@ def decide_approval(
         raise HTTPException(400, "Status must be 'approved' or 'rejected'")
 
     entity = _entity(db, approval)
-    if not _is_admin(current_user) and current_user.id not in _decider_ids(approval, entity):
-        raise HTTPException(403, "Only the assigned approver, the task's reviewer/accountable or an admin can decide this approval")
+    if not _may_decide(db, current_user, approval, entity):
+        raise HTTPException(403, "Only the assigned approver, the task's reviewer/accountable, the COO of its SBU or an admin can decide this approval")
     # taken now: a delete request that is approved removes the task itself below
     entity_label = _entity_label(approval, entity)
     related = _related_ids(approval, entity)

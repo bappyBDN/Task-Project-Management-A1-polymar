@@ -8,6 +8,9 @@ delays, the dashboard's portfolio widgets). Read-only, existing columns only.
                               Responsible / Accountable / Reviewer / Informed on any of its tasks:
                               the project and ALL its tasks
   on a task                -> its Responsible / Accountable / Reviewer / Informed: that task
+  COO (coo)                         -> every project and task of the SBUs they oversee
+                                       (one or more, set by an admin: user_sbus), which
+                                       they also manage (app/permissions.py)
   SBU head (business_head)          -> every project and task of their SBU
   Function head (functional_head)   -> every project and task of their SBU + Function
   Department head (department_head) -> every task of their SBU + Department, and the
@@ -16,7 +19,8 @@ delays, the dashboard's portfolio widgets). Read-only, existing columns only.
   approver / requester of an approval on a task -> that task (so it can be decided)
 
 A task's SBU / Function is its own, or its project's when the task has none.
-A head's SBU / Function / Department is the one on their own user record; copies of
+A head's SBU / Function / Department is the one on their own user record (a COO's SBUs
+are their user_sbus rows instead); copies of
 the same SBU (other spellings) and the same Function / Department name count as one.
 """
 import re
@@ -29,7 +33,7 @@ from app.auth import get_current_user
 from app.database import get_db
 
 # role -> what they head. They get this from an admin (not from Edit My Profile).
-HEAD_ROLES = {"business_head": "sbu", "functional_head": "function", "department_head": "department"}
+HEAD_ROLES = {"coo": "sbu", "business_head": "sbu", "functional_head": "function", "department_head": "department"}
 
 # Same list / spellings as frontend/src/components/SbuSelect.tsx.
 DEFAULT_SBUS = [
@@ -75,7 +79,9 @@ class Scope:
 
         # ---- what this person heads (if anything)
         level = HEAD_ROLES.get(user.role)
-        if level and user.company_id:
+        if user.role == permissions.COO_ROLE:
+            self._companies = permissions.managed_company_ids(db, user)
+        elif level and user.company_id:
             mine = db.get(models.Company, user.company_id)
             key = sbu_key(mine.name) if mine else None
             self._companies = {c.id for c in db.query(models.Company).all() if key and sbu_key(c.name) == key}

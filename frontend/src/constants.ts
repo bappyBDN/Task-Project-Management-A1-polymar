@@ -46,6 +46,7 @@ export const METHODOLOGIES = ['agile', 'waterfall', 'hybrid', 'kanban', 'operati
 
 export function label(s?: string | null): string {
   if (s === undefined || s === null) return '—'
+  if (s === 'coo') return 'COO'
   return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 

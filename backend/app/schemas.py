@@ -50,11 +50,18 @@ class UserBase(BaseModel):
     reports_to_id: Optional[int] = None
 
 
+class UserCreate(UserBase):
+    """Admin "New User": the user's fields, plus the SBUs a COO oversees."""
+    sbu_ids: Optional[list[int]] = None
+
+
 class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     # set when they named a manager (by Employee ID) who has no account yet
     pending_manager_employee_id: Optional[str] = None
+    # COO only: the SBUs they oversee (company ids), set by an admin
+    sbu_ids: list[int] = []
 
 
 class UserUpdate(BaseModel):
@@ -68,6 +75,7 @@ class UserUpdate(BaseModel):
     department_id: Optional[int] = None
     role: Optional[str] = None
     reports_to_id: Optional[int] = None
+    sbu_ids: Optional[list[int]] = None  # COO: the SBUs they oversee (replaces the list)
 
 
 class UserSelfUpdate(BaseModel):
@@ -372,6 +380,8 @@ class ApprovalOut(ApprovalBase):
     status: str
     decided_at: Optional[datetime] = None
     created_at: datetime
+    # may the user who asked approve / reject it? (filled in by the list and detail routes)
+    can_decide: Optional[bool] = None
 
 
 class ApprovalDecision(BaseModel):

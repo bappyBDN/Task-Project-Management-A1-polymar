@@ -74,7 +74,7 @@ def _get_or_create(db: Session, project: models.Project) -> models.ProjectMethod
 
 
 def _can_manage(db: Session, user: models.User, project: models.Project) -> bool:
-    return user.id == project.manager_id or permissions.is_privileged(db, user)
+    return user.id == project.manager_id or permissions.can_manage(db, user, project)
 
 
 def _status(m: models.ProjectMethodology | None, slots: dict[str, models.MethodologyApproval]) -> str:

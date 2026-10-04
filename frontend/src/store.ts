@@ -630,7 +630,7 @@ export const store = {
   privilegedUsers: () => db.users.filter((u) => db.privilegedRoles.includes(u.role)),
   isPrivileged: (role: string) => db.privilegedRoles.includes(role),
   allRoles: () => {
-    const base = ['group_executive', 'business_head', 'functional_head', 'department_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
+    const base = ['group_executive', 'coo', 'business_head', 'functional_head', 'department_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
     const merged = new Set([...base, ...db.privilegedRoles])
     return [...merged]
   },

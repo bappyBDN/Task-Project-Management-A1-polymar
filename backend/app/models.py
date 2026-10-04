@@ -53,7 +53,7 @@ class User(Base, TimestampMixin):
     company_id: Mapped[Optional[int]] = mapped_column(ForeignKey("companies.id"), nullable=True)
     function_id: Mapped[Optional[int]] = mapped_column(ForeignKey("functions.id"), nullable=True)
     department_id: Mapped[Optional[int]] = mapped_column(ForeignKey("departments.id"), nullable=True)
-    role: Mapped[str] = mapped_column(String(32), default="employee")  # group_executive, business_head, functional_head, sponsor, pmo, pm, team_lead, employee, reviewer, auditor, admin
+    role: Mapped[str] = mapped_column(String(32), default="employee")  # group_executive, coo, business_head, functional_head, sponsor, pmo, pm, team_lead, employee, reviewer, auditor, admin
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # --- নতুন ফিল্ডগুলো যোগ করুন ---
@@ -70,6 +70,25 @@ class User(Base, TimestampMixin):
     # Sign-up: the manager's Employee ID when that manager has no account yet.
     # Cleared (and reports_to_id set) once a user with that Employee ID is created.
     pending_manager_employee_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+
+    # --- COO: the SBUs this person oversees (see UserSbu). Empty for everyone else. ---
+    sbus: Mapped[list["UserSbu"]] = relationship(lazy="selectin", cascade="all, delete-orphan")
+
+    @property
+    def sbu_ids(self) -> list[int]:
+        return [s.company_id for s in self.sbus]
+
+
+class UserSbu(Base, TimestampMixin):
+    """One SBU a COO oversees. A COO can have several, so they live here instead of in
+    users.company_id (which stays the person's own SBU). Set by an admin in the Admin
+    Panel; app/visibility.py and app/permissions.py read it."""
+    __tablename__ = "user_sbus"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), index=True)
+
+    __table_args__ = (UniqueConstraint("user_id", "company_id", name="uq_user_sbu"),)
 
 
 # ---------------------------------------------------------------- Program/Project

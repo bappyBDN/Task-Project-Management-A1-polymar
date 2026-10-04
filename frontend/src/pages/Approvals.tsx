@@ -49,6 +49,7 @@ export default function Approvals() {
   // person who requested it.
   const canDecide = (a: Approval) => {
     if (!user || a.status !== 'pending') return false
+    if (a.can_decide != null) return a.can_decide  // the server's answer (it also knows a COO's SBUs)
     if (isAdmin) return true
     if (a.requested_by_id === user.id) return false
     const t = taskOf(a)

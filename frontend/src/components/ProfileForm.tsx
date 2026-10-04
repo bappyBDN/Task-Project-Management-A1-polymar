@@ -17,7 +17,8 @@ import InviteUserModal from './InviteUserModal'
 // Closes only with Cancel, like the other forms.
 
 // SBU / function / department heads see every project of what they head
-const HEAD_ROLES = ['business_head', 'functional_head', 'department_head']
+// (a COO: every project of the SBUs an admin gave them)
+const HEAD_ROLES = ['coo', 'business_head', 'functional_head', 'department_head']
 
 export default function ProfileForm({ onClose, onSaved }: { onClose: () => void; onSaved: (msg: string) => void }) {
   const { user, setMe } = useAuth()

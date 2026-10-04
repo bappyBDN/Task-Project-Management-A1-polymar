@@ -18,6 +18,7 @@ router = APIRouter(tags=["roles"])
 # The canonical role list. Keep this in sync with AdminPanel.tsx's `ROLES` const.
 ALL_ROLES: list[str] = [
     "group_executive",
+    "coo",
     "business_head",
     "functional_head",
     "department_head",

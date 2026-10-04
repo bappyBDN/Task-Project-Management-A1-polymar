@@ -96,15 +96,38 @@ def update_me(payload: schemas.UserSelfUpdate, user: models.User = Depends(get_c
     return user
 
 
+def _set_sbus(db: Session, admin: models.User, user: models.User, company_ids: list[int]):
+    """Replace the SBUs a COO oversees. Only rows that really change are touched."""
+    wanted = list(dict.fromkeys(company_ids))
+    for cid in wanted:
+        if not db.get(models.Company, cid):
+            raise HTTPException(400, "SBU not found")
+    have = {s.company_id: s for s in user.sbus}
+    if set(wanted) == set(have):
+        return
+    for cid, row in have.items():
+        if cid not in wanted:
+            user.sbus.remove(row)
+    for cid in wanted:
+        if cid not in have:
+            user.sbus.append(models.UserSbu(company_id=cid, created_by=admin.name))
+    services.audit(db, admin.name, "user", user.id, "sbus_changed",
+                   previous_value=",".join(map(str, sorted(have))), new_value=",".join(map(str, sorted(wanted))))
+
+
 @router.post("/users", response_model=schemas.UserOut, status_code=201)
 def create_user(
-    payload: schemas.UserBase,
+    payload: schemas.UserCreate,
     admin: models.User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
-    user = models.User(**payload.model_dump())
+    data = payload.model_dump()
+    sbu_ids = data.pop("sbu_ids", None)
+    user = models.User(**data)
     db.add(user)
     db.flush()
+    if sbu_ids:
+        _set_sbus(db, admin, user, sbu_ids)
     # anyone who signed up naming this Employee ID as their manager now reports to them
     services.link_waiting_reports(db, user)
     db.commit()
@@ -158,10 +181,14 @@ def update_user(user_id: int, payload: schemas.UserUpdate, admin: models.User = 
     user = db.get(models.User, user_id)
     if not user:
         raise HTTPException(404, "User not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    sbu_ids = data.pop("sbu_ids", None)
+    for k, v in data.items():
         if v is None and k in {"employee_id", "name", "email", "role"}:
             continue  # required column: an explicit null must not wipe it
         setattr(user, k, v)
+    if sbu_ids is not None:
+        _set_sbus(db, admin, user, sbu_ids)
     if "employee_id" in payload.model_fields_set:
         services.link_waiting_reports(db, user)  # the Employee ID someone was waiting for may be this one now
     if payload.reports_to_id is not None:
