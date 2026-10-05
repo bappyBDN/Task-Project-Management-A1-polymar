@@ -26,6 +26,9 @@ _NEW_COLUMNS = [
     ("users", "reports_to_id", "INTEGER REFERENCES users(id)"),
     ("users", "pending_manager_employee_id", "VARCHAR(32)"),
     ("tasks", "informed_id", "INTEGER REFERENCES users(id)"),
+    ("projects", "gantt_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("tasks", "auto_forecast_date", "DATE"),
+    ("tasks", "own_forecast_date", "DATE"),
 ]
 
 

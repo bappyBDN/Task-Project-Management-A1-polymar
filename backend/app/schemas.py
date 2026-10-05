@@ -166,6 +166,15 @@ class ProjectUpdate(BaseModel):
 class ProjectOut(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    gantt_enabled: bool = False
+
+
+class GanttToggle(BaseModel):
+    enabled: bool
+
+
+class TaskDependenciesOut(BaseModel):
+    depends_on_ids: list[int]
 
 
 class ProjectAssociateIn(BaseModel):
@@ -261,8 +270,14 @@ class TaskBase(BaseModel):
     completion_remarks: Optional[str] = None
 
 
+class TaskCreate(TaskBase):
+    # the tasks (of the same project) this one depends on - Gantt projects only (app/gantt.py)
+    depends_on_ids: Optional[list[int]] = None
+
+
 class TaskUpdate(BaseModel):
     """PATCH payload: every field optional, so a partial update (e.g. only `status`) is valid."""
+    depends_on_ids: Optional[list[int]] = None  # left out / null = dependencies stay as they are
     code: Optional[str] = None
     parent_id: Optional[int] = None
     project_id: Optional[int] = None

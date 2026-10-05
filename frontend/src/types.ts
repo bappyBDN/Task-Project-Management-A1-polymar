@@ -61,6 +61,37 @@ export interface Project {
   health: string
   budget?: number
   criticality: string
+  /** optional Gantt scheduling of this project's tasks (see ProjectGantt) */
+  gantt_enabled?: boolean
+}
+
+/** One task on a project's Gantt chart: its planned dates and where the schedule puts it. */
+export interface GanttTask {
+  id: number
+  code: string
+  title: string
+  status: string
+  progress_pct: number
+  responsible_id?: number | null
+  plan_start?: string | null
+  plan_finish?: string | null
+  start?: string | null
+  finish?: string | null
+  /** days the finish is past the due date */
+  slip_days: number
+  cause?: 'overdue' | 'forecast' | 'late_finish' | 'dependency' | null
+  /** cause 'dependency': the task it is waiting for */
+  driver_id?: number | null
+  depends_on: number[]
+  critical: boolean
+  extends_project: boolean
+}
+
+export interface GanttData {
+  enabled: boolean
+  today?: string
+  project?: { start?: string | null; planned_due?: string | null; forecast?: string | null; slip_days: number }
+  tasks?: GanttTask[]
 }
 
 /** Someone contributing to a project beyond its tasks (see ProjectContribution). */

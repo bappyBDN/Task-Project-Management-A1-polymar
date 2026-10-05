@@ -6,7 +6,7 @@ from typing import List, Optional, Set
 
 from sqlalchemy.orm import Session
 
-from app import models
+from app import gantt, models
 
 
 def audit(db: Session, actor: Optional[str], entity_type: str, entity_id: Optional[int],
@@ -95,6 +95,8 @@ def recalc_project_health(db: Session, project_id: int):
         # completion % from tasks
         if tasks:
             project.completion_pct = round(sum(t.progress_pct for t in tasks) / len(tasks), 1)
+        if project.gantt_enabled:  # a task changed: its dependents' and the project's forecast follow
+            gantt.reschedule(db, project)
 
 
 def recalc_task_health(db: Session, task: models.Task):

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Company, Department, Function, Project, Task, User } from '../types'
-import { label } from '../constants'
+import { fmtDate, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
 import InviteUserModal from './InviteUserModal'
 import OrgModal from './OrgModal'
@@ -112,6 +112,40 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
   const str = (v: any) => (v === null || v === undefined ? '' : String(v))
+
+  // --- Gantt projects: the tasks this one depends on --------------------
+  // Only for a project with the Gantt option on (see ProjectGantt). The task starts after
+  // everything it depends on has finished; the server moves the forecast dates accordingly.
+  const ganttOn = !!projects.find((p) => String(p.id) === str(form.project_id))?.gantt_enabled
+  const [projectTasks, setProjectTasks] = useState<Task[]>([])
+  const [dependsOn, setDependsOn] = useState<string[]>([])
+  // editing: don't send dependencies until the saved ones are known (a failed load must not wipe them)
+  const [depsLoaded, setDepsLoaded] = useState(!task)
+
+  useEffect(() => {
+    if (!task) return
+    api.get<{ depends_on_ids: number[] }>(`/tasks/${task.id}/dependencies`)
+      .then((d) => { setDependsOn(d.depends_on_ids.map(String)); setDepsLoaded(true) }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (!ganttOn || !form.project_id) { setProjectTasks([]); return }
+    let stale = false
+    api.get<Task[]>(`/tasks?project_id=${form.project_id}`).then((l) => { if (!stale) setProjectTasks(l) }).catch(() => {})
+    return () => { stale = true }
+  }, [ganttOn, form.project_id])
+
+  const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86400000).toISOString().slice(0, 10)
+  // when a task this one depends on is expected to be finished
+  const finishOf = (t: Task) => (DONE_STATUSES.includes(t.status) ? t.actual_due_date : t.forecast_due_date) || t.approved_due_date || t.baseline_due_date
+  const chosen = dependsOn.map((v) => projectTasks.find((t) => String(t.id) === v)).filter((t): t is Task => !!t)
+  const lastDep = chosen.filter((t) => t.status !== 'cancelled' && finishOf(t)).sort((a, b) => finishOf(b)!.localeCompare(finishOf(a)!))[0]
+  const earliestStart = lastDep ? addDays(finishOf(lastDep)!, 1) : ''
+  const startsTooEarly = !!earliestStart && !!form.planned_start_date && form.planned_start_date < earliestStart
+  const dueLocked = limited && !!task?.baseline_due_date
+  const startAfterDependencies = () => {
+    const length = form.baseline_due_date ? Math.max(0, Math.round((Date.parse(form.baseline_due_date) - Date.parse(form.planned_start_date)) / 86400000)) : 0
+    setForm((f: any) => ({ ...f, planned_start_date: earliestStart, baseline_due_date: addDays(earliestStart, length) }))
+  }
 
   // --- Hierarchy-aware RACI defaulting ---------------------------------
   // Picking Responsible auto-fills Accountable with that person's immediate
@@ -227,6 +261,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
       blocker_details: form.blocker_details,
       acceptance_criteria: form.acceptance_criteria,
     }
+    if (ganttOn && depsLoaded) payload.depends_on_ids = dependsOn.map(Number)
     if (limited && task) {
       // fields this person may not change are left exactly as they are
       delete payload.code
@@ -255,6 +290,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
     .some((k) => user[k] != null && str(form[k]) === str(user[k]))
   // A task belongs to its project's SBU: follow the project unless the user picked another SBU themselves.
   const onProjectChange = (v: string) => {
+    if (v !== str(form.project_id)) setDependsOn([]) // a task only depends on tasks of its own project
     set('project_id', v)
     const p = projects.find((x) => String(x.id) === v)
     if (!task && p?.company_id && (!form.company_id || str(form.company_id) === str(user?.company_id))) set('company_id', String(p.company_id))
@@ -279,7 +315,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
   }
 
   const removeProject = async (value: string) => {
-    if (!confirm(`Delete this project? Its tasks will be hidden.`)) return
+    if (!confirm(`Delete this project? Its tasks will be permanently deleted too.`)) return
     await api.del(`/projects/${value}`)
     if (str(form.project_id) === value) set('project_id', '')
     onRefresh?.()
@@ -515,6 +551,32 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
             <input type="number" min={0} max={100} value={form.progress_pct} onChange={(e) => set('progress_pct', Number(e.target.value))} />
           </div>
         </div>
+
+        {ganttOn && (
+          <div className="gantt-deps">
+            <label>Depends on <span style={{ fontWeight: 400 }}>— optional. This task starts after the tasks chosen here have finished (Gantt chart).</span></label>
+            {chosen.map((t) => (
+              <span key={t.id} className="gantt-chip">
+                {t.code} — {t.title}{finishOf(t) ? ` (finishes ${fmtDate(finishOf(t))})` : ''}
+                <button type="button" title="Remove" onClick={() => setDependsOn((l) => l.filter((x) => x !== String(t.id)))}>✕</button>
+              </span>
+            ))}
+            <SearchableSelect
+              value=""
+              items={projectTasks.filter((t) => t.id !== task?.id && !dependsOn.includes(String(t.id)))
+                .sort((a, b) => a.code.localeCompare(b.code)).map((t) => ({ value: String(t.id), label: `${t.code} — ${t.title}` }))}
+              onChange={(v) => { if (v) setDependsOn((l) => (l.includes(v) ? l : [...l, v])) }}
+              placeholder={projectTasks.length > (task ? 1 : 0) ? 'Search a task this one depends on…' : 'No other task in this project yet'}
+            />
+            {startsTooEarly && lastDep && (
+              <div className="alert info" style={{ marginTop: 10, marginBottom: 0 }}>
+                {lastDep.code} is expected to finish on {fmtDate(finishOf(lastDep))}, so this task can start on <strong>{fmtDate(earliestStart)}</strong> —
+                later than its planned start. If you keep these dates, its forecast date (and the project's) is moved automatically.
+                {!dueLocked && <> <button type="button" className="btn sm" style={{ marginLeft: 6 }} onClick={startAfterDependencies}>Plan it from {fmtDate(earliestStart)}</button></>}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>

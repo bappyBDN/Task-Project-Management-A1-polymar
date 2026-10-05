@@ -8,6 +8,7 @@ import TaskForm from '../components/TaskForm'
 import ProjectContribution from '../components/ProjectContribution'
 import ProjectRaci from '../components/ProjectRaci'
 import MethodologyApproval from '../components/MethodologyApproval'
+import ProjectGantt from '../components/ProjectGantt'
 import CommentsPanel from '../components/CommentsPanel'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
@@ -259,6 +260,8 @@ export default function ProjectDetail() {
       </div>
 
       <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} reloadUsers={reloadUsers} />
+
+      <ProjectGantt project={project} tasks={tasks} users={users} canToggle={canManageAssociates} onProject={setProject} onChanged={reloadTasks} />
 
           <div className="card mt">
             <div className="spread">

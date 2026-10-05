@@ -126,6 +126,8 @@ class Project(Base, TimestampMixin):
     health: Mapped[str] = mapped_column(String(16), default="green")  # green, amber, red, black
     budget: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     criticality: Mapped[str] = mapped_column(String(16), default="medium")
+    # optional Gantt scheduling: task dependencies drive the forecast dates (app/gantt.py)
+    gantt_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ProjectAssociate(Base, TimestampMixin):
@@ -192,6 +194,10 @@ class Task(Base, TimestampMixin):
     approved_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     forecast_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     actual_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # the forecast the Gantt schedule last wrote; a forecast_due_date that differs was typed by a person
+    auto_forecast_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # the person's own forecast that a calculated one replaced - put back when the delay is gone
+    own_forecast_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     progress_pct: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(24), default="backlog")  # draft, backlog, ready, in_progress, in_review, completed, closed, blocked, on_hold, cancelled
     health: Mapped[str] = mapped_column(String(16), default="green")

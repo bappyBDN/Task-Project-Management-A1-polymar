@@ -5,7 +5,7 @@ from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import models, permissions, schemas, services
+from app import gantt, models, permissions, schemas, services
 from app.auth import get_admin_user, get_current_user
 from app.database import get_db
 from app.visibility import Scope, get_scope
@@ -36,6 +36,15 @@ def _normalize(db: Session, task: models.Task):
     task.progress_pct = max(0.0, min(100.0, float(task.progress_pct or 0.0)))
     services.apply_completion_rules(task)
     services.recalc_task_health(db, task)
+
+
+def _require_schedule(db: Session, user: models.User, task: models.Task):
+    """Who may change what a task depends on: whoever edits the task, or its project's Manager."""
+    project = db.get(models.Project, task.project_id) if task.project_id else None
+    if permissions.can_manage(db, user, task) or user.id in (
+            task.responsible_id, task.accountable_id, project.manager_id if project else None):
+        return
+    raise HTTPException(403, "Only the task's Responsible or Accountable person, the project's Manager or an admin / PMO can change what this task depends on.")
 
 
 @router.get("", response_model=list[schemas.TaskOut])
@@ -92,9 +101,10 @@ def list_tasks(
 
 
 @router.post("", response_model=schemas.TaskOut, status_code=201)
-def create_task(payload: schemas.TaskBase, db: Session = Depends(get_db),
+def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db),
                 current_user: models.User = Depends(get_current_user)):
     data = payload.model_dump()
+    depends_on_ids = data.pop("depends_on_ids", None)
     data["title"] = (data.get("title") or "").strip()
     if not data["title"]:
         raise HTTPException(400, "Task title is required")
@@ -125,6 +135,8 @@ def create_task(payload: schemas.TaskBase, db: Session = Depends(get_db),
             if user_code or attempt == 2:
                 raise HTTPException(409, "Could not save the task (duplicate code). Please try again.")
 
+    if depends_on_ids:
+        gantt.set_dependencies(db, task, depends_on_ids)
     if task.project_id:
         services.recalc_project_health(db, task.project_id)
     services.audit(db, "system", "task", task.id, "created", new_value=task.title)
@@ -149,6 +161,17 @@ def get_task(task_id: int, include_deleted: bool = False, db: Session = Depends(
     return task
 
 
+@router.get("/{task_id}/dependencies", response_model=schemas.TaskDependenciesOut)
+def get_dependencies(task_id: int, db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    """The tasks this task depends on (used by the task form of a Gantt project)."""
+    task = db.get(models.Task, task_id)
+    if not task or task.is_deleted:
+        raise HTTPException(404, "Task not found")
+    if not scope.sees_task(task):
+        return {"depends_on_ids": []}
+    return {"depends_on_ids": gantt.dependency_ids(db, task_id)}
+
+
 @router.patch("/{task_id}", response_model=schemas.TaskOut)
 def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends(get_db),
                 current_user: models.User = Depends(get_current_user)):
@@ -171,6 +194,11 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
         data["code"] = new_code
     if data.get("project_id") and not db.get(models.Project, data["project_id"]):
         raise HTTPException(400, "Selected project does not exist")
+    depends_on_ids = data.pop("depends_on_ids", None)
+    if depends_on_ids is not None and set(depends_on_ids) != set(gantt.dependency_ids(db, task.id)):
+        _require_schedule(db, current_user, task)
+    else:
+        depends_on_ids = None  # unchanged
     # Responsible / Accountable may edit their own task within limits (see app/permissions.py).
     data = permissions.check_task_edit(db, current_user, task, data)
 
@@ -180,6 +208,11 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
     for k, v in data.items():
         setattr(task, k, v)
     _normalize(db, task)
+    if task.project_id != old_project_id:
+        gantt.clear_dependencies(db, task.id)  # dependencies never cross projects
+    if depends_on_ids is not None:
+        db.flush()
+        gantt.set_dependencies(db, task, depends_on_ids)
     if task.informed_id != old_informed_id:
         _notify_informed(db, task, f"You are Informed on: {task.title}",
                          f"{current_user.name} added you as the Informed person of {task.code}. "

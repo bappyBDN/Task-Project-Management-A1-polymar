@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app import models, schemas, services
+from app import gantt, models, schemas, services
 from app.database import get_db
 from app.visibility import Scope, get_scope
 
@@ -36,6 +36,7 @@ def create_delay(payload: schemas.DelayRcaBase, db: Session = Depends(get_db)):
     task.health = "amber"
     if payload.revised_due_date:
         task.forecast_due_date = payload.revised_due_date
+        gantt.reschedule_project(db, task.project_id)  # tasks that depend on this one follow
     services.audit(db, "system", "task", task.id, "delay_rca_submitted",
                    new_value=payload.delay_category, reason=payload.delay_reason)
     db.commit()

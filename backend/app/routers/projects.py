@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import models, permissions, schemas, services
+from app import gantt, models, permissions, schemas, services
 from app.auth import get_current_user
 from app.database import get_db
 from app.visibility import Scope, get_scope
@@ -193,6 +193,38 @@ def remove_associate(project_id: int, associate_id: int, db: Session = Depends(g
                    previous_value=f"{person.name if person else row.user_id}: {row.contribution}")
     db.delete(row)
     db.commit()
+
+
+# ---------------------------------------------------------------- Gantt (optional)
+# Off by default. On: the project page shows its tasks as a Gantt chart and the forecast
+# dates follow the task dependencies (app/gantt.py). Turning it off deletes nothing.
+
+@router.get("/{project_id}/gantt")
+def get_gantt(project_id: int, db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
+    project = _project_or_404(db, project_id)
+    _require_view(scope, project)
+    if not project.gantt_enabled:
+        return {"enabled": False}
+    data = gantt.chart(db, project, scope.sees_task)
+    db.commit()  # the forecast dates the schedule just recalculated
+    return data
+
+
+@router.put("/{project_id}/gantt", response_model=schemas.ProjectOut)
+def set_gantt(project_id: int, payload: schemas.GanttToggle, db: Session = Depends(get_db),
+              current_user: models.User = Depends(get_current_user)):
+    project = _project_or_404(db, project_id)
+    if not permissions.can_manage_associates(db, current_user, project):
+        raise HTTPException(403, "Only the project's Manager / Owner / Sponsor, a Responsible / Accountable person on its tasks, or an admin / PMO can turn the Gantt chart on or off.")
+    if project.gantt_enabled != payload.enabled:
+        project.gantt_enabled = payload.enabled
+        if payload.enabled:
+            gantt.reschedule(db, project)
+        services.audit(db, current_user.name, "project", project.id,
+                       "gantt_enabled" if payload.enabled else "gantt_disabled", new_value=project.name)
+        db.commit()
+        db.refresh(project)
+    return project
 
 
 @router.get("/{project_id}/milestones", response_model=list[schemas.MilestoneOut])
