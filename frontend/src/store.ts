@@ -389,7 +389,13 @@ export const store = {
   deleteProject: (id: number) => {
     db.projects = db.projects.filter((p) => p.id !== id)
     db.milestones = db.milestones.filter((m) => m.project_id !== id)
-    db.tasks.forEach((t) => { if (t.project_id === id) (t as any).is_deleted = true })
+    // every task of the project goes with it, permanently
+    const taskIds = new Set(db.tasks.filter((t) => t.project_id === id).map((t) => t.id))
+    db.tasks = db.tasks.filter((t) => !taskIds.has(t.id))
+    db.progress = db.progress.filter((p) => !taskIds.has(p.task_id))
+    db.delays = db.delays.filter((d) => !taskIds.has(d.task_id))
+    db.approvals = db.approvals.filter((a) => !(a.entity_type === 'task' && taskIds.has(a.entity_id)))
+    db.raci = db.raci.filter((r) => r.task_id == null || !taskIds.has(r.task_id))
     db.backlog.forEach((b) => { if (b.project_id === id) b.project_id = undefined })
     db.raci = db.raci.filter((r) => r.project_id !== id)
     persist()

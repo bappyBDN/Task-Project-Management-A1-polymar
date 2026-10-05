@@ -30,6 +30,8 @@ export default function ProjectDetail() {
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [savedMsg, setSavedMsg] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteErr, setDeleteErr] = useState('')
   // task list filter: the Responsible employee ('' = everyone)
   const [employeeId, setEmployeeId] = useState('')
   const { user } = useAuth()
@@ -83,6 +85,25 @@ export default function ProjectDetail() {
   // associated people: also the project's Manager / Owner / Sponsor (same rule as the server)
   const canManageAssociates = canEdit || (!!user && [project.manager_id, project.owner_id, project.sponsor_id].includes(user.id))
 
+  // Only the project's Manager deletes it (the server checks this too). Every task under the
+  // project is deleted permanently with it.
+  const isProjectManager = !!user && !!project.manager_id && project.manager_id === user.id
+  const removeProject = async () => {
+    if (deleting) return
+    const n = tasks.length
+    const warn = n > 0 ? `\n\nIts ${n} task${n === 1 ? '' : 's'} will be permanently deleted too, with their progress history.` : ''
+    if (!confirm(`Delete project ${project.code} — "${project.name}"?${warn}\n\nThis cannot be undone.`)) return
+    setDeleting(true)
+    setDeleteErr('')
+    try {
+      await api.del(`/projects/${project.id}`)
+      navigate('/projects')
+    } catch (e: any) {
+      setDeleteErr(e.message || 'Could not delete the project. Please try again.')
+      setDeleting(false)
+    }
+  }
+
   // headline numbers for the KPI strip
   const todayStr = new Date().toISOString().slice(0, 10)
   const isClosed = (t: Task) => ['completed', 'closed', 'cancelled'].includes(t.status)
@@ -120,8 +141,13 @@ export default function ProjectDetail() {
             <span className={`health-dot ${HEALTH_COLORS[project.health]}`} /> {label(project.health)}
           </div>
         </div>
-        {canEdit && <button className="btn sm" onClick={() => { setSavedMsg(''); setShowEdit(true) }}>✎ Edit Project</button>}
+        <div className="row">
+          {canEdit && <button className="btn sm" onClick={() => { setSavedMsg(''); setShowEdit(true) }}>✎ Edit Project</button>}
+          {isProjectManager && <button className="btn sm danger" onClick={removeProject} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete Project'}</button>}
+        </div>
       </div>
+
+      {deleteErr && <div className="alert error" role="alert">{deleteErr}</div>}
 
       {savedMsg && <div className="alert success" role="status">{savedMsg}</div>}
       {showTask && (

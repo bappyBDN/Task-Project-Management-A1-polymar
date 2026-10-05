@@ -32,12 +32,12 @@ export default function Projects() {
 
   const open = (p: Project) => navigate(`/projects/${p.id}`)
 
-  // Admin-only. Uses the existing DELETE /projects/{id} route: the backend soft-deletes the project's
-  // tasks, detaches milestones/risks/issues/backlog, then removes the project — so no foreign key breaks.
+  // Admin-only here (the project's Manager deletes from the project page). DELETE /projects/{id}
+  // permanently deletes the project's tasks, detaches risks/issues/backlog, then removes the project.
   const removeProject = async (p: Project) => {
     if (!isAdmin || deletingId !== null) return
     const n = tasks.filter((t) => t.project_id === p.id).length
-    const warn = n > 0 ? `\n\nIts ${n} task${n === 1 ? '' : 's'} will also be removed from all lists.` : ''
+    const warn = n > 0 ? `\n\nIts ${n} task${n === 1 ? '' : 's'} will be permanently deleted too.` : ''
     if (!confirm(`Delete project ${p.code} — "${p.name}"?${warn}\n\nThis cannot be undone.`)) return
     setDeletingId(p.id)
     try {

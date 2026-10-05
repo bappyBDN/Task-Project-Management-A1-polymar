@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models, permissions, schemas, services
-from app.auth import get_admin_user, get_current_user
+from app.auth import get_current_user
 from app.database import get_db
 from app.visibility import Scope, get_scope
 
@@ -218,18 +218,22 @@ def create_milestone(project_id: int, payload: schemas.MilestoneBase, db: Sessio
 
 
 @router.delete("/{project_id}", status_code=204)
-def delete_project(project_id: int, admin: models.User = Depends(get_admin_user), db: Session = Depends(get_db)):
-    """Admin-only: delete a project and its milestones/tasks (soft-delete tasks, hard-delete project)."""
+def delete_project(project_id: int, current_user: models.User = Depends(get_current_user),
+                   db: Session = Depends(get_db)):
+    """The project's Manager (or an admin) deletes a project permanently, with every task under it."""
     project = db.get(models.Project, project_id)
     if not project:
         raise HTTPException(404, "Project not found")
+    if current_user.role != permissions.ADMIN_ROLE and current_user.id != project.manager_id:
+        raise HTTPException(403, "Only the Project Manager can delete this project.")
     name = project.name
     milestone_ids = [m for (m,) in db.query(models.Milestone.id).filter(models.Milestone.project_id == project_id).all()]
 
-    # Soft-delete tasks so history is preserved, but detach them from the rows we are about to remove
-    # (otherwise databases that enforce foreign keys refuse the delete).
-    db.query(models.Task).filter(models.Task.project_id == project_id).update(
-        {"is_deleted": True, "project_id": None}, synchronize_session=False)
+    # Every task of the project goes with it (also the ones waiting for a delete decision),
+    # together with its progress history, delays, approvals and RACI rows.
+    tasks = db.query(models.Task).filter(models.Task.project_id == project_id).all()
+    for task in tasks:
+        services.hard_delete_task(db, task)
     if milestone_ids:
         db.query(models.Task).filter(models.Task.milestone_id.in_(milestone_ids)).update(
             {"milestone_id": None}, synchronize_session=False)
@@ -245,7 +249,7 @@ def delete_project(project_id: int, admin: models.User = Depends(get_admin_user)
     # comments keep the project's code / name, so only the link is cleared
     db.query(models.Comment).filter(models.Comment.project_id == project_id).update(
         {"project_id": None}, synchronize_session=False)
-    services.audit(db, admin.name, "project", project_id, "deleted", previous_value=name,
-                   reason=f"Deleted by admin {admin.name}")
+    services.audit(db, current_user.name, "project", project_id, "deleted", previous_value=name,
+                   reason=f"Deleted by {current_user.name} with {len(tasks)} task(s)")
     db.delete(project)
     db.commit()
