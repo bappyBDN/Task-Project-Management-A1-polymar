@@ -402,6 +402,8 @@ tr.clickable, .clickable { cursor: pointer; }
 .gantt-names .gantt-head { display: flex; align-items: center; padding: 0 10px; }
 .gantt-name { display: block; padding: 0 10px; line-height: 33px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid #eef1f5; cursor: pointer; box-sizing: border-box; }
 .gantt-name:hover { background: #f3f5f9; }
+.gantt-link { border: 1px solid var(--line); background: #fff; border-radius: 6px; font-size: 11px; line-height: 18px; padding: 0 4px; margin-right: 6px; cursor: pointer; color: var(--muted); }
+.gantt-link:hover { border-color: var(--navy); color: var(--navy); }
 .gantt-month { position: absolute; top: 0; height: 22px; line-height: 22px; padding-left: 6px; border-left: 1px solid var(--line); box-sizing: border-box; white-space: nowrap; overflow: hidden; color: var(--navy); }
 .gantt-tick { position: absolute; top: 22px; height: 21px; line-height: 21px; padding-left: 3px; font-weight: 500; text-transform: none; letter-spacing: 0; box-sizing: border-box; border-left: 1px solid #e3e8ef; }
 .gantt-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: #eef1f5; }

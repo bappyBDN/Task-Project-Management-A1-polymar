@@ -77,6 +77,8 @@ export default function SearchableSelect({
         value={open ? query : isCustom ? customLabel(value) : (selected?.label ?? '')}
         placeholder={placeholder}
         onFocus={() => { setOpen(true); setQuery('') }}
+        // still focused after a pick: a click opens the list again (adding several in a row)
+        onClick={() => { if (!open) { setOpen(true); setQuery('') } }}
         onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
         onBlur={commitCustom}
         onKeyDown={(e) => {

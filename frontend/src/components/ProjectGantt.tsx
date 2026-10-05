@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { GanttData, GanttTask, Project, Task, User } from '../types'
 import { fmtDate as formatDate, label } from '../constants'
+import SearchableSelect from './SearchableSelect'
 
 // Optional Gantt chart of a project (see backend app/gantt.py). Off: this renders nothing
 // (or only the switch, for whoever may turn it on) and the page is exactly as before.
@@ -48,6 +49,13 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
   const [data, setData] = useState<GanttData | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  // bumped after dependencies are saved here: the schedule is loaded again
+  const [version, setVersion] = useState(0)
+  // "Set dependencies": the task being edited ('' = none picked yet), null = closed
+  const [depTask, setDepTask] = useState<string | null>(null)
+  const [depOn, setDepOn] = useState<string[]>([])
+  const [depErr, setDepErr] = useState('')
+  const [depSaving, setDepSaving] = useState(false)
 
   // anything that moves the schedule
   const signature = tasks.map((t) => [t.id, t.status, t.progress_pct, t.planned_start_date, t.baseline_due_date,
@@ -64,7 +72,7 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
       if (g.enabled && (g.project?.forecast ?? null) !== (project.forecast_due_date ?? null)) onChanged()
     }).catch((e) => { if (!stale) setErr(e.message || 'Could not load the Gantt chart.') })
     return () => { stale = true }
-  }, [project.id, enabled, signature])
+  }, [project.id, enabled, signature, version])
 
   // a long project opens around today instead of at its first month
   const scroller = useRef<HTMLDivElement>(null)
@@ -88,6 +96,34 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
     }
   }
 
+  // pick the task, then the tasks it waits for (e.g. task 3 depends on tasks 1 and 2)
+  const openDeps = (taskId?: number) => {
+    const t = data?.tasks?.find((x) => x.id === taskId)
+    setDepTask(t ? String(t.id) : '')
+    setDepOn(t ? t.depends_on.map(String) : [])
+    setDepErr('')
+  }
+  const pickDepTask = (v: string) => {
+    setDepTask(v)
+    setDepOn((data?.tasks?.find((x) => String(x.id) === v)?.depends_on ?? []).map(String))
+    setDepErr('')
+  }
+  const saveDeps = async () => {
+    if (!depTask || depSaving) return
+    setDepSaving(true)
+    setDepErr('')
+    try {
+      await api.patch(`/tasks/${depTask}`, { depends_on_ids: depOn.map(Number) })
+      setDepTask(null)
+      setVersion((n) => n + 1)
+      onChanged()
+    } catch (e: any) {
+      setDepErr(e.message || 'Could not save the dependencies.')
+    } finally {
+      setDepSaving(false)
+    }
+  }
+
   if (!enabled && !canToggle) return null
 
   const head = (
@@ -95,12 +131,15 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
       <div className="section-title" style={{ marginTop: 0, marginBottom: enabled ? 12 : 0 }}>
         Gantt Chart <span className="badge gray" style={{ marginLeft: 6 }}>Optional</span>
       </div>
+      <div className="row">
+      {enabled && canToggle && !!data?.tasks?.length && <button className="btn sm" onClick={() => openDeps()}>⛓ Set dependencies</button>}
       {canToggle && (
         <button className={`gantt-switch ${enabled ? 'on' : ''}`} onClick={toggle} disabled={busy} role="switch" aria-checked={enabled}
           title={enabled ? 'Turn the Gantt chart off - nothing is deleted' : 'Turn the Gantt chart on for this project'}>
           <i /> {enabled ? 'On' : 'Off'}
         </button>
       )}
+      </div>
     </div>
   )
 
@@ -184,6 +223,51 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
   return (
     <div className="card mt">
       {head}
+      {depTask !== null && (() => {
+        const all = [...(data?.tasks ?? [])].sort((a, b) => a.code.localeCompare(b.code))
+        const item = (t: GanttTask) => ({ value: String(t.id), label: `${t.code} — ${t.title}` })
+        return (
+          <div className="modal-backdrop">
+            <div className="modal" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
+              <h2>Set dependencies</h2>
+              {depErr && <div className="alert error">{depErr}</div>}
+              <label>Task</label>
+              <SearchableSelect value={depTask} items={all.map(item)} onChange={pickDepTask} placeholder="Search the task…" />
+              <label>Depends on <span style={{ fontWeight: 400 }}>— it starts after all of these have finished</span></label>
+              {!depTask && <div className="small muted">Choose the task first.</div>}
+              {depTask && (
+                <>
+                  <div>
+                    {depOn.map((v) => {
+                      const t = all.find((x) => String(x.id) === v)
+                      return (
+                        <span key={v} className="gantt-chip">
+                          {t ? `${t.code} — ${t.title}${t.finish ? ` (finishes ${fmtDate(t.finish)})` : ''}` : `Task #${v}`}
+                          <button type="button" title="Remove" onClick={() => setDepOn((l) => l.filter((x) => x !== v))}>✕</button>
+                        </span>
+                      )
+                    })}
+                    {depOn.length === 0 && <div className="small muted" style={{ marginBottom: 6 }}>No dependency: this task follows only its own dates.</div>}
+                  </div>
+                  <SearchableSelect
+                    value=""
+                    items={all.filter((t) => String(t.id) !== depTask && !depOn.includes(String(t.id))).map(item)}
+                    onChange={(v) => { if (v) setDepOn((l) => (l.includes(v) ? l : [...l, v])) }}
+                    placeholder="Add a task it depends on…"
+                  />
+                  <div className="small muted" style={{ marginTop: 8 }}>
+                    Add as many as needed. The forecast dates of this task, the tasks after it and the project are recalculated when you save.
+                  </div>
+                </>
+              )}
+              <div className="modal-actions">
+                <button className="btn" onClick={() => setDepTask(null)}>Cancel</button>
+                <button className="btn primary" onClick={saveDeps} disabled={!depTask || depSaving}>{depSaving ? 'Saving…' : 'Save'}</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
       {err && <div className="alert error">{err}</div>}
       {!data && !err && <div className="small muted">Loading the schedule…</div>}
 
@@ -196,6 +280,10 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
               <div className="gantt-head">Task</div>
               {rows.map((t) => (
                 <div key={t.id} className="gantt-name" style={{ height: ROW }} title={tip(t)} onClick={() => navigate(`/tasks/${t.id}`)}>
+                  {canToggle && (
+                    <button className="gantt-link" title={t.depends_on.length ? `Depends on ${t.depends_on.map((i) => byId.get(i)?.code ?? `#${i}`).join(', ')} - click to change` : 'Choose the tasks this one depends on'}
+                      onClick={(e) => { e.stopPropagation(); openDeps(t.id) }}>⛓{t.depends_on.length || ''}</button>
+                  )}
                   <span className="muted small">{t.code}</span> {t.title}
                 </div>
               ))}
