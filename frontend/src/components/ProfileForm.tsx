@@ -3,7 +3,8 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import type { Company, Department, Function, User } from '../types'
 import { label } from '../constants'
-import SbuSelect from './SbuSelect'
+import SbuMultiSelect from './SbuMultiSelect'
+import { userSbuIds } from '../org'
 import SearchableSelect from './SearchableSelect'
 import InviteUserModal from './InviteUserModal'
 
@@ -37,7 +38,8 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
     name: user?.name ?? '',
     email: user?.email ?? '',
     designation: user?.designation ?? '',
-    company_id: user?.company_id ?? null as number | null,
+    // every SBU they belong to; the first one is also their company_id
+    company_ids: userSbuIds(user),
     function_id: user?.function_id ?? null as number | null,
     department_id: user?.department_id ?? null as number | null,
     reports_to_id: user?.reports_to_id ?? null as number | null,
@@ -66,7 +68,8 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
       const mine = {
         name: form.name.trim(),
         designation: form.designation.trim() || null,
-        company_id: form.company_id,
+        company_id: form.company_ids[0] ?? null,
+        company_ids: form.company_ids,
         function_id: form.function_id,
         department_id: form.department_id,
         reports_to_id: form.reports_to_id,
@@ -128,10 +131,10 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
         <div className="form-row">
           <fieldset disabled={orgLocked} title={orgLockedTitle} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <label>SBU</label>
-            <SbuSelect
-              value={form.company_id != null ? String(form.company_id) : ''}
+            <SbuMultiSelect
+              values={form.company_ids.map(String)}
               companies={companies}
-              onChange={(v) => set('company_id', v ? Number(v) : null)}
+              onChange={(ids) => set('company_ids', ids.map(Number))}
               placeholder="Search SBU…"
             />
           </fieldset>

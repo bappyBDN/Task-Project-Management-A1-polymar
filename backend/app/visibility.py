@@ -20,8 +20,8 @@ delays, the dashboard's portfolio widgets). Read-only, existing columns only.
 
 A project or task can be in several SBUs (company_id + its extra_sbus rows): each of
 them counts. A task's SBUs / Function are its own, or its project's when the task has none.
-A head's SBU / Function / Department is the one on their own user record (a COO's SBUs
-are their user_sbus rows instead); copies of
+A head's SBU / Function / Department is the one on their own user record - every SBU on
+it, when they belong to several (a COO's SBUs are their user_sbus rows instead); copies of
 the same SBU (other spellings) and the same Function / Department name count as one.
 """
 import re
@@ -38,7 +38,7 @@ HEAD_ROLES = {"coo": "sbu", "business_head": "sbu", "functional_head": "function
 
 # Same list / spellings as frontend/src/components/SbuSelect.tsx.
 DEFAULT_SBUS = [
-    "Anwar Group Ltd", "Anwar Cement Ltd", "Anwar Ispat Ltd", "A-One Polymer Ltd",
+    "Anwar Group", "Anwar Cement Ltd", "Anwar Ispat Ltd", "A-One Polymer Ltd",
     "Anwar Galvanizing Ltd", "Anwar Textile Ltd", "Anwar Landmark Ltd",
     "Anwar Jute Spinning Mills Ltd", "Anwar Cement Sheet Ltd", "Anwar Organic Ltd", "Anwar Denim Ltd",
 ]
@@ -83,10 +83,10 @@ class Scope:
         level = HEAD_ROLES.get(user.role)
         if user.role == permissions.COO_ROLE:
             self._companies = permissions.managed_company_ids(db, user)
-        elif level and user.company_id:
-            mine = db.get(models.Company, user.company_id)
-            key = sbu_key(mine.name) if mine else None
-            self._companies = {c.id for c in db.query(models.Company).all() if key and sbu_key(c.name) == key}
+        elif level and user.company_ids:
+            everyone = db.query(models.Company).all()
+            keys = {sbu_key(c.name) for c in everyone if c.id in user.company_ids}
+            self._companies = {c.id for c in everyone if sbu_key(c.name) in keys}
         if level == "function" and user.function_id:
             mine = db.get(models.Function, user.function_id)
             key = norm(mine.name) if mine else None

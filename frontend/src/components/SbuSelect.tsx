@@ -6,7 +6,7 @@ import SearchableSelect from './SearchableSelect'
 // The group's SBUs, always offered in every SBU dropdown (in this order).
 // Ones not yet in the company list are created the first time someone picks them.
 export const DEFAULT_SBUS = [
-  'Anwar Group Ltd',
+  'Anwar Group',
   'Anwar Cement Ltd',
   'Anwar Ispat Ltd',
   'A-One Polymer Ltd',

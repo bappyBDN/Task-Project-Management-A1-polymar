@@ -203,6 +203,8 @@ class SignupRequest(BaseModel):
     email: EmailStr
     designation: str | None = None
     company_id: int | None = None
+    # every SBU they belong to, the first one first; left out = company_id alone
+    company_ids: list[int] | None = None
     function_id: int | None = None
     department_id: int | None = None
     reports_to_id: int | None = None
@@ -248,9 +250,10 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     if db.query(User.id).filter(func.lower(User.employee_id) == employee_id.lower()).first():
         raise HTTPException(409, "An account with this Employee ID already exists. Please log in or use Forgot Password.")
 
+    company_ids = list(dict.fromkeys(c for c in (request.company_ids or [request.company_id]) if c))
     # Only link to rows that really exist (the database would reject a bad id).
     for model, value, label in (
-        (models.Company, request.company_id, "Company"),
+        *((models.Company, cid, "SBU") for cid in company_ids),
         (models.Function, request.function_id, "Function"),
         (models.Department, request.department_id, "Department"),
         (models.User, request.reports_to_id, "Reports To person"),
@@ -312,7 +315,7 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
         employee_id=employee_id,
         name=name,
         designation=(request.designation or "").strip() or None,
-        company_id=request.company_id,
+        company_id=company_ids[0] if company_ids else None,
         function_id=function_id,
         department_id=department_id,
         reports_to_id=reports_to_id,
@@ -333,6 +336,7 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     except IntegrityError:
         db.rollback()  # e.g. the same email signed up twice at the same moment
         raise HTTPException(409, "An account with this email or Employee ID already exists.")
+    services.set_sbus(db, user, company_ids, name)
     # anyone who named this new user's Employee ID as their manager now reports to them
     services.link_waiting_reports(db, user)
     services.audit(db, name, "user", user.id, "signed_up", new_value=f"{name} <{email}>")

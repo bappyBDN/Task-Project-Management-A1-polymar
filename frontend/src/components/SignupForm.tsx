@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import SearchableSelect from './SearchableSelect'
-import SbuSelect, { isPendingSbu } from './SbuSelect'
+import { isPendingSbu } from './SbuSelect'
+import SbuMultiSelect from './SbuMultiSelect'
 import InviteUserModal from './InviteUserModal'
 
 // The sign-up form, shared by the Sign Up page and "Add new employee" (e.g. on a
@@ -28,6 +29,8 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
   // an invitation email links to /signup?email=... : start with that email filled in
   const [form, setForm] = useState(() => (forOther ? EMPTY : { ...EMPTY, email: new URLSearchParams(window.location.search).get('email') ?? '' }))
   const [opts, setOpts] = useState<SignupOptions>({ companies: [], functions: [], departments: [], users: [] })
+  // every SBU picked (company ids, or a pending value for one not in the database yet)
+  const [sbus, setSbus] = useState<string[]>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -58,6 +61,8 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
     if (!form.name.trim() || !form.email.trim() || !form.employee_id.trim()) { setError('Name, email and employee id are required'); return }
     if (managerEmail && managerEmail.toLowerCase() === form.email.trim().toLowerCase()) { setError(`${forOther ? 'Their' : 'Your'} manager's email can't be ${their} own.`); return }
     const num = (v: string) => (v.startsWith('id:') ? Number(v.slice(3)) : null)
+    // an SBU not in the database yet can't be linked from here - an admin sets it later
+    const companyIds = sbus.filter((v) => !isPendingSbu(v)).map(Number)
     setBusy(true)
     try {
       const res = await api.post<{ message: string }>('/auth/signup', {
@@ -65,8 +70,8 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
         name: form.name.trim(),
         email: form.email.trim(),
         designation: form.designation.trim() || null,
-        // an SBU not in the database yet can't be linked from here - an admin sets it later
-        company_id: form.company_id && !isPendingSbu(form.company_id) ? Number(form.company_id) : null,
+        company_id: companyIds[0] ?? null,
+        company_ids: companyIds,
         function_id: num(form.function_id),
         department_id: num(form.department_id),
         reports_to_id: num(form.reports_to_id),
@@ -77,6 +82,7 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
       })
       const employeeId = form.employee_id.trim()
       setForm(EMPTY)
+      setSbus([])
       onSuccess(res.message, employeeId)
     } catch (err: any) {
       setError(err.message || 'Sign up failed. Please try again.')
@@ -101,9 +107,11 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
       <div className="form-row">
         <div>
           <label>SBU</label>
-          <SbuSelect value={form.company_id} companies={opts.companies} onChange={(v) => set('company_id', v)} canCreate={forOther} />
-          {isPendingSbu(form.company_id) && (
-            <div className="small muted" style={{ marginTop: 4 }}>This SBU isn't set up yet - your admin will assign it to {their} account.</div>
+          <SbuMultiSelect values={sbus} companies={opts.companies} onChange={setSbus} canCreate={forOther} />
+          {sbus.some(isPendingSbu) && (
+            <div className="small muted" style={{ marginTop: 4 }}>
+              {sbus.filter(isPendingSbu).map((v) => v.slice(v.indexOf(':') + 1)).join(', ')} isn't set up yet - your admin will assign it to {their} account.
+            </div>
           )}
         </div>
         <div>

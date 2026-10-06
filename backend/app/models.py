@@ -78,6 +78,28 @@ class User(Base, TimestampMixin):
     def sbu_ids(self) -> list[int]:
         return [s.company_id for s in self.sbus]
 
+    # --- the person's own SBUs beyond the first one (company_id); see UserCompany ---
+    extra_companies: Mapped[list["UserCompany"]] = relationship(lazy="selectin", cascade="all, delete-orphan",
+                                                                order_by="UserCompany.id")
+
+    @property
+    def company_ids(self) -> list[int]:
+        """Every SBU the person belongs to, the first one (company_id) first."""
+        ids = [self.company_id] if self.company_id else []
+        return list(dict.fromkeys(ids + [c.company_id for c in self.extra_companies]))
+
+
+class UserCompany(Base, TimestampMixin):
+    """One more SBU a person belongs to. The first SBU stays in users.company_id, so only
+    the second, third, ... live here. Not to be confused with UserSbu (below): the SBUs a
+    COO oversees, which an admin gives."""
+    __tablename__ = "user_companies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), index=True)
+
+    __table_args__ = (UniqueConstraint("user_id", "company_id", name="uq_user_company"),)
+
 
 class UserSbu(Base, TimestampMixin):
     """One SBU a COO oversees. A COO can have several, so they live here instead of in

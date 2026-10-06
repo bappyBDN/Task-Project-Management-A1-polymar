@@ -71,10 +71,11 @@ def update_me(payload: schemas.UserSelfUpdate, user: models.User = Depends(get_c
         services.audit(db, user.name, "user", user.id, "role_changed", previous_value=user.role, new_value=new_role,
                        reason="Changed by the user in Edit My Profile")
         data["role"] = new_role
+    new_sbus = services.patched_sbus(user, data, "company_ids")
     if user.role in HEAD_ROLES and user.role != "admin":
-        for fk in ("company_id", "function_id", "department_id"):
-            if fk in data and data[fk] != getattr(user, fk):
-                raise HTTPException(403, "As a head, your SBU, function and department decide which projects you see. Please ask an admin to change them.")
+        sbus_changed = new_sbus is not None and {c for c in new_sbus if c} != set(user.company_ids)
+        if sbus_changed or any(fk in data and data[fk] != getattr(user, fk) for fk in ("function_id", "department_id")):
+            raise HTTPException(403, "As a head, your SBU, function and department decide which projects you see. Please ask an admin to change them.")
     if "name" in data:
         if not (data["name"] or "").strip():
             raise HTTPException(400, "Name is required")
@@ -84,11 +85,13 @@ def update_me(payload: schemas.UserSelfUpdate, user: models.User = Depends(get_c
             raise HTTPException(400, "You cannot report to yourself")
         if not db.get(models.User, data["reports_to_id"]):
             raise HTTPException(400, "Manager not found")
-    for fk, model in (("company_id", models.Company), ("function_id", models.Function), ("department_id", models.Department)):
+    for fk, model in (("function_id", models.Function), ("department_id", models.Department)):
         if data.get(fk) is not None and not db.get(model, data[fk]):
             raise HTTPException(400, f"{fk.replace('_id', '').title()} not found")
     for k, v in data.items():
         setattr(user, k, v)
+    if new_sbus is not None:
+        services.set_sbus(db, user, new_sbus, user.name)
     if data.get("reports_to_id") is not None:
         user.pending_manager_employee_id = None  # manager chosen - nothing left to wait for
     db.commit()
@@ -123,9 +126,12 @@ def create_user(
 ):
     data = payload.model_dump()
     sbu_ids = data.pop("sbu_ids", None)
+    company_ids = data.pop("company_ids", None) or [data.get("company_id")]
+    data["company_id"] = None  # set with their other SBUs once the user has an id
     user = models.User(**data)
     db.add(user)
     db.flush()
+    services.set_sbus(db, user, company_ids, admin.name)
     if sbu_ids:
         _set_sbus(db, admin, user, sbu_ids)
     # anyone who signed up naming this Employee ID as their manager now reports to them
@@ -183,10 +189,13 @@ def update_user(user_id: int, payload: schemas.UserUpdate, admin: models.User = 
         raise HTTPException(404, "User not found")
     data = payload.model_dump(exclude_unset=True)
     sbu_ids = data.pop("sbu_ids", None)
+    company_ids = services.patched_sbus(user, data, "company_ids")
     for k, v in data.items():
         if v is None and k in {"employee_id", "name", "email", "role"}:
             continue  # required column: an explicit null must not wipe it
         setattr(user, k, v)
+    if company_ids is not None:
+        services.set_sbus(db, user, company_ids, admin.name)
     if sbu_ids is not None:
         _set_sbus(db, admin, user, sbu_ids)
     if "employee_id" in payload.model_fields_set:

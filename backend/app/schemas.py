@@ -53,6 +53,8 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Admin "New User": the user's fields, plus the SBUs a COO oversees."""
     sbu_ids: Optional[list[int]] = None
+    # every SBU the person belongs to, the first one first (it is also company_id); left out = company_id alone
+    company_ids: Optional[list[int]] = None
 
 
 class UserOut(UserBase):
@@ -62,6 +64,8 @@ class UserOut(UserBase):
     pending_manager_employee_id: Optional[str] = None
     # COO only: the SBUs they oversee (company ids), set by an admin
     sbu_ids: list[int] = []
+    # every SBU the person belongs to, the first one first (it is also company_id)
+    company_ids: list[int] = []
 
 
 class UserUpdate(BaseModel):
@@ -76,6 +80,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     reports_to_id: Optional[int] = None
     sbu_ids: Optional[list[int]] = None  # COO: the SBUs they oversee (replaces the list)
+    company_ids: Optional[list[int]] = None  # the person's own SBUs; left out / null = they stay as they are
 
 
 class UserSelfUpdate(BaseModel):
@@ -86,6 +91,7 @@ class UserSelfUpdate(BaseModel):
     role: Optional[str] = None
     designation: Optional[str] = None
     company_id: Optional[int] = None
+    company_ids: Optional[list[int]] = None  # their own SBUs; left out / null = they stay as they are
     function_id: Optional[int] = None
     department_id: Optional[int] = None
     reports_to_id: Optional[int] = None

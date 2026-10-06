@@ -4,7 +4,8 @@ import { Company, Department, Function, Project, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import SbuSelect, { sbuKey } from '../components/SbuSelect'
-import { sbuName } from '../org'
+import SbuMultiSelect from '../components/SbuMultiSelect'
+import { sbuName, userSbuIds } from '../org'
 import DuplicatesPanel from '../components/DuplicatesPanel'
 import { clearPrivilegedCache } from '../usePrivileged'
 
@@ -18,7 +19,8 @@ interface UserForm {
   email: string
   designation?: string
   role: string
-  company_id?: number | null
+  /** every SBU the person belongs to; the first one is also their company_id */
+  company_ids: number[]
   function_id?: number | null
   department_id?: number | null
   reports_to_id?: number | null
@@ -36,7 +38,7 @@ export interface EmailLog {
   recipients?: string | null
 }
 
-const EMPTY_USER: UserForm = { employee_id: '', name: '', email: '', designation: '', role: 'employee', company_id: null, function_id: null, department_id: null, reports_to_id: null, sbu_ids: [] }
+const EMPTY_USER: UserForm = { employee_id: '', name: '', email: '', designation: '', role: 'employee', company_ids: [], function_id: null, department_id: null, reports_to_id: null, sbu_ids: [] }
 
 // ---------------------------------------------------------------- Hierarchy helpers
 function groupByManager(users: User[]): Map<number | null, User[]> {
@@ -166,7 +168,7 @@ export default function AdminPanel() {
     setEditing(u)
     setForm({
       employee_id: u.employee_id, name: u.name, email: u.email, designation: u.designation ?? '',
-      role: u.role, company_id: u.company_id ?? null, function_id: u.function_id ?? null,
+      role: u.role, company_ids: userSbuIds(u), function_id: u.function_id ?? null,
       department_id: u.department_id ?? null, reports_to_id: u.reports_to_id ?? null,
       sbu_ids: u.sbu_ids ?? [],
     })
@@ -186,14 +188,14 @@ export default function AdminPanel() {
         await api.patch(`/organizations/users/${editing.id}`, {
           ...form,
           sbu_ids,
-          company_id: form.company_id ?? null,
+          company_id: form.company_ids[0] ?? null,
           function_id: form.function_id ?? null,
           department_id: form.department_id ?? null,
           reports_to_id: form.reports_to_id ?? null,
         })
         setMsg(`Updated ${form.name}`)
       } else {
-        await api.post('/organizations/users', { ...form, sbu_ids })
+        await api.post('/organizations/users', { ...form, sbu_ids, company_id: form.company_ids[0] ?? null })
         setMsg(`Created ${form.name}`)
       }
       setShowForm(false)
@@ -222,7 +224,7 @@ export default function AdminPanel() {
   const departmentItems = departments.map((dp) => ({ value: String(dp.id), label: dp.name }))
 
   const createdOrg = (kind: 'company' | 'function' | 'department', obj: any) => {
-    if (kind === 'company') set('company_id', obj.id)
+    if (kind === 'company') setForm((f) => (f.company_ids.includes(obj.id) ? f : { ...f, company_ids: [...f.company_ids, obj.id] }))
     if (kind === 'function') set('function_id', obj.id)
     if (kind === 'department') set('department_id', obj.id)
     setShowOrgModal(null)
@@ -232,7 +234,7 @@ export default function AdminPanel() {
   const removeCompany = (value: string) => run(async () => {
     if (!confirm('Remove this SBU?')) return
     await api.del(`/organizations/companies/${value}`)
-    if (String(form.company_id) === value) set('company_id', null)
+    setForm((f) => ({ ...f, company_ids: f.company_ids.filter((x) => String(x) !== value) }))
     load()
   })
   const removeFunction = (value: string) => run(async () => {
@@ -506,10 +508,10 @@ export default function AdminPanel() {
             <div className="form-row">
               <div>
                 <label>SBU</label>
-                <SbuSelect
-                  value={form.company_id != null ? String(form.company_id) : ''}
+                <SbuMultiSelect
+                  values={form.company_ids.map(String)}
                   companies={companies}
-                  onChange={(v) => set('company_id', v ? Number(v) : null)}
+                  onChange={(ids) => setForm((f) => ({ ...f, company_ids: ids.map(Number) }))}
                   placeholder="Search SBU…"
                   onAddNew={() => setShowOrgModal('company')}
                   addLabel="new SBU"

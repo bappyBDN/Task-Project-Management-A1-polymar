@@ -23,6 +23,13 @@ export function sbuIdsOf(x?: { company_id?: number | null; sbu_ids?: number[] } 
   return x.sbu_ids?.length ? x.sbu_ids : x.company_id != null ? [x.company_id] : []
 }
 
+/** Every SBU a person belongs to (they can have several); the first one is their company_id.
+ *  (A user's `sbu_ids` is something else: the SBUs a COO oversees.) */
+export function userSbuIds(u?: { company_id?: number | null; company_ids?: number[] } | null): number[] {
+  if (!u) return []
+  return u.company_ids?.length ? u.company_ids : u.company_id != null ? [u.company_id] : []
+}
+
 /** "Anwar Cement Ltd, Anwar Ispat Ltd" - each SBU once, whatever spelling its copy has. */
 export function sbuNames(companies: Named[], ids: number[]): string | undefined {
   const names = [...new Set(ids.map((id) => sbuName(companies, id)).filter(Boolean))]

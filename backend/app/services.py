@@ -20,10 +20,15 @@ def audit(db: Session, actor: Optional[str], entity_type: str, entity_id: Option
 
 
 def set_sbus(db: Session, entity, company_ids, actor: Optional[str] = None) -> bool:
-    """Make these the SBUs of a project / task, in this order: the first one goes to
-    company_id (as always), the others to its extra_sbus rows. Returns True if anything changed."""
+    """Make these the SBUs of a project / task / person, in this order: the first one goes to
+    company_id (as always), the others to its extra rows. Returns True if anything changed."""
+    # where each kind keeps its SBUs: (all of them, the extra rows, the extra row's model)
+    ids_attr, rows_attr, row_model = (
+        ("company_ids", "extra_companies", models.UserCompany) if isinstance(entity, models.User)
+        else ("sbu_ids", "extra_sbus", models.ProjectSbu if isinstance(entity, models.Project) else models.TaskSbu))
+    rows = getattr(entity, rows_attr)
     wanted = list(dict.fromkeys(c for c in company_ids if c))
-    current = entity.sbu_ids
+    current = getattr(entity, ids_attr)
     if wanted[:1] == current[:1] and set(wanted) == set(current):
         return False
     for cid in wanted:
@@ -31,27 +36,26 @@ def set_sbus(db: Session, entity, company_ids, actor: Optional[str] = None) -> b
             raise HTTPException(400, "SBU not found")
     entity.company_id = wanted[0] if wanted else None
     extra = wanted[1:]
-    for row in list(entity.extra_sbus):
+    for row in list(rows):
         if row.company_id not in extra:
-            entity.extra_sbus.remove(row)
-    have = {row.company_id for row in entity.extra_sbus}
-    row_model = models.ProjectSbu if isinstance(entity, models.Project) else models.TaskSbu
+            rows.remove(row)
+    have = {row.company_id for row in rows}
     for cid in extra:
         if cid not in have:
-            entity.extra_sbus.append(row_model(company_id=cid, created_by=(actor or "")[:64] or None))
+            rows.append(row_model(company_id=cid, created_by=(actor or "")[:64] or None))
     return True
 
 
-def patched_sbus(entity, data: dict):
+def patched_sbus(entity, data: dict, field: str = "sbu_ids"):
     """Takes the SBU fields out of a PATCH payload. Returns the SBUs to set, or None when
-    the payload leaves them alone. `sbu_ids` is the whole list; `company_id` alone (older
-    callers) only replaces the first SBU and keeps the others."""
-    sbu_ids, has_company = data.pop("sbu_ids", None), "company_id" in data
+    the payload leaves them alone. `sbu_ids` (a person: `company_ids`) is the whole list;
+    `company_id` alone (older callers) only replaces the first SBU and keeps the others."""
+    ids, has_company = data.pop(field, None), "company_id" in data
     company_id = data.pop("company_id", None)
-    if sbu_ids is not None:
-        return sbu_ids
+    if ids is not None:
+        return ids
     if has_company:
-        return [company_id, *entity.sbu_ids[1:]]
+        return [company_id, *getattr(entity, field)[1:]]
     return None
 
 

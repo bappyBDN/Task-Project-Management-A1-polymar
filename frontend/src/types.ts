@@ -32,6 +32,8 @@ export interface User {
   pending_manager_employee_id?: string | null
   /** COO only: the SBUs (company ids) they oversee, set by an admin */
   sbu_ids?: number[]
+  /** every SBU the person belongs to, the first one first (it is also company_id) */
+  company_ids?: number[]
   is_active: boolean
 }
 
