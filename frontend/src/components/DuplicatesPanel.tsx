@@ -4,11 +4,12 @@ import type { Company, Department, Function, Project, Task, User } from '../type
 import { norm, pickSbu, sbuKey } from './SbuSelect'
 
 // Admin clean-up of SBUs / functions / departments entered more than once.
-// "Merge" moves every task, project and user from the extra copies onto the one
-// kept, one record at a time through the normal edit calls, so nothing is lost:
-// stopping half-way just leaves some records still on the old copy, and pressing
-// Merge again carries on. Only then is an extra department deleted (the one kind
-// the server can delete); an emptied SBU / function stays in the list, unused.
+// Functions and departments: the server moves everything on an extra copy onto the
+// one kept (also the deleted tasks the lists here never show) and deletes the copy,
+// in one step - either all of it happens or nothing does.
+// SBUs: every task, project and user is moved one record at a time through the
+// normal edit calls; stopping half-way just leaves some records on the old copy and
+// pressing Merge again carries on. An emptied SBU stays in the list, unused.
 
 type Kind = 'company' | 'function' | 'department'
 type Item = { id: number; name: string }
@@ -70,8 +71,27 @@ export default function DuplicatesPanel({ companies, functions, departments, tas
       for (const p of u.projects) moves.push({ label: `project ${p.code}`, call: () => api.patch(`/projects/${p.id}`, { [f]: keep }) })
       for (const x of u.users) moves.push({ label: `user ${x.name}`, call: () => api.patch(`/organizations/users/${x.id}`, { [f]: keep }) })
     }
-    if (!confirm(`Move ${moves.length} record(s) onto "${keptName}" (id ${keep})` +
-      (kind === 'department' ? ` and then delete the ${extras.length} extra department(s)?` : '?'))) return
+    if (kind !== 'company') {
+      if (!confirm(`Move everything on the ${extras.length} extra ${kind}(s) onto "${keptName}" (id ${keep}) and delete the extra ${kind}(s)?`)) return
+      setBusy(kind); setResult(null)
+      let merged = 0
+      try {
+        for (const e of extras) {
+          setProgress(`Merging ${kind} "${e.name}" (id ${e.id}) into "${keptName}"…`)
+          try { await api.del(`/organizations/${kind}s/${e.id}?move_to=${keep}`) } catch (err: any) { throw new Error(`Could not merge "${e.name}" (id ${e.id}): ${err?.message ?? err}`) }
+          merged++
+        }
+        setResult({ ok: true, text: `Merged ${merged} extra ${kind}(s) into "${keptName}". Their tasks, projects and users are now on "${keptName}".` })
+      } catch (e: any) {
+        setResult({ ok: false, text: `${e.message} ${merged} of ${extras.length} were merged before this. Nothing else changed - press Merge again to continue.` })
+      } finally {
+        setBusy(null); setProgress('')
+        onDone()
+      }
+      return
+    }
+
+    if (!confirm(`Move ${moves.length} record(s) onto "${keptName}" (id ${keep})?`)) return
 
     setBusy(kind); setResult(null)
     let done = 0
@@ -81,21 +101,7 @@ export default function DuplicatesPanel({ companies, functions, departments, tas
         try { await m.call() } catch (e: any) { throw new Error(`Could not move ${m.label}: ${e?.message ?? e}`) }
         done++
       }
-      const notes: string[] = []
-      if (kind === 'department') {
-        for (const e of extras) {
-          setProgress(`Deleting department "${e.name}" (id ${e.id})…`)
-          try {
-            await api.del(`/organizations/departments/${e.id}`)
-          } catch {
-            // the database refuses while something (e.g. a deleted task) still points at it - nothing is lost
-            notes.push(`Department id ${e.id} was not deleted: something still uses it (for example a deleted task).`)
-          }
-        }
-      } else {
-        notes.push(`The emptied ${kind === 'company' ? 'SBU' : 'function'}(s) stay in the list - they can only be deleted on the server.`)
-      }
-      setResult({ ok: true, text: `Moved ${done} record(s) onto "${keptName}". ${notes.join(' ')}` })
+      setResult({ ok: true, text: `Moved ${done} record(s) onto "${keptName}". The emptied SBU(s) stay in the list - they can only be deleted on the server.` })
     } catch (e: any) {
       setResult({ ok: false, text: `${e.message} ${done} record(s) were moved before this. Nothing else changed - press Merge again to continue.` })
     } finally {
@@ -112,7 +118,8 @@ export default function DuplicatesPanel({ companies, functions, departments, tas
       <div className="section-title">Duplicate SBUs, Functions &amp; Departments</div>
       <div className="small muted mb">
         Entries with the same name (ignoring case, spaces and "Ltd") are listed together.
-        <strong> Merge</strong> moves their tasks, projects and users onto the copy you keep - no record is deleted.
+        <strong> Merge</strong> moves their tasks, projects and users onto the copy you keep - no task, project or user is deleted.
+        For functions and departments the emptied extra copies are then removed from the list.
       </div>
       {result && <div className={`alert ${result.ok ? 'success' : 'error'}`} role="status">{result.text}</div>}
       {progress && <div className="alert info">{progress}</div>}
@@ -157,7 +164,7 @@ export default function DuplicatesPanel({ companies, functions, departments, tas
                     {busy === kind ? 'Merging…' : `Merge into id ${g.keep}`}
                   </button>
                   <span className="small muted">
-                    {moving ? `${moving} record(s) will move.` : 'Nothing to move.'}
+                    {moving ? `${moving} record(s) will move.` : kind === 'company' ? 'Nothing to move.' : 'Nothing visible to move - the extra copies will be removed.'}
                     {kind === 'company' && ' For SBUs the kept copy is the one the dropdowns use.'}
                   </span>
                 </div>

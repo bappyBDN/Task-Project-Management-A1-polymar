@@ -190,8 +190,10 @@ def update_user(user_id: int, payload: schemas.UserUpdate, admin: models.User = 
     data = payload.model_dump(exclude_unset=True)
     sbu_ids = data.pop("sbu_ids", None)
     company_ids = services.patched_sbus(user, data, "company_ids")
+    if data.get("is_active") is not None and data["is_active"] != user.is_active:
+        services.audit(db, admin.name, "user", user.id, "activated" if data["is_active"] else "deactivated", new_value=user.name)
     for k, v in data.items():
-        if v is None and k in {"employee_id", "name", "email", "role"}:
+        if v is None and k in {"employee_id", "name", "email", "role", "is_active"}:
             continue  # required column: an explicit null must not wipe it
         setattr(user, k, v)
     if company_ids is not None:
@@ -212,6 +214,8 @@ def deactivate_user(user_id: int, admin: models.User = Depends(get_admin_user), 
     user = db.get(models.User, user_id)
     if not user:
         raise HTTPException(404, "User not found")
+    if user.is_active:
+        services.audit(db, admin.name, "user", user.id, "deactivated", new_value=user.name)
     user.is_active = False
     db.commit()
 
@@ -273,12 +277,65 @@ def create_department(payload: schemas.DepartmentBase, db: Session = Depends(get
     return dep
 
 
+# Every column that points at a function / department, with the word used for it in messages.
+# Tasks include the ones hidden while their delete request waits (is_deleted).
+_ORG_REFS = {
+    "function": (models.Function, [
+        (models.Task, "function_id", "task"), (models.Project, "function_id", "project"),
+        (models.User, "function_id", "user"), (models.Department, "function_id", "department"),
+    ]),
+    "department": (models.Department, [
+        (models.Task, "department_id", "task"), (models.User, "department_id", "user"),
+    ]),
+}
+
+
+def _delete_org(db: Session, user: models.User, kind: str, item_id: int, move_to: int | None):
+    """Delete a function / department without losing anything.
+
+    Plain delete: only when nothing uses it - otherwise 409 says what still does (before,
+    the database refused and the user saw "500 Internal Server Error").
+    With `move_to` (admin only - the Duplicates clean-up): every task, project, user and
+    department on it is first moved onto that other entry, then it is deleted. All in one
+    transaction: either everything moved and it is gone, or nothing changed."""
+    model, refs = _ORG_REFS[kind]
+    item = db.get(model, item_id)
+    if not item:
+        return  # already gone - deleting twice shouldn't error
+    name = item.name
+    used = {word: db.query(ref).filter(getattr(ref, col) == item_id).count() for ref, col, word in refs}
+    used_text = ", ".join(f"{n} {word}{'' if n == 1 else 's'}" for word, n in used.items() if n)
+
+    if move_to is None:
+        if used_text:
+            raise HTTPException(409, f'"{name}" is still used by {used_text}, so it can\'t be deleted. '
+                                     f"Move them to another {kind} first (Admin Panel - Duplicates - Merge).")
+        services.audit(db, user.name, kind, item_id, "deleted", previous_value=name)
+    else:
+        if user.role != permissions.ADMIN_ROLE:
+            raise HTTPException(403, "Only an admin can merge duplicates.")
+        keep = db.get(model, move_to)
+        if move_to == item_id or not keep:
+            raise HTTPException(400, f"Choose another {kind} to keep.")
+        for ref, col, _ in refs:
+            db.query(ref).filter(getattr(ref, col) == item_id).update({col: move_to}, synchronize_session=False)
+        services.audit(db, user.name, kind, item_id, "merged", previous_value=f"{name} (id {item_id})",
+                       new_value=f"{keep.name} (id {move_to})", reason=f"Moved {used_text or 'nothing'}")
+    db.delete(item)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()  # something else still points at it: nothing was moved or deleted
+        raise HTTPException(409, f'"{name}" is still in use and could not be deleted. Nothing was changed.')
+
+
 @router.delete("/departments/{department_id}", status_code=204)
-def delete_department(department_id: int, db: Session = Depends(get_db)):
-    dep = db.get(models.Department, department_id)
-    if not dep:
-        return  # already gone — deleting twice shouldn't error
-    db.query(models.User).filter(models.User.department_id == department_id).update(
-        {"department_id": None}, synchronize_session=False)  # don't orphan FK references
-    db.delete(dep)
-    db.commit()
+def delete_department(department_id: int, move_to: int | None = None, db: Session = Depends(get_db),
+                      current_user: models.User = Depends(get_current_user)):
+    _delete_org(db, current_user, "department", department_id, move_to)
+
+
+@router.delete("/functions/{function_id}", status_code=204)
+def delete_function(function_id: int, move_to: int | None = None, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    _delete_org(db, current_user, "function", function_id, move_to)

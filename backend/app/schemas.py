@@ -60,6 +60,8 @@ class UserCreate(UserBase):
 class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    # False = deactivated by an admin: cannot log in, gets no emails, is not offered in the pickers
+    is_active: bool = True
     # set when they named a manager (by Employee ID) who has no account yet
     pending_manager_employee_id: Optional[str] = None
     # COO only: the SBUs they oversee (company ids), set by an admin
@@ -81,6 +83,7 @@ class UserUpdate(BaseModel):
     reports_to_id: Optional[int] = None
     sbu_ids: Optional[list[int]] = None  # COO: the SBUs they oversee (replaces the list)
     company_ids: Optional[list[int]] = None  # the person's own SBUs; left out / null = they stay as they are
+    is_active: Optional[bool] = None  # true = let a deactivated person log in again
 
 
 class UserSelfUpdate(BaseModel):

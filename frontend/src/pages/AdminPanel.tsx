@@ -212,6 +212,12 @@ export default function AdminPanel() {
     load()
   })
 
+  const activate = (u: User) => run(async () => {
+    await api.patch(`/organizations/users/${u.id}`, { is_active: true })
+    setMsg(`Activated ${u.name}. They can log in again.`)
+    load()
+  })
+
   const removeUser = (u: User) => run(async () => {
     if (!confirm(`Permanently delete user "${u.name}" (${u.email})? This cannot be undone.`)) return
     await api.del(`/organizations/users/${u.id}/permanent`)
@@ -448,13 +454,18 @@ export default function AdminPanel() {
                         <div className="small muted">{(u.sbu_ids ?? []).map((id) => sbuName(companies, id) ?? `SBU #${id}`).join(', ') || 'No SBU assigned'}</div>
                       )}
                     </td>
-                    <td>{u.is_active ? <span className="badge green">Active</span> : <span className="badge red">Inactive</span>}</td>
+                    <td>
+                      {!u.is_active ? <span className="badge red" title="Deactivated by an admin: cannot log in">Inactive</span>
+                        : u.employee_id.startsWith('INVITED-') ? <span className="badge amber" title="Added by email - has not signed up yet">Invited</span>
+                        : <span className="badge green">Active</span>}
+                    </td>
                     <td>
                       <div className="row">
                         <button className="btn sm" onClick={() => openEdit(u)}>Edit</button>
                         {u.role !== 'admin' && (
                           <>
                             {u.is_active && <button className="btn sm danger" onClick={() => deactivate(u)} onBlur={() => setConfirmDeactivate((id) => (id === u.id ? null : id))}>{confirmDeactivate === u.id ? 'Click again to confirm' : 'Deactivate'}</button>}
+                            {!u.is_active && <button className="btn sm" onClick={() => activate(u)}>Activate</button>}
                             <button className="btn sm danger" onClick={() => removeUser(u)}>Remove</button>
                           </>
                         )}
