@@ -176,8 +176,9 @@ function local<T>(path: string, options?: { method?: string; body?: unknown }): 
 
   // POST
   if (m === 'POST') {
-    if (sp === '/tasks') return store.createTask(body) as unknown as T
-    if (sp === '/projects') return store.createProject(body) as unknown as T
+    const created_by = currentUserId != null ? store.userById(currentUserId)?.name : undefined
+    if (sp === '/tasks') return store.createTask({ ...body, created_by }) as unknown as T
+    if (sp === '/projects') return store.createProject({ ...body, created_by }) as unknown as T
     if (sp === '/organizations/users') return store.createUser(body) as unknown as T
     if (sp === '/organizations/companies') return store.createCompany(body) as unknown as T
     if (sp === '/organizations/functions') return store.createFunction(body) as unknown as T

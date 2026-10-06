@@ -54,7 +54,7 @@ def create_project(payload: schemas.ProjectBase, db: Session = Depends(get_db),
     project = None
     for attempt in range(3):
         data["code"] = user_code or services.next_code("PRJ", db, models.Project)
-        project = models.Project(**data)
+        project = models.Project(**data, created_by=current_user.name[:64])
         db.add(project)
         try:
             db.flush()

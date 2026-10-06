@@ -372,7 +372,8 @@ def update_action(action_id: int, payload: schemas.ManagementActionBase, db: Ses
 
 
 @router.post("/actions/{action_id}/convert-to-task", response_model=schemas.TaskOut, status_code=201)
-def convert_action(action_id: int, responsible_id: int | None = None, db: Session = Depends(get_db)):
+def convert_action(action_id: int, responsible_id: int | None = None, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
     a = db.get(models.ManagementAction, action_id)
     if not a:
         raise HTTPException(404, "Action not found")
@@ -395,6 +396,7 @@ def convert_action(action_id: int, responsible_id: int | None = None, db: Sessio
         project_id=project.id if project else None,
         company_id=project.company_id if project else None,
         function_id=project.function_id if project else None,
+        created_by=current_user.name[:64],
     )
     db.add(task)
     db.flush()

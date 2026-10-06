@@ -235,6 +235,10 @@ export default function ProjectDetail() {
               <div><label>Criticality</label><div className="small">{label(project.criticality)}</div></div>
               <div><label>Budget</label><div className="small">{project.budget ? project.budget.toLocaleString() : '—'}</div></div>
             </div>
+            <div className="form-row" style={{ marginTop: 12 }}>
+              <div><label>Created By</label><div className="small">{project.created_by || '—'}</div></div>
+              <div><label>Created On</label><div className="small">{fmtDate(project.created_at?.slice(0, 10))}</div></div>
+            </div>
           </div>
 
           <MethodologyApproval projectId={project.id} users={users} reloadUsers={reloadUsers} />

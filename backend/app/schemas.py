@@ -167,6 +167,8 @@ class ProjectOut(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     gantt_enabled: bool = False
+    created_at: Optional[datetime] = None
+    created_by: Optional[str] = None  # name of whoever created the project
 
 
 class GanttToggle(BaseModel):
@@ -314,6 +316,7 @@ class TaskOut(TaskBase):
     id: int
     actual_due_date: Optional[date] = None
     created_at: datetime
+    created_by: Optional[str] = None  # name of whoever created the task
 
 
 class ProgressUpdateBase(BaseModel):

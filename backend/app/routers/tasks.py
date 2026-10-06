@@ -124,7 +124,7 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db),
     task = None
     for attempt in range(3):  # retry covers two requests generating the same code at once
         data["code"] = user_code or services.next_code("TSK", db, models.Task)
-        task = models.Task(**data)
+        task = models.Task(**data, created_by=current_user.name[:64])
         _normalize(db, task)
         db.add(task)
         try:
@@ -139,7 +139,7 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db),
         gantt.set_dependencies(db, task, depends_on_ids)
     if task.project_id:
         services.recalc_project_health(db, task.project_id)
-    services.audit(db, "system", "task", task.id, "created", new_value=task.title)
+    services.audit(db, current_user.name, "task", task.id, "created", new_value=task.title)
     services.notify(db, task.responsible_id, f"Task assigned: {task.title}",
                     body=f"You are responsible for {task.code}.", kind="assignment")
     _notify_informed(db, task, f"You are Informed on: {task.title}",

@@ -191,6 +191,10 @@ export default function TaskDetail() {
               <div><label>Function</label><div className="small">{functions.find((f) => f.id === task.function_id)?.name ?? '—'}</div></div>
               <div><label>Department</label><div className="small">{departments.find((d) => d.id === task.department_id)?.name ?? '—'}</div></div>
             </div>
+            <div className="form-row" style={{ marginTop: 12 }}>
+              <div><label>Created By</label><div className="small">{task.created_by || '—'}</div></div>
+              <div><label>Created On</label><div className="small">{fmtDate(task.created_at?.slice(0, 10))}</div></div>
+            </div>
             {task.blocker && (
               <div style={{ marginTop: 12, padding: 10, background: '#fbe5e5', borderRadius: 8 }}>
                 <strong className="small" style={{ color: 'var(--red)' }}>Blocker:</strong> <span className="small">{task.blocker_details}</span>

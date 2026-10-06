@@ -45,6 +45,23 @@ def ensure_columns():
 
 ensure_columns()
 
+
+def backfill_project_creators():
+    """Projects made before `created_by` was recorded take the name from their audit entry.
+    Older entries logged the actor as 'system' - those stay blank, nobody is known."""
+    with engine.begin() as conn:
+        conn.execute(text(
+            "UPDATE projects SET created_by = ("
+            "SELECT SUBSTR(a.actor, 1, 64) FROM audit_logs a "
+            "WHERE a.entity_type = 'project' AND a.entity_id = projects.id AND a.action = 'created' "
+            "AND a.actor <> 'system' "
+            "ORDER BY a.happened_at DESC LIMIT 1"
+            ") WHERE created_by IS NULL"
+        ))
+
+
+backfill_project_creators()
+
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(

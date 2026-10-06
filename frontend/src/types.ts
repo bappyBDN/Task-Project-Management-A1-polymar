@@ -63,6 +63,9 @@ export interface Project {
   criticality: string
   /** optional Gantt scheduling of this project's tasks (see ProjectGantt) */
   gantt_enabled?: boolean
+  created_at?: string
+  /** name of whoever created the project */
+  created_by?: string | null
 }
 
 /** One task on a project's Gantt chart: its planned dates and where the schedule puts it. */
@@ -172,6 +175,8 @@ export interface Task {
   completion_evidence?: string
   completion_remarks?: string
   created_at: string
+  /** name of whoever created the task */
+  created_by?: string | null
 }
 
 export interface DelayRca {

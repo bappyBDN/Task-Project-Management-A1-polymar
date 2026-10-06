@@ -379,7 +379,7 @@ export const store = {
   projectById: (id: number) => db.projects.find((p) => p.id === id),
   createProject: (p: any): Project => {
     const code = p.code || nextCode('PRJ', db.projects.map((x) => x.code))
-    const proj = { ...p, id: nextId(db), code, completion_pct: 0, health: 'green', status: p.status || 'planning' } as Project
+    const proj = { ...p, id: nextId(db), code, completion_pct: 0, health: 'green', status: p.status || 'planning', created_at: new Date().toISOString() } as Project
     db.projects.push(proj); persist(); audit('created', 'project', proj.id, undefined, proj.name); return proj
   },
   updateProject: (id: number, p: any): Project => {
