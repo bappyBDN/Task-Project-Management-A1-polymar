@@ -13,6 +13,7 @@ import ProjectDetail from './pages/ProjectDetail'
 import Approvals from './pages/Approvals'
 import ApprovalDetail from './pages/ApprovalDetail'
 import Audit from './pages/Audit'
+import { NAV_BADGES_EVENT } from './navBadges'
 import Backlog from './pages/Backlog'
 import Governance from './pages/Governance'
 import Raci from './pages/Raci'
@@ -81,14 +82,17 @@ function buildSections(isAdmin: boolean): NavSection[] {
   return sections
 }
 
-// Live counts on the menu: unread notifications and approvals waiting for me.
-// Reloads on every page change and once a minute; a failed call just hides the badge.
+// Live counts on the menu: unread notifications and the approvals I can approve / reject
+// (still pending). Reloads on every page change, once a minute and right after a decision
+// (navBadges.ts); a failed call just hides the badge.
 function useNavBadges(userId: number | undefined, pathname: string): Record<string, number> {
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [tick, setTick] = useState(0)
   useEffect(() => {
     const t = window.setInterval(() => { if (document.visibilityState === 'visible') setTick((n) => n + 1) }, 60000)
-    return () => window.clearInterval(t)
+    const now = () => setTick((n) => n + 1)
+    window.addEventListener(NAV_BADGES_EVENT, now)
+    return () => { window.clearInterval(t); window.removeEventListener(NAV_BADGES_EVENT, now) }
   }, [])
   useEffect(() => {
     if (!userId || STORAGE_MODE === 'local') return
@@ -96,8 +100,10 @@ function useNavBadges(userId: number | undefined, pathname: string): Record<stri
     const put = (to: string) => (n: number) => { if (!cancelled) setCounts((c) => ({ ...c, [to]: n })) }
     api.get<{ is_read: boolean }[]>(`/audit/notifications?user_id=${userId}`)
       .then((l) => put('/notifications')(l.filter((n) => !n.is_read).length)).catch(() => {})
-    api.get<unknown[]>(`/approvals?approver_id=${userId}&status=pending`)
-      .then((l) => put('/approvals')(l.length)).catch(() => {})
+    // not only the ones assigned to me: also those I decide as the task's Reviewer / Accountable,
+    // as the COO of its SBU or as an admin (the server says which: can_decide)
+    api.get<{ can_decide?: boolean | null }[]>('/approvals?status=pending')
+      .then((l) => put('/approvals')(l.filter((a) => a.can_decide).length)).catch(() => {})
     return () => { cancelled = true }
   }, [userId, pathname, tick])
   return counts

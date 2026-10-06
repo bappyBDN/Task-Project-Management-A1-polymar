@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
+import { refreshNavBadges } from '../navBadges'
 import { Approval, DelayRca, ProgressUpdate, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { RichTextView } from '../components/RichText'
@@ -120,6 +121,7 @@ export default function ApprovalDetail() {
       })
       setMsg({ ok: true, text: isDeletion ? (status === 'approved' ? 'Task deleted permanently.' : 'Task restored.') : status === 'approved' ? 'Approved.' : 'Rejected.' })
       if (isDeletion && status === 'approved') setTask(null)
+      refreshNavBadges() // the count on the menu drops straight away
       setComment('')
       load()
     } catch (e: any) {

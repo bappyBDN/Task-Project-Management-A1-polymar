@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
+import { refreshNavBadges } from '../navBadges'
 import { useAuth } from '../auth'
 import { Approval, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
@@ -38,6 +39,7 @@ export default function Approvals() {
     } finally {
       setBusyId(null)
       load()
+      refreshNavBadges() // the count on the menu drops straight away
     }
   }
 
