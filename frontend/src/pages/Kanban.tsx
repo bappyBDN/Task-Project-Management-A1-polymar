@@ -6,7 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
-import { inName, inSbu, nameFilterItems, overseesSbu, sbuFilterItems, sbuName } from '../org'
+import { inAnySbu, inName, nameFilterItems, overseesSbu, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
 
 const COLUMNS = [
   { key: 'backlog', label: 'Backlog' },
@@ -50,14 +50,14 @@ export default function Kanban() {
   }, [])
 
   const name = (id?: number) => users.find((u) => u.id === id)?.name
-  const companyName = (id?: number) => sbuName(companies, id)
+  const companyName = (t: Task) => sbuNames(companies, sbuIdsOf(t))
   const functionName = (id?: number) => functions.find((f) => f.id === id)?.name
   const departmentName = (id?: number) => departments.find((d) => d.id === id)?.name
 
   const visibleTasks = useMemo(() => {
     let list = tasks // the server already returns only the tasks this user may see
     if (filter.project_id) list = list.filter((t) => String(t.project_id) === String(filter.project_id))
-    if (filter.company_id) list = list.filter((t) => inSbu(companies, t.company_id, filter.company_id))
+    if (filter.company_id) list = list.filter((t) => inAnySbu(companies, sbuIdsOf(t), filter.company_id))
     if (filter.function_id) list = list.filter((t) => inName(functions, t.function_id, filter.function_id))
     if (filter.department_id) list = list.filter((t) => inName(departments, t.department_id, filter.department_id))
     if (filter.responsible_id) list = list.filter((t) => String(t.responsible_id) === String(filter.responsible_id))
@@ -69,7 +69,7 @@ export default function Kanban() {
   // (everyone else finishes a task with "Submit for Completion" on the task page).
   // A COO manages the tasks of the SBUs they oversee like an admin / PMO.
   const manages = (t: Task) => canSeeAll
-    || overseesSbu(user, companies, t.company_id ?? projects.find((p) => p.id === t.project_id)?.company_id)
+    || overseesSbu(user, companies, sbuIdsOf(t).length ? sbuIdsOf(t) : sbuIdsOf(projects.find((p) => p.id === t.project_id)))
   const canMove = (t: Task) => manages(t) || t.responsible_id === user?.id || t.accountable_id === user?.id
   const canMoveTo = (t: Task, status: string) => canMove(t) && (manages(t) || status !== 'completed')
 
@@ -176,7 +176,7 @@ export default function Kanban() {
                     onClick={() => navigate(`/tasks/${t.id}`)}>
                     <div className="small" style={{ fontWeight: 600 }}>{t.title}</div>
                     <div className="muted" style={{ fontSize: 11 }}>{t.code} · {name(t.responsible_id) ?? '—'}</div>
-                    <div className="muted" style={{ fontSize: 11 }}>{companyName(t.company_id) ?? '—'}{t.function_id ? ` · ${functionName(t.function_id)}` : ''}{t.department_id ? ` · ${departmentName(t.department_id)}` : ''}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{companyName(t) ?? '—'}{t.function_id ? ` · ${functionName(t.function_id)}` : ''}{t.department_id ? ` · ${departmentName(t.department_id)}` : ''}</div>
                     <div className="row" style={{ marginTop: 6, gap: 6 }}>
                       <span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span>
                       <span className={`health-dot ${HEALTH_COLORS[t.health]}`} />

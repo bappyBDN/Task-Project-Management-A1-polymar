@@ -18,7 +18,8 @@ delays, the dashboard's portfolio widgets). Read-only, existing columns only.
                                        department of their own)
   approver / requester of an approval on a task -> that task (so it can be decided)
 
-A task's SBU / Function is its own, or its project's when the task has none.
+A project or task can be in several SBUs (company_id + its extra_sbus rows): each of
+them counts. A task's SBUs / Function are its own, or its project's when the task has none.
 A head's SBU / Function / Department is the one on their own user record (a COO's SBUs
 are their user_sbus rows instead); copies of
 the same SBU (other spellings) and the same Function / Department name count as one.
@@ -71,7 +72,8 @@ class Scope:
         self._companies: set[int] = set()
         self._functions: set[int] = set()
         self._departments: set[int] = set()
-        self._project_company: dict[int, int | None] = {}
+        self._project_companies: dict[int, set] = {}
+        self._task_companies: dict[int, set] = {}
         self._project_function: dict[int, int | None] = {}
         if self.all:
             return
@@ -102,7 +104,13 @@ class Scope:
         projects = db.query(P.id, P.company_id, P.function_id, P.manager_id, P.sponsor_id, P.owner_id).all()
         tasks = db.query(T.id, T.project_id, T.company_id, T.function_id, T.department_id,
                          T.responsible_id, T.accountable_id, T.reviewer_id, T.informed_id).filter(T.is_deleted.is_(False)).all()
-        self._project_company = {p.id: p.company_id for p in projects}
+        # every SBU of each project / task: company_id plus the extra ones
+        self._project_companies = {p.id: {p.company_id} - {None} for p in projects}
+        for pid, cid in db.query(models.ProjectSbu.project_id, models.ProjectSbu.company_id).all():
+            self._project_companies.setdefault(pid, set()).add(cid)
+        self._task_companies = {t.id: {t.company_id} - {None} for t in tasks}
+        for tid, cid in db.query(models.TaskSbu.task_id, models.TaskSbu.company_id).all():
+            self._task_companies.setdefault(tid, set()).add(cid)
         self._project_function = {p.id: p.function_id for p in projects}
 
         # ---- projects this person works on: all of each one's tasks are shown
@@ -113,9 +121,9 @@ class Scope:
                  and uid in (t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id)}
         # ---- projects of the SBU / Function this person heads
         if self._level == "sbu":
-            full |= {p.id for p in projects if p.company_id in self._companies}
+            full |= {p.id for p in projects if self._project_companies[p.id] & self._companies}
         elif self._level == "function":
-            full |= {p.id for p in projects if p.company_id in self._companies and p.function_id in self._functions}
+            full |= {p.id for p in projects if self._project_companies[p.id] & self._companies and p.function_id in self._functions}
         self._full_projects = full
         # ---- plus the projects of single tasks that fall under what they head
         self.project_ids = full | {t.project_id for t in tasks if t.project_id and self._heads_task(t)}
@@ -127,8 +135,9 @@ class Scope:
     def _heads_task(self, t) -> bool:
         if not self._level:
             return False
-        company = t.company_id or self._project_company.get(t.project_id)
-        if company not in self._companies:
+        companies = (self._task_companies.get(t.id, {t.company_id} - {None})
+                     or self._project_companies.get(t.project_id) or set())
+        if not companies & self._companies:
             return False
         if self._level == "sbu":
             return True

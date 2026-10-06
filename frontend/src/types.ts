@@ -63,6 +63,8 @@ export interface Project {
   criticality: string
   /** optional Gantt scheduling of this project's tasks (see ProjectGantt) */
   gantt_enabled?: boolean
+  /** every SBU of the project, the first one first (it is also company_id) */
+  sbu_ids?: number[]
   created_at?: string
   /** name of whoever created the project */
   created_by?: string | null
@@ -174,6 +176,8 @@ export interface Task {
   acceptance_criteria?: string
   completion_evidence?: string
   completion_remarks?: string
+  /** every SBU of the task, the first one first (it is also company_id) */
+  sbu_ids?: number[]
   created_at: string
   /** name of whoever created the task */
   created_by?: string | null

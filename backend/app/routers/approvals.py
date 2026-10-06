@@ -172,7 +172,7 @@ def list_approvals(
             entity = projects.get(a.entity_id)
         else:
             entity = None
-        oversees = bool(sbus) and entity is not None and permissions.company_of(db, entity) in sbus
+        oversees = bool(sbus) and entity is not None and bool(permissions.companies_of(db, entity) & sbus)
         if admin or oversees or current_user.id in _related_ids(a, entity):
             a.can_decide = a.status == "pending" and (
                 admin or current_user.id in _decider_ids(a, entity)

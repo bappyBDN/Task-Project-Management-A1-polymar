@@ -4,6 +4,7 @@ from datetime import date
 from typing import Optional
 from typing import List, Optional, Set
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app import gantt, models
@@ -16,6 +17,48 @@ def audit(db: Session, actor: Optional[str], entity_type: str, entity_id: Option
         actor=actor, entity_type=entity_type, entity_id=entity_id, action=action,
         previous_value=previous_value, new_value=new_value, reason=reason,
     ))
+
+
+def set_sbus(db: Session, entity, company_ids, actor: Optional[str] = None) -> bool:
+    """Make these the SBUs of a project / task, in this order: the first one goes to
+    company_id (as always), the others to its extra_sbus rows. Returns True if anything changed."""
+    wanted = list(dict.fromkeys(c for c in company_ids if c))
+    current = entity.sbu_ids
+    if wanted[:1] == current[:1] and set(wanted) == set(current):
+        return False
+    for cid in wanted:
+        if not db.get(models.Company, cid):
+            raise HTTPException(400, "SBU not found")
+    entity.company_id = wanted[0] if wanted else None
+    extra = wanted[1:]
+    for row in list(entity.extra_sbus):
+        if row.company_id not in extra:
+            entity.extra_sbus.remove(row)
+    have = {row.company_id for row in entity.extra_sbus}
+    row_model = models.ProjectSbu if isinstance(entity, models.Project) else models.TaskSbu
+    for cid in extra:
+        if cid not in have:
+            entity.extra_sbus.append(row_model(company_id=cid, created_by=(actor or "")[:64] or None))
+    return True
+
+
+def patched_sbus(entity, data: dict):
+    """Takes the SBU fields out of a PATCH payload. Returns the SBUs to set, or None when
+    the payload leaves them alone. `sbu_ids` is the whole list; `company_id` alone (older
+    callers) only replaces the first SBU and keeps the others."""
+    sbu_ids, has_company = data.pop("sbu_ids", None), "company_id" in data
+    company_id = data.pop("company_id", None)
+    if sbu_ids is not None:
+        return sbu_ids
+    if has_company:
+        return [company_id, *entity.sbu_ids[1:]]
+    return None
+
+
+def sbu_names(db: Session, company_ids) -> str:
+    """'Anwar Cement Ltd, Anwar Ispat Ltd' - for the audit trail."""
+    names = {c.id: c.name for c in db.query(models.Company).filter(models.Company.id.in_(list(company_ids))).all()} if company_ids else {}
+    return ", ".join(names.get(c, str(c)) for c in company_ids) or "none"
 
 
 def notify(db: Session, user_id: Optional[int], title: str, body: Optional[str] = None, kind: str = "info"):

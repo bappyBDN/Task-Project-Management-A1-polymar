@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -50,7 +51,8 @@ def _build_matrix(db: Session, scope: Scope, project_id: int | None, company_id:
     else:
         q = q.filter(models.Task.project_id.isnot(None))
     if company_id:
-        q = q.filter(models.Task.company_id == company_id)
+        q = q.filter((models.Task.company_id == company_id) | models.Task.id.in_(  # any of the task's SBUs
+            select(models.TaskSbu.task_id).where(models.TaskSbu.company_id == company_id)))
     if function_id:
         q = q.filter(models.Task.function_id == function_id)
     if department_id:

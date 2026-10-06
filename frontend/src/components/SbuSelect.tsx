@@ -63,13 +63,15 @@ interface Props {
   /** false where nobody is logged in (sign-up): SBUs not yet in the database can't be created there,
    *  so picking one just passes its pending value on (see isPendingSbu) */
   canCreate?: boolean
+  /** an SBU from the list was just added to the database (SbuMultiSelect shows its name) */
+  onCreated?: (company: Option) => void
   onAddNew?: () => void
   addLabel?: string
   onRemove?: (value: string) => void
   removeLabel?: string
 }
 
-export default function SbuSelect({ value, companies, onChange, placeholder = 'Search SBU…', canCreate = true, ...rest }: Props) {
+export default function SbuSelect({ value, companies, onChange, placeholder = 'Search SBU…', canCreate = true, onCreated, ...rest }: Props) {
   const [created, setCreated] = useState<Option[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -108,6 +110,7 @@ export default function SbuSelect({ value, companies, onChange, placeholder = 'S
         }
       }
       setCreated((prev) => [...prev, company!])
+      onCreated?.(company!)
       onChange(String(company!.id))
     } catch (e: any) {
       setError(`Could not add ${name}: ${e?.message ?? e}`)

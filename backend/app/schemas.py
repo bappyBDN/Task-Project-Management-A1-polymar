@@ -134,10 +134,13 @@ class ProjectBase(BaseModel):
     health: str = "green"
     budget: Optional[float] = None
     criticality: str = "medium"
+    # every SBU of the project, the first one first (it is also company_id); left out = company_id alone
+    sbu_ids: Optional[list[int]] = None
 
 
 class ProjectUpdate(BaseModel):
     """PATCH payload: every field optional."""
+    sbu_ids: Optional[list[int]] = None  # left out / null = the SBUs stay as they are
     code: Optional[str] = None
     name: Optional[str] = None
     company_id: Optional[int] = None
@@ -167,6 +170,7 @@ class ProjectOut(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     gantt_enabled: bool = False
+    sbu_ids: list[int] = []
     created_at: Optional[datetime] = None
     created_by: Optional[str] = None  # name of whoever created the project
 
@@ -275,11 +279,14 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     # the tasks (of the same project) this one depends on - Gantt projects only (app/gantt.py)
     depends_on_ids: Optional[list[int]] = None
+    # every SBU of the task, the first one first (it is also company_id); left out = company_id alone
+    sbu_ids: Optional[list[int]] = None
 
 
 class TaskUpdate(BaseModel):
     """PATCH payload: every field optional, so a partial update (e.g. only `status`) is valid."""
     depends_on_ids: Optional[list[int]] = None  # left out / null = dependencies stay as they are
+    sbu_ids: Optional[list[int]] = None  # left out / null = the SBUs stay as they are
     code: Optional[str] = None
     parent_id: Optional[int] = None
     project_id: Optional[int] = None
@@ -315,6 +322,7 @@ class TaskOut(TaskBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     actual_due_date: Optional[date] = None
+    sbu_ids: list[int] = []
     created_at: datetime
     created_by: Optional[str] = None  # name of whoever created the task
 

@@ -17,6 +17,18 @@ export function sbuName(companies: Named[], id?: number | null): string | undefi
   return c ? sbuLabel(c.name) : undefined
 }
 
+/** Every SBU of a project / task (it can have several); the first one is its company_id. */
+export function sbuIdsOf(x?: { company_id?: number | null; sbu_ids?: number[] } | null): number[] {
+  if (!x) return []
+  return x.sbu_ids?.length ? x.sbu_ids : x.company_id != null ? [x.company_id] : []
+}
+
+/** "Anwar Cement Ltd, Anwar Ispat Ltd" - each SBU once, whatever spelling its copy has. */
+export function sbuNames(companies: Named[], ids: number[]): string | undefined {
+  const names = [...new Set(ids.map((id) => sbuName(companies, id)).filter(Boolean))]
+  return names.length ? names.join(', ') : undefined
+}
+
 /** Filter list: the group SBUs in their fixed order, then any other companies; one entry per SBU. */
 export function sbuFilterItems(companies: Named[]): SelectItem[] {
   const keys = new Set(companies.map((c) => sbuKey(c.name)))
@@ -33,14 +45,21 @@ export function inSbu(companies: Named[], id: number | null | undefined, key: st
   return !!c && sbuKey(c.name) === key
 }
 
-/** Is company `id` one of the SBUs this COO oversees? They manage its projects and tasks
- *  like an admin (same rule as app/permissions.py on the server). */
-export function overseesSbu(user: { role: string; sbu_ids?: number[] } | null | undefined, companies: Named[], id?: number | null): boolean {
-  if (user?.role !== 'coo' || id == null) return false
+/** Is any of these SBUs (a project's / task's) one this COO oversees? They manage its projects
+ *  and tasks like an admin (same rule as app/permissions.py on the server). */
+export function overseesSbu(user: { role: string; sbu_ids?: number[] } | null | undefined, companies: Named[], ids: number[]): boolean {
+  if (user?.role !== 'coo') return false
   const mine = user.sbu_ids ?? []
-  if (mine.includes(id)) return true
-  const c = companies.find((x) => x.id === id)
-  return !!c && companies.some((x) => mine.includes(x.id) && sbuKey(x.name) === sbuKey(c.name))
+  return ids.some((id) => {
+    if (mine.includes(id)) return true
+    const c = companies.find((x) => x.id === id)
+    return !!c && companies.some((x) => mine.includes(x.id) && sbuKey(x.name) === sbuKey(c.name))
+  })
+}
+
+/** Is any of these SBUs the one picked in a filter (a value from sbuFilterItems)? */
+export function inAnySbu(companies: Named[], ids: number[], key: string): boolean {
+  return ids.some((id) => inSbu(companies, id, key))
 }
 
 /** The company id to send to the server for an SBU filter value (the copy the forms use). */

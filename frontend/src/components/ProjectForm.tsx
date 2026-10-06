@@ -4,7 +4,8 @@ import { Company, Department, Function, Project, User } from '../types'
 import { METHODOLOGIES, PROJECT_STATUSES, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
 import { RichTextEditor } from './RichText'
-import SbuSelect from './SbuSelect'
+import SbuMultiSelect from './SbuMultiSelect'
+import { sbuIdsOf } from '../org'
 import InviteUserModal from './InviteUserModal'
 import OrgModal from './OrgModal'
 import { useAuth } from '../auth'
@@ -98,6 +99,8 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
     objective: project.objective || '',
     // a new project starts in the signed-in user's own SBU (they can change it)
   } : { ...EMPTY_FORM, company_id: me?.company_id != null ? String(me.company_id) : '' })
+  // every SBU of the project (company ids); form.company_id is always the first one
+  const [sbuIds, setSbuIdsState] = useState<string[]>(() => project ? sbuIdsOf(project).map(String) : me?.company_id != null ? [String(me.company_id)] : [])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [newTypes, setNewTypes] = useState<string[]>([])
@@ -107,6 +110,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
   const [invited, setInvited] = useState<User[]>([])
   const users = [...listedUsers, ...invited.filter((u) => !listedUsers.some((x) => x.id === u.id))]
   const set = (k: keyof typeof EMPTY_FORM, v: string) => setForm((f) => ({ ...f, [k]: v }))
+  const setSbuIds = (ids: string[]) => { setSbuIdsState(ids); set('company_id', ids[0] ?? '') }
 
   // ---- tasks added together with the project
   const [drafts, setDrafts] = useState<TaskDraft[]>([])
@@ -259,6 +263,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
       priority: d.priority || 'medium',
       project_id: p.id,
       company_id: p.company_id ?? (form.company_id ? Number(form.company_id) : null),
+      sbu_ids: p.sbu_ids?.length ? p.sbu_ids : sbuIds.map(Number),
       function_id: common.function_id ? Number(common.function_id) : null,
       department_id: common.department_id ? Number(common.department_id) : null,
       responsible_id: Number(d.responsible_id),
@@ -278,6 +283,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
     const payload: any = {
       name: form.name.trim(),
       company_id: Number(form.company_id),
+      sbu_ids: sbuIds.map(Number),
       project_type: form.project_type || 'operational',
       methodology: form.methodology || 'hybrid',
       status: form.status || 'planning',
@@ -301,6 +307,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
       code: null,
       name: form.name.trim(),
       company_id: Number(form.company_id),
+      sbu_ids: sbuIds.map(Number),
       manager_id: form.manager_id ? Number(form.manager_id) : null,
       // optional, but these columns can't be empty in the database - fall back to the defaults
       project_type: form.project_type || 'operational',
@@ -341,7 +348,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
         <div className="form-row">
           <div>
             <label>SBU *</label>
-            <SbuSelect value={form.company_id} companies={companies} onChange={(v) => set('company_id', v)} />
+            <SbuMultiSelect values={sbuIds} companies={companies} onChange={setSbuIds} />
           </div>
           <fieldset disabled={limited} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={limited ? 'Only an admin / PMO can change this' : undefined}>
             <label>Project Manager *</label>

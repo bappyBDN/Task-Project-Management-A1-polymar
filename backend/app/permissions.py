@@ -47,7 +47,7 @@ TASK_PROGRESS_FIELDS = {
 TASK_ACCOUNTABLE_FIELDS = TASK_PROGRESS_FIELDS | {
     "title", "description", "expected_deliverable", "category", "task_type", "priority",
     "responsible_id", "planned_start_date", "acceptance_criteria",
-    "project_id", "milestone_id", "parent_id", "company_id", "function_id", "department_id",
+    "project_id", "milestone_id", "parent_id", "company_id", "sbu_ids", "function_id", "department_id",
 }
 TASK_RESPONSIBLE_FIELDS = TASK_ACCOUNTABLE_FIELDS | {"accountable_id", "reviewer_id", "informed_id"}
 
@@ -78,19 +78,19 @@ def managed_company_ids(db: Session, user: models.User) -> set:
     return {c.id for c in companies if sbu_key(c.name) in keys}
 
 
-def company_of(db: Session, entity) -> int | None:
-    """A project's SBU; a task's own, or its project's when the task has none."""
-    company = entity.company_id
-    if company is None and getattr(entity, "project_id", None):
+def companies_of(db: Session, entity) -> set:
+    """A project's SBUs (one or more); a task's own, or its project's when the task has none."""
+    companies = set(entity.sbu_ids)
+    if not companies and getattr(entity, "project_id", None):
         project = db.get(models.Project, entity.project_id)
-        company = project.company_id if project else None
-    return company
+        companies = set(project.sbu_ids) if project else set()
+    return companies
 
 
 def oversees(db: Session, user: models.User, entity) -> bool:
-    """True if this task / project belongs to an SBU `user` oversees as COO."""
+    """True if this task / project belongs to an SBU `user` oversees as COO (any of its SBUs)."""
     sbus = managed_company_ids(db, user)
-    return bool(sbus) and company_of(db, entity) in sbus
+    return bool(sbus) and bool(companies_of(db, entity) & sbus)
 
 
 def can_manage(db: Session, user: models.User, entity) -> bool:
@@ -105,7 +105,11 @@ def _changed(obj, data: dict) -> set:
         if k in _ALWAYS_IGNORED:
             continue
         cur = getattr(obj, k, None)
-        if isinstance(cur, (int, float)) and isinstance(v, (int, float)) and not isinstance(cur, bool):
+        if k == "sbu_ids":  # the first SBU and the set of them, as services.set_sbus
+            v = list(dict.fromkeys(c for c in (v or []) if c))
+            if v[:1] == cur[:1] and set(v) == set(cur):
+                continue
+        elif isinstance(cur, (int, float)) and isinstance(v, (int, float)) and not isinstance(cur, bool):
             if float(cur) == float(v):
                 continue
         elif cur == v:

@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import gantt, models, permissions, schemas, services
 from app.auth import get_current_user
 from app.database import get_db
-from app.visibility import Scope, get_scope
+from app.visibility import Scope, get_scope, sbu_key
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -25,8 +26,9 @@ def list_projects(
 ):
     """Only the projects this user may see (app/visibility.py)."""
     q = db.query(models.Project)
-    if company_id:
-        q = q.filter(models.Project.company_id == company_id)
+    if company_id:  # any of the project's SBUs
+        q = q.filter((models.Project.company_id == company_id) | models.Project.id.in_(
+            select(models.ProjectSbu.project_id).where(models.ProjectSbu.company_id == company_id)))
     if function_id:
         q = q.filter(models.Project.function_id == function_id)
     if status:
@@ -40,6 +42,8 @@ def list_projects(
 def create_project(payload: schemas.ProjectBase, db: Session = Depends(get_db),
                    current_user: models.User = Depends(get_current_user)):
     data = payload.model_dump()
+    sbu_ids = data.pop("sbu_ids", None) or [data.get("company_id")]
+    data["company_id"] = None  # set with the other SBUs once the project has an id
     # whoever creates a project owns it unless another owner is named - otherwise they
     # could not see the project they just made (app/visibility.py)
     if not data.get("owner_id"):
@@ -63,10 +67,30 @@ def create_project(payload: schemas.ProjectBase, db: Session = Depends(get_db),
             db.rollback()
             if user_code or attempt == 2:
                 raise HTTPException(409, "Could not save the project (duplicate code). Please try again.")
+    services.set_sbus(db, project, sbu_ids, current_user.name)
     services.audit(db, current_user.name, "project", project.id, "created", new_value=project.name)
     db.commit()
     db.refresh(project)
     return project
+
+
+def _change_sbus(db: Session, user: models.User, project: models.Project, sbu_ids: list[int]):
+    """Set the project's SBUs. Its tasks that were on exactly the project's SBUs follow the
+    project (they only had them because the project did); a task given other SBUs keeps them.
+    Copies of one SBU (other spellings) count as the same SBU, as everywhere."""
+    old = project.sbu_ids
+    if not services.set_sbus(db, project, sbu_ids, user.name):
+        return
+    new = project.sbu_ids
+    key = {c.id: sbu_key(c.name) for c in db.query(models.Company).all()}
+    old_keys = {key.get(c) for c in old}
+    moved = 0
+    for task in db.query(models.Task).filter(models.Task.project_id == project.id).all():
+        if old and {key.get(c) for c in task.sbu_ids} == old_keys:
+            moved += services.set_sbus(db, task, new, user.name)
+    services.audit(db, user.name, "project", project.id, "sbus_changed",
+                   previous_value=services.sbu_names(db, old), new_value=services.sbu_names(db, new),
+                   reason=f"{moved} task(s) followed the project" if moved else None)
 
 
 @router.get("/{project_id}", response_model=schemas.ProjectOut)
@@ -93,8 +117,11 @@ def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session 
         data["code"] = new_code
     # Admin / PMO or task Responsible / Accountable on this project (see app/permissions.py).
     data = permissions.check_project_edit(db, current_user, project, data)
+    new_sbus = services.patched_sbus(project, data)
     for k, v in data.items():
         setattr(project, k, v)
+    if new_sbus is not None:
+        _change_sbus(db, current_user, project, new_sbus)
     services.audit(db, current_user.name, "project", project.id, "updated", new_value=project.name)
     db.commit()
     db.refresh(project)

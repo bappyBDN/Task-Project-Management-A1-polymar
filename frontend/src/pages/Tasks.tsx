@@ -7,7 +7,7 @@ import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import TaskForm from '../components/TaskForm'
 import SearchableSelect from '../components/SearchableSelect'
-import { inName, inSbu, nameFilterItems, sbuFilterItems, sbuName } from '../org'
+import { inAnySbu, inName, nameFilterItems, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
 
 // Turn whatever the API threw into a readable sentence (FastAPI sends {"detail": "..."}).
 function errText(e: any): string {
@@ -60,7 +60,7 @@ export default function Tasks() {
   const filtered = useMemo(() => {
     return visibleTasks.filter((t) => {
       if (filter.project_id && String(t.project_id) !== String(filter.project_id)) return false
-      if (filter.company_id && !inSbu(companies, t.company_id, filter.company_id)) return false
+      if (filter.company_id && !inAnySbu(companies, sbuIdsOf(t), filter.company_id)) return false
       if (filter.function_id && !inName(functions, t.function_id, filter.function_id)) return false
       if (filter.department_id && !inName(departments, t.department_id, filter.department_id)) return false
       if (filter.status && t.status !== filter.status) return false
@@ -86,7 +86,7 @@ export default function Tasks() {
   const priorityItems = [{ value: '', label: 'All' }, ...Object.keys(PRIORITY_COLORS).map((s) => ({ value: s, label: label(s) }))]
   const timingItems = [{ value: '', label: 'All' }, { value: 'true', label: 'Overdue' }]
 
-  const companyName = (id?: number) => sbuName(companies, id)
+  const companyName = (t: Task) => sbuNames(companies, sbuIdsOf(t))
   const functionName = (id?: number) => functions.find((f) => f.id === id)?.name
 
   return (
@@ -165,7 +165,7 @@ export default function Tasks() {
                 <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
                   <td className="muted small">{t.code}</td>
                   <td><Link to={`/tasks/${t.id}`}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
-                  <td className="small">{companyName(t.company_id) ?? '—'}</td>
+                  <td className="small">{companyName(t) ?? '—'}</td>
                   <td className="small">
                     {proj ? (
                       <Link

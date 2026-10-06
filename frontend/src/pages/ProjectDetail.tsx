@@ -14,7 +14,7 @@ import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { RichTextView } from '../components/RichText'
 import SearchableSelect from '../components/SearchableSelect'
-import { overseesSbu, sbuName } from '../org'
+import { overseesSbu, sbuIdsOf, sbuNames } from '../org'
 
 export default function ProjectDetail() {
   const { id } = useParams()
@@ -77,12 +77,12 @@ export default function ProjectDetail() {
     return <div className="empty">Loading…</div>
   }
 
-  const companyName = sbuName(companies, project.company_id) ?? '—'
+  const companyName = sbuNames(companies, sbuIdsOf(project)) ?? '—'
   // Admin / PMO, or anyone Responsible / Accountable on one of this project's tasks, can edit
   // the whole project (same rule as app/permissions.py on the server).
   const isProjectRA = !!user && tasks.some((t) => t.responsible_id === user.id || t.accountable_id === user.id)
   // ...and so can the COO of the project's SBU
-  const canEdit = isPrivileged || isProjectRA || overseesSbu(user, companies, project.company_id)
+  const canEdit = isPrivileged || isProjectRA || overseesSbu(user, companies, sbuIdsOf(project))
   // associated people: also the project's Manager / Owner / Sponsor (same rule as the server)
   const canManageAssociates = canEdit || (!!user && [project.manager_id, project.owner_id, project.sponsor_id].includes(user.id))
 

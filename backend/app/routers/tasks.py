@@ -105,16 +105,19 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db),
                 current_user: models.User = Depends(get_current_user)):
     data = payload.model_dump()
     depends_on_ids = data.pop("depends_on_ids", None)
+    sbu_ids = data.pop("sbu_ids", None) or [data.get("company_id")]
+    data["company_id"] = None  # set with the other SBUs once the task has an id
     data["title"] = (data.get("title") or "").strip()
     if not data["title"]:
         raise HTTPException(400, "Task title is required")
 
-    # A task picked under a project inherits that project's company / function if left blank.
+    # A task picked under a project inherits that project's SBUs / function if left blank.
     if data.get("project_id"):
         project = db.get(models.Project, data["project_id"])
         if not project:
             raise HTTPException(400, "Selected project does not exist")
-        data["company_id"] = data.get("company_id") or project.company_id
+        if not any(sbu_ids):
+            sbu_ids = project.sbu_ids
         data["function_id"] = data.get("function_id") or project.function_id
 
     user_code = (data.get("code") or "").strip() or None
@@ -135,6 +138,7 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db),
             if user_code or attempt == 2:
                 raise HTTPException(409, "Could not save the task (duplicate code). Please try again.")
 
+    services.set_sbus(db, task, sbu_ids, current_user.name)
     if depends_on_ids:
         gantt.set_dependencies(db, task, depends_on_ids)
     if task.project_id:
@@ -205,8 +209,11 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
     previous = task.title
     old_project_id = task.project_id
     old_informed_id, old_status = task.informed_id, task.status
+    new_sbus = services.patched_sbus(task, data)
     for k, v in data.items():
         setattr(task, k, v)
+    if new_sbus is not None:
+        services.set_sbus(db, task, new_sbus, current_user.name)
     _normalize(db, task)
     if task.project_id != old_project_id:
         gantt.clear_dependencies(db, task.id)  # dependencies never cross projects

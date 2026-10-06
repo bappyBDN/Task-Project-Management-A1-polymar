@@ -6,7 +6,7 @@ import { Company, Project, Task, User } from '../types'
 import { HEALTH_COLORS, METHODOLOGIES, PROJECT_STATUSES, fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import ProjectForm, { errText } from '../components/ProjectForm'
-import { inSbu, sbuFilterItems, sbuName } from '../org'
+import { inAnySbu, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
 
 
 export default function Projects() {
@@ -64,8 +64,8 @@ export default function Projects() {
   }, [tasks])
   const projectCompanyIds = (p: Project) => {
     const s = new Set<number>()
-    if (p.company_id) s.add(p.company_id)
-    ;(tasksByProject.get(p.id) ?? []).forEach((t) => { if (t.company_id) s.add(t.company_id) })
+    sbuIdsOf(p).forEach((id) => s.add(id))
+    ;(tasksByProject.get(p.id) ?? []).forEach((t) => sbuIdsOf(t).forEach((id) => s.add(id)))
     return s
   }
   const projectPeopleIds = (p: Project) => {
@@ -80,7 +80,7 @@ export default function Projects() {
     const uid = filter.manager_id ? Number(filter.manager_id) : null
     const leadsProject = uid !== null && [p.manager_id, p.sponsor_id, p.owner_id].includes(uid)
     return (tasksByProject.get(p.id) ?? []).filter((t) => {
-      if (filter.company_id && !inSbu(companies, t.company_id ?? p.company_id, filter.company_id)) return false
+      if (filter.company_id && !inAnySbu(companies, sbuIdsOf(t).length ? sbuIdsOf(t) : sbuIdsOf(p), filter.company_id)) return false
       // a PM / Sponsor / Owner sees all the project's tasks; others only the ones they are on
       if (uid !== null && !leadsProject && ![t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id].includes(uid)) return false
       return true
@@ -89,7 +89,7 @@ export default function Projects() {
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
-      if (filter.company_id && ![...projectCompanyIds(p)].some((id) => inSbu(companies, id, filter.company_id))) return false
+      if (filter.company_id && !inAnySbu(companies, [...projectCompanyIds(p)], filter.company_id)) return false
       if (filter.status && p.status !== filter.status) return false
       if (filter.health && p.health !== filter.health) return false
       if (filter.type && p.project_type !== filter.type) return false
@@ -120,11 +120,10 @@ export default function Projects() {
   const methodologyItems = [{ value: '', label: 'All' }, ...fullList(METHODOLOGIES, projects.map((p) => p.methodology)).map((m) => ({ value: m, label: label(m) }))]
   const managerItems = [{ value: '', label: 'All' }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]
 
-  // SBU column: the project's own SBU, otherwise the SBUs of its tasks.
-  const companyName = (p: Project) => {
-    const names = [...new Set([...projectCompanyIds(p)].map((id) => sbuName(companies, id)).filter(Boolean))]
-    return names.length ? names.join(', ') : '—'
-  }
+  // SBU column: the project's own SBUs. Only a project without any shows the SBUs of its tasks
+  // (a task left on an SBU the project has since moved away from must not show here).
+  const companyName = (p: Project) =>
+    sbuNames(companies, sbuIdsOf(p).length ? sbuIdsOf(p) : [...projectCompanyIds(p)]) ?? '—'
 
   return (
     <div>

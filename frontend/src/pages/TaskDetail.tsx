@@ -8,7 +8,7 @@ import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDat
 import { RichTextView } from '../components/RichText'
 import TaskForm from '../components/TaskForm'
 import CommentsPanel from '../components/CommentsPanel'
-import { overseesSbu, sbuName } from '../org'
+import { overseesSbu, sbuIdsOf, sbuNames } from '../org'
 
 export default function TaskDetail() {
   const { id } = useParams()
@@ -78,7 +78,7 @@ export default function TaskDetail() {
 
   const isMine = user?.id === task.responsible_id || user?.id === task.accountable_id
   // the COO of the task's SBU (its own, or its project's) manages it like an admin / PMO
-  const isPrivileged = hasPrivilegedRole || overseesSbu(user, companies, task.company_id ?? proj?.company_id)
+  const isPrivileged = hasPrivilegedRole || overseesSbu(user, companies, sbuIdsOf(task).length ? sbuIdsOf(task) : sbuIdsOf(proj))
   // Admin / PMO edit everything; the Responsible / Accountable person edits the task details (limited).
   // The Responsible person also sets the task's people (Responsible, Accountable, Reviewer, Informed).
   const isResponsible = user?.id === task.responsible_id
@@ -187,7 +187,7 @@ export default function TaskDetail() {
               <div><label>Priority</label><span className={`badge ${PRIORITY_COLORS[task.priority]}`}>{label(task.priority)}</span></div>
             </div>
             <div className="form-row three" style={{ marginTop: 12 }}>
-              <div><label>SBU</label><div className="small">{sbuName(companies, task.company_id) ?? '—'}</div></div>
+              <div><label>SBU</label><div className="small">{sbuNames(companies, sbuIdsOf(task)) ?? '—'}</div></div>
               <div><label>Function</label><div className="small">{functions.find((f) => f.id === task.function_id)?.name ?? '—'}</div></div>
               <div><label>Department</label><div className="small">{departments.find((d) => d.id === task.department_id)?.name ?? '—'}</div></div>
             </div>

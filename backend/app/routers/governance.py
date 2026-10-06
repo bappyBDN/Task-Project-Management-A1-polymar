@@ -394,12 +394,13 @@ def convert_action(action_id: int, responsible_id: int | None = None, db: Sessio
         baseline_due_date=a.due_date, approved_due_date=a.due_date,
         status="backlog", progress_pct=0.0,
         project_id=project.id if project else None,
-        company_id=project.company_id if project else None,
         function_id=project.function_id if project else None,
         created_by=current_user.name[:64],
     )
     db.add(task)
     db.flush()
+    if project:
+        services.set_sbus(db, task, project.sbu_ids, current_user.name)
     a.converted_task_id = task.id
     if task.project_id:
         services.recalc_project_health(db, task.project_id)

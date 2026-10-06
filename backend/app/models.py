@@ -91,6 +91,12 @@ class UserSbu(Base, TimestampMixin):
     __table_args__ = (UniqueConstraint("user_id", "company_id", name="uq_user_sbu"),)
 
 
+def _sbu_ids(entity) -> list[int]:
+    """A project's / task's SBUs: company_id first, then its extra_sbus rows (no repeats)."""
+    ids = [entity.company_id] if entity.company_id else []
+    return list(dict.fromkeys(ids + [s.company_id for s in entity.extra_sbus]))
+
+
 # ---------------------------------------------------------------- Program/Project
 class Program(Base, TimestampMixin):
     __tablename__ = "programs"
@@ -128,6 +134,25 @@ class Project(Base, TimestampMixin):
     criticality: Mapped[str] = mapped_column(String(16), default="medium")
     # optional Gantt scheduling: task dependencies drive the forecast dates (app/gantt.py)
     gantt_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # --- more SBUs than the first one (company_id); see ProjectSbu ---
+    extra_sbus: Mapped[list["ProjectSbu"]] = relationship(lazy="selectin", cascade="all, delete-orphan",
+                                                          order_by="ProjectSbu.id")
+
+    @property
+    def sbu_ids(self) -> list[int]:
+        """Every SBU of the project, the first one (company_id) first."""
+        return _sbu_ids(self)
+
+
+class ProjectSbu(Base, TimestampMixin):
+    """One more SBU of a project. The first SBU stays in projects.company_id (as before a
+    project could have several), so only the second, third, ... live here."""
+    __tablename__ = "project_sbus"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), index=True)
+
+    __table_args__ = (UniqueConstraint("project_id", "company_id", name="uq_project_sbu"),)
 
 
 class ProjectAssociate(Base, TimestampMixin):
@@ -207,6 +232,24 @@ class Task(Base, TimestampMixin):
     completion_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     completion_remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # --- more SBUs than the first one (company_id); see TaskSbu ---
+    extra_sbus: Mapped[list["TaskSbu"]] = relationship(lazy="selectin", cascade="all, delete-orphan",
+                                                       order_by="TaskSbu.id")
+
+    @property
+    def sbu_ids(self) -> list[int]:
+        """Every SBU of the task, the first one (company_id) first."""
+        return _sbu_ids(self)
+
+
+class TaskSbu(Base, TimestampMixin):
+    """One more SBU of a task (the first one stays in tasks.company_id) - see ProjectSbu."""
+    __tablename__ = "task_sbus"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), index=True)
+
+    __table_args__ = (UniqueConstraint("task_id", "company_id", name="uq_task_sbu"),)
 
 
 class TaskDependency(Base, TimestampMixin):

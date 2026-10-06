@@ -4,7 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { Comment, Company, Department, Function, Project, ProjectKpi, Task, TaskKpi, User } from '../types'
 import { HEALTH_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
-import { mergeSbuRows } from '../org'
+import { mergeSbuRows, sbuIdsOf } from '../org'
 import { sbuKey } from '../components/SbuSelect'
 import ProfileForm from '../components/ProfileForm'
 import { CommentReplies, REPLY_CSS, addReply, commenterLabel, fmtDateTime } from '../components/CommentsPanel'
@@ -332,7 +332,7 @@ function projectsOf(tab: OrgTab, rowName: string, projects: Project[], org: OrgL
     return rowName === 'Unassigned' ? !name : !!name && key(name) === key(rowName)
   }
   let keep: (p: Project) => boolean
-  if (tab === 'bySbu') keep = (p) => matches(org.companies, p.company_id)
+  if (tab === 'bySbu') keep = (p) => (sbuIdsOf(p).length ? sbuIdsOf(p).some((id) => matches(org.companies, id)) : matches(org.companies, null))
   else if (tab === 'byFunction') keep = (p) => matches(org.functions, p.function_id)
   else {
     const ids = new Set(org.tasks.filter((t) => t.project_id && matches(org.departments, t.department_id)).map((t) => t.project_id))

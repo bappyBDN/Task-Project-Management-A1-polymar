@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.visibility import Scope, get_scope
+from app.visibility import Scope, get_scope, sbu_key
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
@@ -123,6 +123,14 @@ def org_intelligence(db: Session = Depends(get_db), scope: Scope = Depends(get_s
     tasks = [t for t in db.query(models.Task).filter(models.Task.is_deleted.is_(False)).all() if scope.sees_task(t)]
     projects = [p for p in db.query(models.Project).all() if scope.sees_project(p)]
 
+    def sbu_names(entity):
+        """One name per SBU of a task / project (it counts under each); copies of one SBU count once."""
+        names = {}
+        for cid in entity.sbu_ids:
+            if cid in companies:
+                names.setdefault(sbu_key(companies[cid]), companies[cid])
+        return list(names.values()) or ["Unassigned"]
+
     by_sbu = {}
     by_function = {}
     by_department = {}
@@ -149,7 +157,7 @@ def org_intelligence(db: Session = Depends(get_db), scope: Scope = Depends(get_s
         is_overdue = t.status in OPEN_STATUSES and due is not None and due < today_
 
         for bucket, key in (
-            (by_sbu, companies.get(t.company_id, "Unassigned")),
+            *((by_sbu, name) for name in sbu_names(t)),
             (by_function, functions.get(t.function_id, "Unassigned")),
             (by_department, departments.get(t.department_id, "Unassigned")),
         ):
@@ -163,7 +171,8 @@ def org_intelligence(db: Session = Depends(get_db), scope: Scope = Depends(get_s
                 r["overdue"] += 1
 
     for p in projects:
-        row(by_sbu, companies.get(p.company_id, "Unassigned"))["projects"] += 1
+        for name in sbu_names(p):
+            row(by_sbu, name)["projects"] += 1
         row(by_function, functions.get(p.function_id, "Unassigned"))["projects"] += 1
 
     # Projects have no department of their own: a department's projects are the
