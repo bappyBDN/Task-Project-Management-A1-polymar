@@ -7,9 +7,11 @@ import InviteUserModal from './InviteUserModal'
 
 // The sign-up form, shared by the Sign Up page and "Add new employee" (e.g. on a
 // project's Associated People), so both save exactly the same way: role is always
-// employee (an admin can change it), no password - they get an email with a link
-// to set it. A typed-in function / department is added to the lists, and a manager
-// may be given by Employee ID (linked now, or when that manager joins).
+// employee (an admin can change it). Signing up yourself, you choose your password
+// here and no email is sent; added by someone else (forOther), there is no password -
+// they get an email with a link to set it. A typed-in function / department is added
+// to the lists, and a manager may be given by Employee ID (linked now, or when that
+// manager joins).
 
 interface Option { id: number; name: string }
 interface SignupOptions { companies: Option[]; functions: Option[]; departments: Option[]; users: Option[] }
@@ -31,6 +33,8 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
   const [opts, setOpts] = useState<SignupOptions>({ companies: [], functions: [], departments: [], users: [] })
   // every SBU picked (company ids, or a pending value for one not in the database yet)
   const [sbus, setSbus] = useState<string[]>([])
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -60,6 +64,10 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
     setError('')
     if (!form.name.trim() || !form.email.trim() || !form.employee_id.trim()) { setError('Name, email and employee id are required'); return }
     if (managerEmail && managerEmail.toLowerCase() === form.email.trim().toLowerCase()) { setError(`${forOther ? 'Their' : 'Your'} manager's email can't be ${their} own.`); return }
+    if (!forOther) {
+      if (password.length < 6) { setError('Password must be at least 6 characters'); return }
+      if (password !== confirmPassword) { setError('Passwords do not match'); return }
+    }
     const num = (v: string) => (v.startsWith('id:') ? Number(v.slice(3)) : null)
     // an SBU not in the database yet can't be linked from here - an admin sets it later
     const companyIds = sbus.filter((v) => !isPendingSbu(v)).map(Number)
@@ -79,10 +87,13 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
         new_function: isNew(form.function_id) ? form.function_id.trim() : null,
         new_department: isNew(form.department_id) ? form.department_id.trim() : null,
         reports_to_email: managerEmail || null,
+        password: forOther ? null : password,
       })
       const employeeId = form.employee_id.trim()
       setForm(EMPTY)
       setSbus([])
+      setPassword('')
+      setConfirmPassword('')
       onSuccess(res.message, employeeId)
     } catch (err: any) {
       setError(err.message || 'Sign up failed. Please try again.')
@@ -137,6 +148,12 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
           </div>
         </div>
       </div>
+      {!forOther && (
+        <div className="form-row">
+          <div><label>Password *</label><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+          <div><label>Confirm Password *</label><input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div>
+        </div>
+      )}
 
       {onCancel ? (
         <div className="modal-actions">

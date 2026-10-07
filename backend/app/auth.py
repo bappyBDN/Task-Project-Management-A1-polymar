@@ -216,6 +216,9 @@ class SignupRequest(BaseModel):
     # ...or the manager's email: linked if they have an account, otherwise they are
     # added by that email and get an invitation to sign up.
     reports_to_email: EmailStr | None = None
+    # Chosen on the sign-up form: the account can log in at once and no "set password"
+    # email is sent. Left out = the old way, a link by email.
+    password: str | None = None
 
 
 @router.get("/signup-options")
@@ -241,6 +244,11 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     email = str(request.email).strip()
     if not employee_id or not name:
         raise HTTPException(400, "Name, email and employee id are required")
+    password = request.password or ""
+    if password and len(password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    if len(password.encode("utf-8")) > 72:
+        raise HTTPException(400, "Password is too long (72 characters at most).")
     # Someone added by email only ("+ Add new user") finishes that same account here.
     invited = db.query(User).filter(func.lower(User.email) == email.lower()).first()
     if invited is not None and not is_invited(invited):
@@ -331,6 +339,8 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     else:
         user = User(email=email, role="employee", **details)
         db.add(user)
+    if password:
+        user.hashed_password = get_password_hash(password)
     try:
         db.flush()
     except IntegrityError:
@@ -342,8 +352,11 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
     services.audit(db, name, "user", user.id, "signed_up", new_value=f"{name} <{email}>")
     db.commit()
     db.refresh(user)
-    send_set_password_link(db, user)
-    message = "Account created. Check your email for a link to set your password."
+    if password:
+        message = "Account created. You can now log in with your email and password."
+    else:
+        send_set_password_link(db, user)
+        message = "Account created. Check your email for a link to set your password."
     if manager_to_invite is not None:
         if send_signup_invite(manager_to_invite, name):
             message += f" An invitation to sign up was sent to your manager ({manager_to_invite.email})."
