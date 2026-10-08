@@ -218,7 +218,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
     { key: 'expected_deliverable', label: 'Expected Deliverable' },
     { key: 'responsible_id', label: 'Responsible (R)' },
     { key: 'accountable_id', label: 'Accountable (A)' },
-    { key: 'reviewer_id', label: 'Reviewer' },
+    { key: 'reviewer_id', label: 'Reviewer (C)' },
     { key: 'planned_start_date', label: 'Planned Start' },
     { key: 'baseline_due_date', label: 'Baseline Due Date' },
   ]
@@ -519,7 +519,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
             )}
           </fieldset>
           <fieldset disabled={lockApprovers} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} title={lockApprovers ? 'Only the Responsible person or an admin / PMO can change this' : undefined}>
-            <label>Reviewer *</label>
+            <label>Reviewer (C) *</label>
             <SearchableSelect
               value={str(form.reviewer_id)}
               items={userItems}

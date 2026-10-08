@@ -452,7 +452,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                       onAddNew={() => setInviting({ key: d.key, field: 'accountable_id' })} addLabel="new user" />
                   </div>
                   <div>
-                    <label>Reviewer *</label>
+                    <label>Reviewer (C) *</label>
                     <SearchableSelect value={d.reviewer_id} items={userItems} onChange={(v) => setDraft(d.key, 'reviewer_id', v)} placeholder="Search person…"
                       onAddNew={() => setInviting({ key: d.key, field: 'reviewer_id' })} addLabel="new user" />
                   </div>
@@ -480,7 +480,8 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
                 <RichTextEditor rows={2} value={d.description} onChange={(v) => setDraft(d.key, 'description', v)}
                   placeholder="What is this task about? Use Link to attach a document or page." disabled={saving} />
                 <label>Expected Deliverable</label>
-                <input value={d.expected_deliverable} onChange={(e) => setDraft(d.key, 'expected_deliverable', e.target.value)} placeholder="What will be delivered?" disabled={saving} />
+                <RichTextEditor rows={2} value={d.expected_deliverable} onChange={(v) => setDraft(d.key, 'expected_deliverable', v)}
+                  placeholder="What will be delivered?" disabled={saving} />
               </div>
             ))}
             {drafts.length > 0 && (

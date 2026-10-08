@@ -304,8 +304,8 @@ export default function ApprovalDetail() {
               {progress.map((p) => (
                 <div key={p.id} className="small" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
                   <strong>{p.progress_pct}%</strong>{p.status ? ` · ${label(p.status)}` : ''}{p.blocker ? <span className="badge red" style={{ marginLeft: 6 }}>Blocker</span> : null}
-                  {p.remarks && <div>{p.remarks}</div>}
-                  {p.next_action && <div className="muted">Next: {p.next_action}</div>}
+                  {p.remarks && <RichTextView text={p.remarks} />}
+                  {p.next_action && <div className="muted"><strong>Next:</strong> <RichTextView text={p.next_action} /></div>}
                   {p.support_required && <div className="muted">Support: {p.support_required}</div>}
                   <div className="muted" style={{ fontSize: 11 }}>{fmtDate(p.created_at?.slice(0, 10))}</div>
                 </div>

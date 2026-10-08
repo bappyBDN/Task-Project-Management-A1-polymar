@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,6 +30,13 @@ def _notify_informed(db: Session, task: models.Task, title: str, body: str, acto
     The text names the task code, so the notification opens the task (routers/audit.py)."""
     if task.informed_id and task.informed_id != actor_id:
         services.notify(db, task.informed_id, title[:240], body=body, kind="info")
+
+
+def _plain(text: str) -> str:
+    """Rich text (the light markdown the editor stores) as one plain line, for notifications."""
+    text = re.sub(r"\[([^\]\n]+)\]\(([^)\s]+)\)", r"\1 (\2)", text)  # [text](address) -> text (address)
+    text = re.sub(r"\*\*|\+\+|(?<![\w*])\*(?=\S)|(?<=\S)\*(?![\w*])", "", text)  # bold / underline / italic markers
+    return " ".join(text.split())
 
 
 def _normalize(db: Session, task: models.Task):
@@ -328,7 +336,7 @@ def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session 
     services.audit(db, current_user.name, "task", task.id, "progress_updated", new_value=str(task.progress_pct))
     _notify_informed(db, task, f"Progress update: {task.code}",
                      f"'{task.title}' is at {task.progress_pct:g}% ({task.status.replace('_', ' ')}), updated by {current_user.name}."
-                     + (f" {payload.remarks}" if payload.remarks else ""), actor_id=current_user.id)
+                     + (f" {_plain(payload.remarks)}" if payload.remarks else ""), actor_id=current_user.id)
     db.commit()
     db.refresh(update)
     return update

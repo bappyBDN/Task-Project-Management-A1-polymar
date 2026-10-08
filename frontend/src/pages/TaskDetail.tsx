@@ -5,7 +5,7 @@ import { useAuth } from '../auth'
 import { useIsPrivileged } from '../usePrivileged'
 import { Approval, Company, DelayRca, Department, Function, ProgressUpdate, Project, Task, User } from '../types'
 import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
-import { RichTextView } from '../components/RichText'
+import { RichTextEditor, RichTextView } from '../components/RichText'
 import TaskForm from '../components/TaskForm'
 import CommentsPanel from '../components/CommentsPanel'
 import { overseesSbu, sbuIdsOf, sbuNames } from '../org'
@@ -219,7 +219,9 @@ export default function TaskDetail() {
             {progress.length === 0 && <div className="small muted">No updates yet.</div>}
             {progress.map((p) => (
               <div key={p.id} className="small" style={{ padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
-                <strong>{p.progress_pct}%</strong>{p.status ? ` · ${label(p.status)}` : ''} · {p.remarks}
+                <strong>{p.progress_pct}%</strong>{p.status ? ` · ${label(p.status)}` : ''}
+                {p.remarks && <RichTextView text={p.remarks} />}
+                {p.next_action && <div className="muted"><strong>Next:</strong> <RichTextView text={p.next_action} /></div>}
                 <div className="muted" style={{ fontSize: 11 }}>{fmtDate(p.created_at?.slice(0, 10))}</div>
               </div>
             ))}
@@ -491,9 +493,9 @@ function ProgressForm({ task, canComplete, onClose, onSaved }: { task: Task; can
           </div>
         </div>
         <label>Remarks</label>
-        <textarea rows={2} value={f.remarks} onChange={(e) => set('remarks', e.target.value)} disabled={isSubmitting} />
+        <RichTextEditor rows={2} value={f.remarks ?? ''} onChange={(v) => set('remarks', v)} placeholder="What was done? Use Link to attach a document or page." disabled={isSubmitting} />
         <label>Next Action</label>
-        <input value={f.next_action} onChange={(e) => set('next_action', e.target.value)} disabled={isSubmitting} />
+        <RichTextEditor rows={2} value={f.next_action ?? ''} onChange={(v) => set('next_action', v)} placeholder="What happens next?" disabled={isSubmitting} />
         <div className="row" style={{ marginTop: 12 }}>
           <label style={{ margin: 0 }}><input type="checkbox" checked={f.blocker} onChange={(e) => set('blocker', e.target.checked)} style={{ width: 'auto' }} disabled={isSubmitting} /> Blocker</label>
         </div>
