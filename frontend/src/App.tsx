@@ -75,7 +75,9 @@ const ADMIN: NavItem[] = [
 
 function buildSections(isAdmin: boolean): NavSection[] {
   const sections: NavSection[] = [
-    { section: 'My Workspace', items: WORKSPACE },
+    // the Tasks page (every task in one list) is for admins; everyone else opens a project's
+    // tasks from the project page
+    { section: 'My Workspace', items: isAdmin ? WORKSPACE : WORKSPACE.filter((i) => i.to !== '/tasks') },
     { section: 'Governance', items: GOVERNANCE },
   ]
   if (isAdmin) sections.push({ section: 'Administration', items: ADMIN })
@@ -213,7 +215,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/tasks" element={<Tasks />} />
+          {isAdmin && <Route path="/tasks" element={<Tasks />} />}
           <Route path="/tasks/:id" element={<TaskDetail />} />
           <Route path="/kanban" element={<Kanban />} />
           <Route path="/projects" element={<Projects />} />

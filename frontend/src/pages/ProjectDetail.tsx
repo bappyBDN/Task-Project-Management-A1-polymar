@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -35,6 +35,7 @@ export default function ProjectDetail() {
   const [deleteErr, setDeleteErr] = useState('')
   // task list filter: the Responsible employee ('' = everyone)
   const [employeeId, setEmployeeId] = useState('')
+  const taskListRef = useRef<HTMLDivElement>(null)
   const { user } = useAuth()
   const isPrivileged = useIsPrivileged(user?.role)
 
@@ -130,6 +131,12 @@ export default function ProjectDetail() {
   const activeEmployee = employeeItems.some((i) => i.value === employeeId) ? employeeId : ''
   const shownTasks = activeEmployee ? tasks.filter((t) => String(t.responsible_id) === activeEmployee) : tasks
 
+  // "All Tasks": jump to this project's task list, showing every task (no employee filter)
+  const showAllTasks = () => {
+    setEmployeeId('')
+    taskListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div>
       <div className="topbar">
@@ -143,6 +150,7 @@ export default function ProjectDetail() {
           </div>
         </div>
         <div className="row">
+          <button className="btn sm" onClick={showAllTasks}>☰ All Tasks</button>
           {canEdit && <button className="btn sm" onClick={() => { setSavedMsg(''); setShowEdit(true) }}>✎ Edit Project</button>}
           {isProjectManager && <button className="btn sm danger" onClick={removeProject} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete Project'}</button>}
         </div>
@@ -267,7 +275,7 @@ export default function ProjectDetail() {
 
       <ProjectGantt project={project} tasks={tasks} users={users} canToggle={canManageAssociates} onProject={setProject} onChanged={reloadTasks} />
 
-          <div className="card mt">
+          <div className="card mt" ref={taskListRef}>
             <div className="spread">
               <div className="section-title" style={{ marginTop: 0 }}>
                 Tasks ({activeEmployee ? `${shownTasks.length} of ${tasks.length}` : tasks.length})

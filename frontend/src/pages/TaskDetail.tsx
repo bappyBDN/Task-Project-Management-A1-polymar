@@ -35,6 +35,12 @@ export default function TaskDetail() {
   const [loadErr, setLoadErr] = useState('')
   const hasPrivilegedRole = useIsPrivileged(user?.role)
 
+  // Where "back" goes: the Tasks page is for admins only, so everyone else returns to the
+  // task's project (or My Dashboard for a task without one).
+  const isAdmin = user?.role === 'admin'
+  const backTo = isAdmin ? '/tasks' : task?.project_id ? `/projects/${task.project_id}` : '/'
+  const backLabel = isAdmin ? 'Tasks' : task?.project_id ? 'Project' : 'My Dashboard'
+
   const load = () => {
     if (!id) return
     setLoadErr('')
@@ -60,7 +66,7 @@ export default function TaskDetail() {
           <h2 style={{ color: 'var(--navy)', marginTop: 0 }}>Task not available</h2>
           <p>{/not found/i.test(loadErr) ? 'This task does not exist or was deleted.' : loadErr}</p>
           <button className="btn" onClick={load} style={{ marginRight: 8 }}>Try again</button>
-          <button className="btn primary" onClick={() => navigate('/tasks')}>Back to Tasks</button>
+          <button className="btn primary" onClick={() => navigate(backTo)}>Back to {backLabel}</button>
         </div>
       )
     }
@@ -105,7 +111,7 @@ export default function TaskDetail() {
     try {
       const res = await api.del<{ status?: string } | undefined>(`/tasks/${task.id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`)
       if (res?.status === 'pending_approval') alert('Delete request sent. You can follow it on the Approvals page.')
-      navigate('/tasks')
+      navigate(backTo)
     } catch (e: any) {
       setActionErr(e.message || 'Could not delete the task. Please try again.')
       setDeleting(false)
@@ -148,7 +154,7 @@ export default function TaskDetail() {
     <div>
       <div className="topbar">
         <div>
-          <button className="btn sm" onClick={() => navigate('/tasks')} style={{ marginBottom: 8 }}>← Tasks</button>
+          <button className="btn sm" onClick={() => navigate(backTo)} style={{ marginBottom: 8 }}>← {backLabel}</button>
           <h1>{task.title}</h1>
           <div className="crumb">{task.code} · {proj?.name ?? 'Standalone'} · <span className={`badge ${STATUS_COLORS[task.status]}`}>{label(task.status)}</span> <span className={`health-dot ${HEALTH_COLORS[task.health]}`} /> {label(task.health)}</div>
         </div>
