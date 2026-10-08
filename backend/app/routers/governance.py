@@ -18,6 +18,11 @@ Who is notified:
 
 Who sees a meeting in the list:
   Admins see all; everyone else sees meetings they organised or attend.
+
+Who sees a decision / management action (see _Visibility):
+  a project's decisions and actions are seen only by Admins, people related
+  to that project and the people named on the item. Items that belong to no
+  project are general management items, seen by everyone.
 """
 import json
 import logging
@@ -157,6 +162,80 @@ def _can_see(details: dict, user) -> bool:
     return user.id == details.get("organizer_id") or user.id in (details.get("attendee_ids") or [])
 
 
+def _my_project_ids(db: Session, user) -> set:
+    """Projects the user is related to: Responsible, Accountable, Reviewer or
+    Informed on any of its tasks, or its Manager, Sponsor or Owner."""
+    uid = user.id
+    ids = {pid for (pid,) in db.query(models.Task.project_id).filter(
+        models.Task.is_deleted.is_(False),
+        models.Task.project_id.isnot(None),
+        (models.Task.responsible_id == uid) | (models.Task.accountable_id == uid) | (models.Task.reviewer_id == uid)
+        | (models.Task.informed_id == uid),
+    ).distinct().all()}
+    ids |= {pid for (pid,) in db.query(models.Project.id).filter(
+        (models.Project.manager_id == uid) | (models.Project.sponsor_id == uid) | (models.Project.owner_id == uid)
+    ).all()}
+    return ids
+
+
+class _Visibility:
+    """Who sees a decision / management action - no database schema change.
+
+    The project of a decision is its own project, else the project of its
+    meeting. The project of an action is the project of its decision, else of
+    its meeting, else of the task it was converted to.
+
+    A project item is seen only by Admins, people related to that project and
+    the people named on the item itself (owner / responsible / accountable).
+    An item that belongs to no project is a general management item and is
+    seen by everyone.
+    """
+
+    def __init__(self, db: Session, user):
+        self.db = db
+        self.user = user
+        self.admin = _is_admin(user)
+        self.my_projects = set() if self.admin else _my_project_ids(db, user)
+        self._meeting_project: dict = {}
+
+    def _meeting_pid(self, meeting_id):
+        if not meeting_id:
+            return None
+        if meeting_id not in self._meeting_project:
+            self._meeting_project[meeting_id] = (_details_map(self.db, [meeting_id]).get(meeting_id) or {}).get("project_id")
+        return self._meeting_project[meeting_id]
+
+    def preload_meetings(self, meeting_ids) -> None:
+        ids = {i for i in meeting_ids if i}
+        details = _details_map(self.db, ids)
+        for i in ids:
+            self._meeting_project[i] = (details.get(i) or {}).get("project_id")
+
+    def decision_pid(self, d):
+        return d.project_id or self._meeting_pid(d.meeting_id)
+
+    def action_pid(self, a, decision=None, task=None):
+        pid = self.decision_pid(decision) if decision else None
+        return pid or self._meeting_pid(a.meeting_id) or (task.project_id if task else None)
+
+    def _allowed(self, pid, named_ids) -> bool:
+        if self.admin or not pid:
+            return True
+        return pid in self.my_projects or self.user.id in named_ids
+
+    def decision(self, d) -> bool:
+        return self._allowed(self.decision_pid(d), {d.owner_id})
+
+    def action(self, a, decision=None, task=None) -> bool:
+        named = {a.responsible_id, a.accountable_id, decision.owner_id if decision else None}
+        return self._allowed(self.action_pid(a, decision, task), named)
+
+    def action_by_id(self, a) -> bool:
+        decision = self.db.get(models.Decision, a.decision_id) if a.decision_id else None
+        task = self.db.get(models.Task, a.converted_task_id) if a.converted_task_id else None
+        return self.action(a, decision, task)
+
+
 # ---------------------------------------------------------------- Meetings
 @router.get("/meetings", response_model=list[MeetingFullOut])
 def list_meetings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -173,17 +252,7 @@ def schedulable_projects(db: Session = Depends(get_db), current_user: models.Use
     """Projects the current user may schedule a meeting for."""
     q = db.query(models.Project)
     if not _is_admin(current_user):
-        uid = current_user.id
-        task_project_ids = {pid for (pid,) in db.query(models.Task.project_id).filter(
-            models.Task.is_deleted.is_(False),
-            models.Task.project_id.isnot(None),
-            (models.Task.responsible_id == uid) | (models.Task.accountable_id == uid) | (models.Task.reviewer_id == uid)
-            | (models.Task.informed_id == uid),
-        ).distinct().all()}
-        q = q.filter(
-            (models.Project.id.in_(task_project_ids)) | (models.Project.manager_id == uid)
-            | (models.Project.sponsor_id == uid) | (models.Project.owner_id == uid)
-        )
+        q = q.filter(models.Project.id.in_(_my_project_ids(db, current_user)))
     return [{"id": p.id, "code": p.code, "name": p.name} for p in q.order_by(models.Project.name).all()]
 
 
@@ -289,13 +358,17 @@ def create_meeting(payload: MeetingCreate, background_tasks: BackgroundTasks, db
 
 # ---------------------------------------------------------------- Decisions
 @router.get("/decisions", response_model=list[schemas.DecisionOut])
-def list_decisions(project_id: int | None = None, status: str | None = None, db: Session = Depends(get_db)):
+def list_decisions(project_id: int | None = None, status: str | None = None, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user)):
     q = db.query(models.Decision)
     if project_id:
         q = q.filter(models.Decision.project_id == project_id)
     if status:
         q = q.filter(models.Decision.status == status)
-    return q.order_by(models.Decision.decision_date.desc()).all()
+    decisions = q.order_by(models.Decision.decision_date.desc()).all()
+    vis = _Visibility(db, current_user)
+    vis.preload_meetings(d.meeting_id for d in decisions)
+    return [d for d in decisions if vis.decision(d)]
 
 
 @router.post("/decisions", response_model=schemas.DecisionOut, status_code=201)
@@ -313,10 +386,13 @@ def create_decision(payload: schemas.DecisionBase, db: Session = Depends(get_db)
 
 
 @router.patch("/decisions/{decision_id}", response_model=schemas.DecisionOut)
-def update_decision(decision_id: int, payload: schemas.DecisionBase, db: Session = Depends(get_db)):
+def update_decision(decision_id: int, payload: schemas.DecisionBase, db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
     d = db.get(models.Decision, decision_id)
     if not d:
         raise HTTPException(404, "Decision not found")
+    if not _Visibility(db, current_user).decision(d):
+        raise HTTPException(403, "You are not part of this decision's project")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(d, k, v)
     db.commit()
@@ -326,13 +402,23 @@ def update_decision(decision_id: int, payload: schemas.DecisionBase, db: Session
 
 # ---------------------------------------------------------------- Management Actions
 @router.get("/actions", response_model=list[schemas.ManagementActionOut])
-def list_actions(status: str | None = None, responsible_id: int | None = None, db: Session = Depends(get_db)):
+def list_actions(status: str | None = None, responsible_id: int | None = None, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
     q = db.query(models.ManagementAction)
     if status:
         q = q.filter(models.ManagementAction.status == status)
     if responsible_id:
         q = q.filter(models.ManagementAction.responsible_id == responsible_id)
-    return q.order_by(models.ManagementAction.due_date).all()
+    actions = q.order_by(models.ManagementAction.due_date).all()
+    vis = _Visibility(db, current_user)
+    if vis.admin:
+        return actions
+    decision_ids = {a.decision_id for a in actions if a.decision_id}
+    task_ids = {a.converted_task_id for a in actions if a.converted_task_id}
+    decisions = {d.id: d for d in db.query(models.Decision).filter(models.Decision.id.in_(decision_ids)).all()} if decision_ids else {}
+    tasks = {t.id: t for t in db.query(models.Task).filter(models.Task.id.in_(task_ids)).all()} if task_ids else {}
+    vis.preload_meetings([a.meeting_id for a in actions] + [d.meeting_id for d in decisions.values()])
+    return [a for a in actions if vis.action(a, decisions.get(a.decision_id), tasks.get(a.converted_task_id))]
 
 
 @router.post("/actions", response_model=schemas.ManagementActionOut, status_code=201)
@@ -354,10 +440,13 @@ def create_action(payload: schemas.ManagementActionBase, db: Session = Depends(g
 
 
 @router.patch("/actions/{action_id}", response_model=schemas.ManagementActionOut)
-def update_action(action_id: int, payload: schemas.ManagementActionBase, db: Session = Depends(get_db)):
+def update_action(action_id: int, payload: schemas.ManagementActionBase, db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)):
     a = db.get(models.ManagementAction, action_id)
     if not a:
         raise HTTPException(404, "Action not found")
+    if not _Visibility(db, current_user).action_by_id(a):
+        raise HTTPException(403, "You are not part of this action's project")
     data = payload.model_dump(exclude_unset=True)
     # Evidence -> Closure: an action can only be closed once evidence is recorded.
     if data.get("status") == "closed" and a.status != "closed":
@@ -377,6 +466,8 @@ def convert_action(action_id: int, responsible_id: int | None = None, db: Sessio
     a = db.get(models.ManagementAction, action_id)
     if not a:
         raise HTTPException(404, "Action not found")
+    if not _Visibility(db, current_user).action_by_id(a):
+        raise HTTPException(403, "You are not part of this action's project")
     if a.converted_task_id:
         task = db.get(models.Task, a.converted_task_id)
         return task
