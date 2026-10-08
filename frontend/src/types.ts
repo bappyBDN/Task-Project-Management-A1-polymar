@@ -183,6 +183,8 @@ export interface Task {
   created_at: string
   /** name of whoever created the task */
   created_by?: string | null
+  /** completion already submitted and no progress update since: it can't be submitted again yet */
+  completion_submitted?: boolean
 }
 
 export interface DelayRca {

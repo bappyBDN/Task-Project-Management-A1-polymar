@@ -163,9 +163,10 @@ export default function TaskDetail() {
           <button
             className="btn sm gold"
             onClick={() => requestApproval('completion')}
-            disabled={(!isMine && !isPrivileged) || cooldown}
+            disabled={(!isMine && !isPrivileged) || cooldown || !!task.completion_submitted}
+            title={task.completion_submitted ? 'Already submitted. Update the progress to submit it again.' : undefined}
           >
-            {cooldown ? 'Submitted...' : 'Submit for Completion'}
+            {cooldown || task.completion_submitted ? '✓ Submitted' : 'Submit for Completion'}
           </button>
           {canEdit && <button className="btn sm" onClick={() => setShowEdit(true)}>✎ Edit Task</button>}
           {canDelete && <button className="btn sm danger" onClick={removeTask} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete Task'}</button>}

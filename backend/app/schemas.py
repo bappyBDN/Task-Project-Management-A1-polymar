@@ -334,6 +334,8 @@ class TaskOut(TaskBase):
     sbu_ids: list[int] = []
     created_at: datetime
     created_by: Optional[str] = None  # name of whoever created the task
+    # completion already submitted and no progress update since: "Submit Completion" is locked
+    completion_submitted: bool = False
 
 
 class ProgressUpdateBase(BaseModel):

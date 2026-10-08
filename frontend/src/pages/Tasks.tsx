@@ -6,6 +6,7 @@ import { useIsPrivileged } from '../usePrivileged'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import TaskForm from '../components/TaskForm'
+import CompletionButton from '../components/CompletionButton'
 import SearchableSelect from '../components/SearchableSelect'
 import { inAnySbu, inName, nameFilterItems, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
 
@@ -154,7 +155,7 @@ export default function Tasks() {
           <thead>
             <tr>
               <th>Code</th><th>Task</th><th>SBU</th><th>Project</th><th>Responsible</th>
-              <th>Priority</th><th>Status</th><th>Health</th><th>Progress</th><th>Due</th>
+              <th>Priority</th><th>Status</th><th>Health</th><th>Progress</th><th>Due</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -186,6 +187,9 @@ export default function Tasks() {
                     <span className="small muted">{t.progress_pct}%</span>
                   </td>
                   <td className="small">{fmtDate(t.approved_due_date || t.baseline_due_date)}</td>
+                  <td>
+                    <CompletionButton task={t} onDone={reload} />
+                  </td>
                 </tr>
               )
             })}

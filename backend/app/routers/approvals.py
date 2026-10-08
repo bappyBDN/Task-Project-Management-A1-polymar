@@ -219,6 +219,11 @@ def create_approval(
         data["approver_id"] = None  # nobody approves their own request; resolved below
     approval = models.Approval(**data, status="pending")
     entity = _entity(db, approval)
+    # One completion request per progress update: no second one while it is pending, and after
+    # a decision the progress is updated first.
+    if (approval.entity_type == "task" and approval.approval_type == "completion" and entity is not None
+            and services.completion_submitted_ids(db, [entity.id])):
+        raise HTTPException(409, "Completion is already submitted for this task. Update the progress before submitting it again.")
 
     if _is_date_revision(approval):
         # Date revisions always go to the task's Reviewer.

@@ -105,7 +105,11 @@ def list_tasks(
             models.Task.approved_due_date.isnot(None),
             models.Task.approved_due_date < today,
         )
-    return [t for t in q.order_by(models.Task.approved_due_date, _PRIORITY_RANK).all() if scope.sees_task(t)]
+    tasks = [t for t in q.order_by(models.Task.approved_due_date, _PRIORITY_RANK).all() if scope.sees_task(t)]
+    submitted = services.completion_submitted_ids(db, [t.id for t in tasks])
+    for t in tasks:
+        t.completion_submitted = t.id in submitted
+    return tasks
 
 
 @router.post("", response_model=schemas.TaskOut, status_code=201)
@@ -170,6 +174,7 @@ def get_task(task_id: int, include_deleted: bool = False, db: Session = Depends(
         raise HTTPException(404, "Task not found")
     if not scope.sees_task(task):
         raise HTTPException(403, "You don't have access to this task. Only the people on the task or its project, the heads of its SBU / function / department and admin / PMO can open it.")
+    task.completion_submitted = task.id in services.completion_submitted_ids(db, [task.id])
     return task
 
 

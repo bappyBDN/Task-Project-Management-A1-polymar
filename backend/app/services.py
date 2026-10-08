@@ -5,6 +5,7 @@ from typing import Optional
 from typing import List, Optional, Set
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import gantt, models
@@ -183,6 +184,26 @@ def apply_completion_rules(task: models.Task):
             task.actual_due_date = date.today()
     elif task.actual_due_date is not None and task.status != "cancelled":
         task.actual_due_date = None
+
+
+def completion_submitted_ids(db: Session, task_ids) -> set[int]:
+    """Tasks whose completion is already submitted and can't be submitted again yet:
+    a completion request is still pending, or nobody has updated the progress since the
+    last one (a rejected task is updated first, then submitted again)."""
+    ids = list(task_ids)
+    if not ids:
+        return set()
+    last_request: dict[int, models.Approval] = {}
+    for a in db.query(models.Approval).filter(
+            models.Approval.entity_type == "task", models.Approval.approval_type == "completion",
+            models.Approval.entity_id.in_(ids)).order_by(models.Approval.id).all():
+        last_request[a.entity_id] = a
+    if not last_request:
+        return set()
+    last_progress = dict(db.query(models.ProgressUpdate.task_id, func.max(models.ProgressUpdate.created_at)).filter(
+        models.ProgressUpdate.task_id.in_(list(last_request))).group_by(models.ProgressUpdate.task_id).all())
+    return {tid for tid, a in last_request.items()
+            if a.status == "pending" or last_progress.get(tid) is None or last_progress[tid] <= a.created_at}
 
 
 def scan_escalations(db: Session) -> list[dict]:

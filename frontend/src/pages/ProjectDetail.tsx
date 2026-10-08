@@ -10,6 +10,7 @@ import ProjectRaci from '../components/ProjectRaci'
 import MethodologyApproval from '../components/MethodologyApproval'
 import ProjectGantt from '../components/ProjectGantt'
 import CommentsPanel from '../components/CommentsPanel'
+import CompletionButton from '../components/CompletionButton'
 import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { RichTextView } from '../components/RichText'
@@ -293,7 +294,7 @@ export default function ProjectDetail() {
               <thead>
                 <tr>
                   <th>Code</th><th>Task</th><th>Responsible</th><th>Priority</th>
-                  <th>Status</th><th>Health</th><th>Progress</th><th>Due</th>
+                  <th>Status</th><th>Health</th><th>Progress</th><th>Due</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -310,9 +311,12 @@ export default function ProjectDetail() {
                       <span className="small muted">{t.progress_pct}%</span>
                     </td>
                     <td className="small">{fmtDate(t.approved_due_date || t.baseline_due_date)}</td>
+                    <td>
+                      <CompletionButton task={t} onDone={reloadTasks} />
+                    </td>
                   </tr>
                 ))}
-                {tasks.length === 0 && <tr><td colSpan={8} className="muted small">No tasks under this project</td></tr>}
+                {tasks.length === 0 && <tr><td colSpan={9} className="muted small">No tasks under this project</td></tr>}
               </tbody>
             </table>
             </div>
