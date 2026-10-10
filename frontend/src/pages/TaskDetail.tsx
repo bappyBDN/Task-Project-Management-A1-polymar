@@ -25,6 +25,7 @@ export default function TaskDetail() {
   const [showRca, setShowRca] = useState(false)
   const [showProgress, setShowProgress] = useState(false)
   const [showRevise, setShowRevise] = useState(false)
+  const [showDates, setShowDates] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
 
   // New states for success message and button cooldown
@@ -169,6 +170,7 @@ export default function TaskDetail() {
             {cooldown || task.completion_submitted ? '✓ Submitted' : 'Submit for Completion'}
           </button>
           {canEdit && <button className="btn sm" onClick={() => setShowEdit(true)}>✎ Edit Task</button>}
+          {isProjectManager && <button className="btn sm" onClick={() => setShowDates(true)} title="As the project's Manager you can move this task's start and due date. Everyone on the task and the project is notified.">🗓 Change Dates</button>}
           {canDelete && <button className="btn sm danger" onClick={removeTask} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete Task'}</button>}
         </div>
       </div>
@@ -285,6 +287,7 @@ export default function TaskDetail() {
 
       {showRca && <RcaForm task={task} users={users} onClose={() => setShowRca(false)} onSaved={() => { setShowRca(false); load() }} />}
       {showProgress && <ProgressForm task={task} canComplete={isPrivileged} onClose={() => setShowProgress(false)} onSaved={() => { setShowProgress(false); load() }} />}
+      {showDates && <DatesForm task={task} onClose={() => setShowDates(false)} onSaved={() => { setShowDates(false); load() }} />}
       {showRevise && <ReviseForm task={task} users={users} onClose={() => setShowRevise(false)} onSaved={() => { setShowRevise(false); load() }} />}
       {showEdit && (
         <TaskForm
@@ -300,6 +303,61 @@ export default function TaskDetail() {
           onSaved={() => { setShowEdit(false); load() }}
         />
       )}
+    </div>
+  )
+}
+
+// The project's Manager moves the task's planned start / due date (no approval needed);
+// the server notifies everyone on the task and the project.
+function DatesForm({ task, onClose, onSaved }: { task: Task; onClose: () => void; onSaved: () => void }) {
+  const due = task.approved_due_date || task.baseline_due_date || ''
+  const [start, setStart] = useState(task.planned_start_date || '')
+  const [newDue, setNewDue] = useState(due)
+  const [reason, setReason] = useState('')
+  const [err, setErr] = useState('')
+  const [saving, setSaving] = useState(false)
+  const changed = start !== (task.planned_start_date || '') || newDue !== due
+
+  const submit = async () => {
+    if (saving) return
+    if (start && newDue && start > newDue) { setErr("The start date can't be after the due date."); return }
+    setSaving(true)
+    setErr('')
+    try {
+      await api.post(`/tasks/${task.id}/dates`, { planned_start_date: start || null, due_date: newDue || null, reason: reason.trim() || null })
+      onSaved()
+    } catch (e: any) {
+      setErr(e.message || 'Could not change the dates.')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
+        <h2>Change Task Dates</h2>
+        {err && <div className="alert error" role="alert">{err}</div>}
+        <div className="form-row">
+          <div>
+            <label>Planned Start</label>
+            <input type="date" value={start} max={newDue || undefined} onChange={(e) => setStart(e.target.value)} disabled={saving} />
+          </div>
+          <div>
+            <label>Due Date</label>
+            <input type="date" value={newDue} min={start || undefined} onChange={(e) => setNewDue(e.target.value)} disabled={saving} />
+          </div>
+        </div>
+        <label>Reason <span style={{ fontWeight: 400 }}>— optional, shown in the notification</span></label>
+        <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why are the dates changing?" disabled={saving} />
+        <div className="small muted" style={{ marginTop: 8 }}>
+          Saved at once, without approval. The task's Responsible, Accountable, Reviewer and Informed people, the project's
+          Sponsor and Owner and its associated people are notified.
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn primary" onClick={submit} disabled={saving || !changed}>{saving ? 'Saving…' : 'Save Dates'}</button>
+        </div>
+      </div>
     </div>
   )
 }

@@ -316,6 +316,71 @@ def permanent_delete_task(task_id: int, admin: models.User = Depends(get_admin_u
     db.commit()
 
 
+# ---------------------------------------------------------------- Dates (project Manager)
+def _date_text(d) -> str:
+    return d.strftime("%d %b %Y") if d else "not set"
+
+
+@router.post("/{task_id}/dates", response_model=schemas.TaskOut)
+def change_dates(task_id: int, payload: schemas.TaskDatesIn, db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)):
+    """The project's Manager (or an admin / privileged role / the SBU's COO) moves a task's
+    planned start and due date directly - no approval - and everyone related to the task and
+    its project is told. The due date changed is the approved one; the baseline stays as the
+    original plan (it is set here only if the task had none)."""
+    task = db.get(models.Task, task_id)
+    if not task or task.is_deleted:
+        raise HTTPException(404, "Task not found")
+    project = db.get(models.Project, task.project_id) if task.project_id else None
+    is_manager = bool(project) and project.manager_id == current_user.id
+    if not (is_manager or permissions.can_manage(db, current_user, task)):
+        raise HTTPException(403, "Only the project's Manager or an admin / PMO can change a task's dates here.")
+
+    sent = payload.model_dump(exclude_unset=True)
+    old_start, old_due = task.planned_start_date, task.approved_due_date or task.baseline_due_date
+    new_start = sent.get("planned_start_date") or old_start
+    new_due = sent.get("due_date") or old_due
+    if new_start and new_due and new_start > new_due:
+        raise HTTPException(400, "The start date can't be after the due date.")
+    if (new_start, new_due) == (old_start, old_due):
+        return task
+
+    task.planned_start_date = new_start
+    if new_due != old_due:
+        task.approved_due_date = new_due
+        if task.baseline_due_date is None:
+            task.baseline_due_date = new_due
+    _normalize(db, task)
+    if task.project_id:
+        services.recalc_project_health(db, task.project_id)
+
+    reason = (payload.reason or "").strip()
+    changes = []
+    if new_start != old_start:
+        changes.append(f"start {_date_text(old_start)} -> {_date_text(new_start)}")
+    if new_due != old_due:
+        changes.append(f"due {_date_text(old_due)} -> {_date_text(new_due)}")
+    services.audit(db, current_user.name, "task", task.id, "dates_changed",
+                   previous_value=f"start {_date_text(old_start)}, due {_date_text(old_due)}",
+                   new_value=f"start {_date_text(new_start)}, due {_date_text(new_due)}", reason=reason or None)
+
+    # everyone related: the people on the task, the project's Manager / Sponsor / Owner and
+    # its associated people - not whoever made the change
+    people = {task.responsible_id, task.accountable_id, task.reviewer_id, task.informed_id}
+    if project:
+        people |= {project.manager_id, project.sponsor_id, project.owner_id}
+        people |= {r[0] for r in db.query(models.ProjectAssociate.user_id).filter(
+            models.ProjectAssociate.project_id == project.id).all()}
+    body = (f"{current_user.name} changed the dates of '{task.title}'"
+            + (f" ({project.name})" if project else "") + ": " + "; ".join(changes) + "."
+            + (f" Reason: {reason}" if reason else ""))
+    for uid in people - {None, current_user.id}:
+        services.notify(db, uid, f"Task dates changed: {task.code}", body=body, kind="info")
+    db.commit()
+    db.refresh(task)
+    return task
+
+
 # ---------------------------------------------------------------- Progress
 @router.post("/{task_id}/progress", response_model=schemas.ProgressUpdateOut, status_code=201)
 def add_progress(task_id: int, payload: schemas.ProgressUpdateBase, db: Session = Depends(get_db),

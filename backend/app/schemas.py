@@ -339,6 +339,14 @@ class TaskOut(TaskBase):
     completion_submitted: bool = False
 
 
+class TaskDatesIn(BaseModel):
+    """POST /tasks/{id}/dates: the project's Manager moves a task's dates. A field left
+    out stays as it is."""
+    planned_start_date: Optional[date] = None
+    due_date: Optional[date] = None
+    reason: Optional[str] = None
+
+
 class ProgressUpdateBase(BaseModel):
     task_id: int
     progress_pct: float = 0.0
