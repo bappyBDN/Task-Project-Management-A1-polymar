@@ -169,6 +169,14 @@ def next_code(prefix: str, db: Session, model) -> str:
 
 
 DONE_STATUSES = ("completed", "closed")
+STARTED_STATUSES = ("in_progress", "in_review") + DONE_STATUSES
+
+
+def stamp_start(task: models.Task):
+    """Record the day work began (`actual_start_date`) the first time the task is in
+    progress or has any progress. Kept once set: it is the first start."""
+    if task.actual_start_date is None and (task.status in STARTED_STATUSES or (task.progress_pct or 0) > 0):
+        task.actual_start_date = date.today()
 
 
 def apply_completion_rules(task: models.Task):
@@ -178,6 +186,7 @@ def apply_completion_rules(task: models.Task):
     in the completion email) stamped with today if not already set.
     Any other status  -> a previously stamped completion date is cleared (task re-opened).
     """
+    stamp_start(task)
     if task.status in DONE_STATUSES:
         task.progress_pct = 100.0
         if task.actual_due_date is None:

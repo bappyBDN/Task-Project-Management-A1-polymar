@@ -2,7 +2,8 @@ import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { Comment, Company, Department, Function, Project, ProjectKpi, Task, TaskKpi, User } from '../types'
+import { Comment, Company, Department, Function, Project, ProjectKpi, Task, TaskKpi, User, UserKpi } from '../types'
+import KpiCard from '../components/KpiCard'
 import { HEALTH_COLORS, STATUS_COLORS, fmtDate, label } from '../constants'
 import { mergeSbuRows, sbuIdsOf } from '../org'
 import { sbuKey } from '../components/SbuSelect'
@@ -552,6 +553,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [taskKpi, setTaskKpi] = useState<TaskKpi | null>(null)
   const [projKpi, setProjKpi] = useState<ProjectKpi | null>(null)
+  const [myKpi, setMyKpi] = useState<UserKpi | null>(null) // my own KPI card
   const [myTasks, setMyTasks] = useState<Task[]>([])
   // names for the My Tasks table (project, its manager, the task's Responsible person)
   const [projects, setProjects] = useState<Project[]>([])
@@ -615,6 +617,8 @@ export default function Dashboard() {
       .catch(fail)
     // Trends are optional: an older backend without this route just shows flat sparklines.
     api.get<Trends>(`/dashboards/individual/${userId}/trends?days=7`).then(ok(setTrends)).catch(() => {})
+    // My KPI card is optional too: without the route the card is simply not shown.
+    api.get<UserKpi>('/kpi/me').then(ok(setMyKpi)).catch(() => {})
     // The KPI cards count tasks where you are Responsible, Accountable, Reviewer OR Informed, plus every
     // task of the projects you lead (Manager / Sponsor / Owner), so the list loads all five -
     // otherwise "Total Tasks: 1" could sit next to an empty list.
@@ -796,6 +800,8 @@ export default function Dashboard() {
             )
           })}
         </div>
+
+        {myKpi && <div style={{ marginBottom: 22 }}><KpiCard kpi={myKpi} /></div>}
 
         <div className="dsb-cols">
           <div className="dsb-stack">

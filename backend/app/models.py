@@ -241,6 +241,9 @@ class Task(Base, TimestampMixin):
     approved_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     forecast_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     actual_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # the day work on the task began (first in progress / first progress); stamped by
+    # services.apply_completion_rules, read by the KPI's On-Time Start rate (routers/kpi.py)
+    actual_start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     # the forecast the Gantt schedule last wrote; a forecast_due_date that differs was typed by a person
     auto_forecast_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     # the person's own forecast that a calculated one replaced - put back when the delay is gone

@@ -170,6 +170,8 @@ export interface Task {
   approved_due_date?: string
   forecast_due_date?: string
   actual_due_date?: string
+  /** the day work began (set by the server) */
+  actual_start_date?: string
   progress_pct: number
   status: string
   health: string
@@ -372,4 +374,48 @@ export interface Notification {
   /** where a click leads (/tasks/12, /projects/3, /approvals ...), worked out by the server */
   link?: string | null
   link_label?: string | null
+}
+/** One person's KPI over the tasks they are Responsible for (GET /kpi/...). */
+export interface UserKpi {
+  user_id: number
+  name: string
+  employee_id?: string | null
+  designation?: string | null
+  role?: string | null
+  company?: string | null
+  department?: string | null
+  assigned: number
+  completed: number
+  open: number
+  overdue: number
+  completed_on_time: number
+  /** tasks whose start could be judged (the On-Time Start denominator) */
+  start_judged: number
+  started_on_time: number
+  tcr: number
+  otr: number
+  /** null = no task whose start can be judged */
+  otsr?: number | null
+  /** TCR x 0.60 + OTR x 0.40; null = no tasks assigned */
+  total_kpi?: number | null
+  rating: string
+}
+
+export interface UserKpiTask {
+  id: number
+  code: string
+  title: string
+  status: string
+  planned_start_date?: string | null
+  actual_start_date?: string | null
+  due_date?: string | null
+  actual_due_date?: string | null
+  /** null = not completed yet */
+  on_time?: boolean | null
+  /** null = start not judged */
+  started_on_time?: boolean | null
+}
+
+export interface UserKpiDetail extends UserKpi {
+  tasks: UserKpiTask[]
 }

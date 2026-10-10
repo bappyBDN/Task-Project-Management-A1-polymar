@@ -331,6 +331,7 @@ class TaskOut(TaskBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     actual_due_date: Optional[date] = None
+    actual_start_date: Optional[date] = None  # the day work began (set by the server)
     sbu_ids: list[int] = []
     created_at: datetime
     created_by: Optional[str] = None  # name of whoever created the task
@@ -568,6 +569,46 @@ class NotificationOut(BaseModel):
 
 
 # ---------------------------------------------------------------- Dashboards
+class UserKpiOut(BaseModel):
+    """One person's KPI over the tasks they are Responsible for (routers/kpi.py)."""
+    user_id: int
+    name: str
+    employee_id: Optional[str] = None
+    designation: Optional[str] = None
+    role: Optional[str] = None
+    company: Optional[str] = None
+    department: Optional[str] = None
+    assigned: int
+    completed: int
+    open: int
+    overdue: int
+    completed_on_time: int
+    start_judged: int       # tasks whose start could be judged (the OTSR denominator)
+    started_on_time: int
+    tcr: float              # Task Completion Rate, %
+    otr: float              # On-Time Delivery Rate, %
+    otsr: Optional[float] = None       # On-Time Start Rate, %; None = no task to judge
+    total_kpi: Optional[float] = None  # TCR x 0.60 + OTR x 0.40; None = no tasks assigned
+    rating: str             # excellent / good / fair / needs_attention / no_tasks
+
+
+class UserKpiTaskOut(BaseModel):
+    id: int
+    code: str
+    title: str
+    status: str
+    planned_start_date: Optional[date] = None
+    actual_start_date: Optional[date] = None
+    due_date: Optional[date] = None
+    actual_due_date: Optional[date] = None
+    on_time: Optional[bool] = None          # None = not completed yet
+    started_on_time: Optional[bool] = None  # None = start not judged
+
+
+class UserKpiDetailOut(UserKpiOut):
+    tasks: list[UserKpiTaskOut] = []
+
+
 class TaskKpiOut(BaseModel):
     total: int
     open: int

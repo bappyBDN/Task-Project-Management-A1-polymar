@@ -9,7 +9,7 @@ from app import auth  # 👈 login / forgot-password / reset-password
 from app.routers import (
     organizations, projects, tasks, delays, approvals, backlogs, dashboards,
     audit, governance, raci, list_options, email_notifications, privileged, user_mapping,
-    comments, methodology,
+    comments, methodology, kpi,
 )
 from app.scheduler import start_scheduler, stop_scheduler
 from app.seed import seed
@@ -29,6 +29,7 @@ _NEW_COLUMNS = [
     ("projects", "gantt_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("tasks", "auto_forecast_date", "DATE"),
     ("tasks", "own_forecast_date", "DATE"),
+    ("tasks", "actual_start_date", "DATE"),
 ]
 
 
@@ -62,6 +63,23 @@ def backfill_project_creators():
 
 backfill_project_creators()
 
+
+def backfill_task_starts():
+    """Tasks begun before `actual_start_date` was recorded take the day of their first
+    progress update that shows work. Fills only empty values and changes nothing else;
+    a task with no such update stays blank (its start is not known)."""
+    started = "('in_progress', 'in_review', 'completed', 'closed')"
+    with engine.begin() as conn:
+        conn.execute(text(
+            "UPDATE tasks SET actual_start_date = ("
+            "SELECT MIN(DATE(p.created_at)) FROM progress_updates p "
+            f"WHERE p.task_id = tasks.id AND (p.progress_pct > 0 OR p.status IN {started})"
+            f") WHERE actual_start_date IS NULL AND (progress_pct > 0 OR status IN {started})"
+        ))
+
+
+backfill_task_starts()
+
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
@@ -81,7 +99,7 @@ _login_required = [Depends(auth.get_current_user)]
 for _r in (
     organizations, projects, tasks, delays, approvals, backlogs, dashboards,
     audit, governance, raci, privileged, list_options, email_notifications, user_mapping,
-    comments, methodology,
+    comments, methodology, kpi,
 ):
     app.include_router(_r.router, dependencies=_login_required)
 

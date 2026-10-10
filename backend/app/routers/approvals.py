@@ -305,6 +305,7 @@ def decide_approval(
                 task.status = "completed"
                 task.actual_due_date = date.today()
                 task.progress_pct = 100.0
+                services.stamp_start(task)
             if approval.approval_type == "revised_date":
                 # The pending delay record that carries the proposed date (a plain
                 # delay logged later no longer hides it).

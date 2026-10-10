@@ -216,6 +216,7 @@ export default function TaskDetail() {
                 <tr><td className="muted">Baseline Due</td><td>{fmtDate(task.baseline_due_date)}</td></tr>
                 <tr><td className="muted">Approved Due</td><td>{fmtDate(task.approved_due_date)}</td></tr>
                 <tr><td className="muted">Forecast</td><td>{fmtDate(task.forecast_due_date)}</td></tr>
+                <tr><td className="muted">Actual Start</td><td>{fmtDate(task.actual_start_date)}</td></tr>
                 <tr><td className="muted">Actual Completion</td><td>{fmtDate(task.actual_due_date)}</td></tr>
               </tbody>
             </table>

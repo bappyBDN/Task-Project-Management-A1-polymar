@@ -20,6 +20,8 @@ import Raci from './pages/Raci'
 import Kanban from './pages/Kanban'
 import Notifications from './pages/Notifications'
 import AdminPanel from './pages/AdminPanel'
+import UserKpi from './pages/UserKpi'
+import { useIsPrivileged } from './usePrivileged'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import { label } from './constants'
@@ -41,6 +43,7 @@ const ICONS: Record<string, string> = {
   notifications: 'M6 9a6 6 0 0112 0c0 6 3 8 3 8H3s3-2 3-8M10 21h4',
   audit: 'M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9zM14 3v6h6M8 13h8M8 17h5',
   admin: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
+  kpi: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   signout: 'M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9',
 }
 
@@ -73,7 +76,7 @@ const ADMIN: NavItem[] = [
   { to: '/admin', label: 'Admin Panel', icon: 'admin' },
 ]
 
-function buildSections(isAdmin: boolean): NavSection[] {
+function buildSections(isAdmin: boolean, seesKpi: boolean): NavSection[] {
   const sections: NavSection[] = [
     // the Tasks page (every task in one list) is for admins; everyone else opens a project's
     // tasks from the project page
@@ -81,6 +84,8 @@ function buildSections(isAdmin: boolean): NavSection[] {
     { section: 'Governance', items: GOVERNANCE },
   ]
   if (isAdmin) sections.push({ section: 'Administration', items: ADMIN })
+  // the privileged roles have no Admin Panel: they open User KPI from the menu (admins: its tab there)
+  else if (seesKpi) sections.push({ section: 'Administration', items: [{ to: '/user-kpi', label: 'User KPI', icon: 'kpi' }] })
   return sections
 }
 
@@ -131,6 +136,7 @@ export default function App() {
   // close the phone menu after navigating
   useEffect(() => { setNavOpen(false) }, [location.pathname])
   const badges = useNavBadges(user?.id, location.pathname)
+  const isPrivileged = useIsPrivileged(user?.role)
 
   if (loading) {
     return (
@@ -150,7 +156,7 @@ export default function App() {
 
   // ---- Logged in → main layout ----
   const isAdmin = user.role === 'admin'
-  const sections = buildSections(isAdmin)
+  const sections = buildSections(isAdmin, isPrivileged)
 
   return (
     <div className="app">
@@ -228,6 +234,7 @@ export default function App() {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/audit" element={<Audit />} />
           {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
+          {isPrivileged && <Route path="/user-kpi" element={<UserKpi />} />}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
