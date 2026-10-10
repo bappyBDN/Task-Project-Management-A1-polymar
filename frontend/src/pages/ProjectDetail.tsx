@@ -270,8 +270,6 @@ export default function ProjectDetail() {
 
       <ProjectContribution project={project} tasks={tasks} users={users} canManage={canManageAssociates} reloadUsers={reloadUsers} />
 
-      <ProjectGantt project={project} tasks={tasks} users={users} canToggle={canManageAssociates} onProject={setProject} onChanged={reloadTasks} />
-
           <div className="card mt" ref={taskListRef}>
             <div className="spread">
               <div className="section-title" style={{ marginTop: 0 }}>
@@ -317,6 +315,8 @@ export default function ProjectDetail() {
             </table>
             </div>
           </div>
+
+      <ProjectGantt project={project} tasks={tasks} users={users} canToggle={canManageAssociates} onProject={setProject} onChanged={reloadTasks} />
 
       <CommentsPanel kind="project" id={project.id} recipients={[{ id: project.manager_id, name: userName(project.manager_id) }]} />
     </div>
