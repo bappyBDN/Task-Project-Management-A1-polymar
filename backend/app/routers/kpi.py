@@ -23,7 +23,9 @@ Each role is also scored on its own.
 Project KPI - for a project's Manager, over the projects they manage (cancelled ones are
 left out). A project still running inside its due date is neither a success nor a failure
 yet, so it is not counted; the ones counted are "due": completed, or past the due date.
-  PCR        Project Completion Rate = completed projects / due projects
+  PCR        Project Completion Rate = (completed projects + the overall progress of each
+             due project still open) / due projects - a project past its due date that is
+             90 % done counts as 0.9 of a project, not as nothing
   POTR       Project On-Time Rate    = completed on or before the due date / completed
              (completion date = projects.actual_due_date, else the day its last task was
              completed; none known, or no due date = counts as on time)
@@ -98,7 +100,9 @@ def _judge_project(p: models.Project, last_task_done: Optional[date], today: dat
     if completed:
         on_time = due is None or finished is None or finished <= due
     state = "completed" if completed else "overdue" if due is not None and due < today else "running"
-    return {"due": due, "completed": completed, "finished": finished, "on_time": on_time, "state": state}
+    progress = 100.0 if completed else max(0.0, min(100.0, float(p.completion_pct or 0.0)))
+    return {"due": due, "completed": completed, "finished": finished, "on_time": on_time, "state": state,
+            "progress": progress}
 
 
 class _Data:
@@ -148,17 +152,21 @@ class _Data:
             good = sum(1 for j in mine if j["on_time"])
             r_tcr, r_otr = _pct(done, len(mine)), _pct(good, done)
             roles.append({"role": role, "unit": "tasks", "assigned": len(mine), "completed": done,
-                          "completed_on_time": good, "not_counted": 0,
+                          "completed_on_time": good, "not_counted": 0, "open_progress": None,
                           "tcr": r_tcr, "otr": r_otr, "kpi": _weighted(r_tcr, r_otr, len(mine))})
 
         projects = self.projects.get(user.id, [])
         due = [j for _, j in projects if j["state"] != "running"]
         p_done = sum(1 for j in due if j["completed"])
         p_good = sum(1 for j in due if j["on_time"])
-        pcr, potr = _pct(p_done, len(due)), _pct(p_good, p_done)
+        # a due project still open counts for as much as it is done (its overall progress)
+        behind = [j["progress"] for j in due if not j["completed"]]
+        pcr = round((p_done * 100 + sum(behind)) / len(due), 1) if due else 0.0
+        potr = _pct(p_good, p_done)
         project_kpi = _weighted(pcr, potr, len(due))
         roles.append({"role": "project_manager", "unit": "projects", "assigned": len(due), "completed": p_done,
                       "completed_on_time": p_good, "not_counted": len(projects) - len(due),
+                      "open_progress": round(sum(behind) / len(behind), 1) if behind else None,
                       "tcr": pcr, "otr": potr, "kpi": project_kpi})
 
         parts = [k for k in (task_kpi, project_kpi) if k is not None]
@@ -185,6 +193,7 @@ class _Data:
             projects.sort(key=lambda r: (r[1]["due"] or date.max, r[0].id))
             out["projects"] = [{
                 "id": p.id, "code": p.code, "name": p.name, "status": p.status, "state": j["state"],
+                "progress_pct": j["progress"],
                 "due_date": j["due"], "completed_date": j["finished"], "on_time": j["on_time"],
             } for p, j in projects]
         return out

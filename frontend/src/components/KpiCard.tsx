@@ -94,7 +94,7 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
             return (
               <div key={r.role} className={`kpic-role${has ? '' : ' none'}`}
                 title={projects
-                  ? 'Scored on the projects managed: completed ÷ due projects × 60% + completed on time ÷ completed × 40%. A due project is completed or past its due date; one still running inside its due date is not counted yet.'
+                  ? 'Scored on the projects managed: (completed + the overall progress of due projects still open) ÷ due projects × 60% + completed on time ÷ completed × 40%. A due project is completed or past its due date; one still running inside its due date is not counted yet.'
                   : has ? `As ${ROLE_NAME[r.role]}: TCR ${pct(r.tcr)} × 60% + OTR ${pct(r.completed ? r.otr : null)} × 40%` : `No tasks as ${ROLE_NAME[r.role]}`}>
                 <div className="small muted">As {ROLE_NAME[r.role]}</div>
                 <strong style={has ? { color: toneOf(r.kpi!) } : undefined}>{has ? Number(r.kpi!.toFixed(1)) : '—'}</strong>
@@ -102,6 +102,9 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
                   {projects
                     ? (has ? `${r.completed} of ${r.assigned} due project${r.assigned === 1 ? '' : 's'} done · ${r.completed_on_time} on time` : waiting || 'No projects')
                     : (has ? `${r.completed} of ${r.assigned} done · ${r.completed_on_time} on time` : 'No tasks')}
+                  {projects && has && r.open_progress !== null && r.open_progress !== undefined && (
+                    <div>{r.assigned - r.completed} past due, {Number(r.open_progress.toFixed(1))}% done on average</div>
+                  )}
                   {projects && has && waiting && <div>{waiting}</div>}
                 </div>
               </div>

@@ -587,6 +587,7 @@ class RoleKpiOut(BaseModel):
     completed: int
     completed_on_time: int
     not_counted: int = 0    # projects still running inside their due date
+    open_progress: Optional[float] = None  # average progress of the due projects still open, %
     tcr: float              # completion rate, %
     otr: float              # on-time rate, %
     kpi: Optional[float] = None  # None = nothing to score in this role
@@ -639,6 +640,7 @@ class UserKpiProjectOut(BaseModel):
     name: str
     status: str
     state: str                             # completed / overdue (both counted) / running (not counted)
+    progress_pct: float = 0.0              # overall progress (100 when completed)
     due_date: Optional[date] = None
     completed_date: Optional[date] = None
     on_time: Optional[bool] = None         # None = not completed yet

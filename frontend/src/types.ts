@@ -386,6 +386,8 @@ export interface RoleKpi {
   completed_on_time: number
   /** projects still running inside their due date (not counted yet) */
   not_counted?: number
+  /** average progress of the due projects still open, %; null = none */
+  open_progress?: number | null
   tcr: number
   otr: number
   /** null = nothing to score in this role */
@@ -399,6 +401,8 @@ export interface UserKpiProject {
   status: string
   /** completed / overdue (both counted) or running (not counted yet) */
   state: 'completed' | 'overdue' | 'running'
+  /** overall progress (100 when completed) */
+  progress_pct?: number
   due_date?: string | null
   completed_date?: string | null
   /** null = not completed yet */

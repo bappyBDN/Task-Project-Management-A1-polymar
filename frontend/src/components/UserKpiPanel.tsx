@@ -115,19 +115,20 @@ export default function UserKpiPanel() {
                   <div style={{ overflowX: 'auto' }}>
                     <table>
                       <thead>
-                        <tr><th>Project</th><th>Status</th><th>Due</th><th>Completed</th><th>Delivery</th><th>In the score</th></tr>
+                        <tr><th>Project</th><th>Status</th><th>Progress</th><th>Due</th><th>Completed</th><th>Delivery</th><th>In the score</th></tr>
                       </thead>
                       <tbody>
                         {detail.projects.map((p) => (
                           <tr key={p.id} onClick={() => navigate(`/projects/${p.id}`)} style={{ cursor: 'pointer' }}>
                             <td><span className="muted small">{p.code}</span> {p.name}</td>
                             <td><span className="badge gray">{label(p.status)}</span></td>
+                            <td className="small">{pct(p.progress_pct)}</td>
                             <td className="small">{fmtDate(p.due_date ?? undefined)}</td>
                             <td className="small">{fmtDate(p.completed_date ?? undefined)}</td>
                             <td>{yesNo(p.on_time, 'On time', 'Late')}</td>
                             <td>
                               {p.state === 'completed' ? <span className="badge green">Completed</span>
-                                : p.state === 'overdue' ? <span className="badge red">Overdue, not completed</span>
+                                : p.state === 'overdue' ? <span className="badge amber" title="Past its due date and not completed: counted for as much as it is done">Past due — counted by progress</span>
                                   : <span className="badge gray" title="Still running inside its due date: not counted yet">Running — not counted</span>}
                             </td>
                           </tr>

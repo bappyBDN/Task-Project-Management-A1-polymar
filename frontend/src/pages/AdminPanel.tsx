@@ -117,6 +117,7 @@ export default function AdminPanel() {
   const [privileged, setPrivileged] = useState<string[]>([])
   const [allRoles, setAllRoles] = useState<string[]>([])
   const [newRole, setNewRole] = useState('')
+  const [userSearch, setUserSearch] = useState('') // Users tab: search box
   const [showOrgModal, setShowOrgModal] = useState<'company' | 'function' | 'department' | null>(null)
   const [showQuickUser, setShowQuickUser] = useState(false)
 
@@ -281,6 +282,15 @@ export default function AdminPanel() {
     .filter((u) => u.id !== editing?.id)
     .map((u) => ({ value: String(u.id), label: `${u.name} — ${label(u.role)}` }))
 
+  // Users tab search: every word typed must be found somewhere on the user's row
+  const searchWords = userSearch.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const shownUsers = !searchWords.length ? users : users.filter((u) => {
+    const status = !u.is_active ? 'inactive' : u.employee_id.startsWith('INVITED-') ? 'invited' : 'active'
+    const hay = [u.employee_id, u.name, u.email, u.designation, label(u.role), u.role, status,
+      ...userSbuIds(u).map((id) => sbuName(companies, id))].filter(Boolean).join(' ').toLowerCase()
+    return searchWords.every((w) => hay.includes(w))
+  })
+
   return (
     <div>
       <div className="topbar">
@@ -430,8 +440,11 @@ export default function AdminPanel() {
 
       {tab === 'users' && (
         <>
-          <div className="mb">
+          <div className="row mb" style={{ flexWrap: 'wrap' }}>
             <button className="btn primary" onClick={openCreate}>+ New User</button>
+            <input type="search" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} aria-label="Search users"
+              placeholder="Search users: name, employee ID, email, designation, role, SBU…" style={{ flex: 1, minWidth: 220, maxWidth: 440 }} />
+            {userSearch.trim() && <span className="small muted">{shownUsers.length} of {users.length} users</span>}
           </div>
           <div className="card" style={{ padding: 0 }}>
             <table>
@@ -439,7 +452,8 @@ export default function AdminPanel() {
                 <tr><th>ID</th><th>Name</th><th>Email</th><th>Designation</th><th>Role</th><th>Active</th><th>Actions</th></tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {shownUsers.length === 0 && <tr><td colSpan={7} className="muted small">No user matches this search.</td></tr>}
+                {shownUsers.map((u) => (
                   <tr key={u.id}>
                     <td className="muted small">{u.employee_id}</td>
                     <td>
