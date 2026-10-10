@@ -232,17 +232,13 @@ export default function ProjectDetail() {
           <div className="card">
             <div className="section-title" style={{ marginTop: 0 }}>Overview</div>
             <div className="form-row">
-              <div><label>Strategic Objective</label><div className="small"><RichTextView text={project.strategic_objective} /></div></div>
               <div><label>Objective</label><div className="small"><RichTextView text={project.objective} /></div></div>
-            </div>
-            <div className="form-row" style={{ marginTop: 12 }}>
               <div><label>Expected Outcome</label><div className="small"><RichTextView text={project.expected_outcome} /></div></div>
-              <div><label>Type / Methodology</label><div className="small">{label(project.project_type)} · {label(project.methodology)}</div></div>
             </div>
             <div className="form-row three" style={{ marginTop: 12 }}>
+              <div><label>Type / Methodology</label><div className="small">{label(project.project_type)} · {label(project.methodology)}</div></div>
               <div><label>Priority</label><span className={`badge ${PRIORITY_COLORS[project.priority] ?? 'gray'}`}>{label(project.priority)}</span></div>
               <div><label>Criticality</label><div className="small">{label(project.criticality)}</div></div>
-              <div><label>Budget</label><div className="small">{project.budget ? project.budget.toLocaleString() : '—'}</div></div>
             </div>
             <div className="form-row" style={{ marginTop: 12 }}>
               <div><label>Created By</label><div className="small">{project.created_by || '—'}</div></div>

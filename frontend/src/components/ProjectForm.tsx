@@ -27,7 +27,7 @@ const TYPE_MAX_LEN = 32 // projects.project_type is VARCHAR(32)
 
 const EMPTY_FORM = {
   name: '', company_id: '', manager_id: '', project_type: 'operational', methodology: 'hybrid',
-  status: 'planning', priority: 'medium', start_date: '', baseline_due_date: '', objective: '',
+  status: 'planning', priority: 'medium', start_date: '', baseline_due_date: '', objective: '', expected_outcome: '',
 }
 
 // Only these are mandatory; everything else is optional.
@@ -96,7 +96,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
     project_type: project.project_type || 'operational', methodology: project.methodology || 'hybrid',
     status: project.status || 'planning', priority: project.priority || 'medium',
     start_date: project.start_date || '', baseline_due_date: project.baseline_due_date || '',
-    objective: project.objective || '',
+    objective: project.objective || '', expected_outcome: project.expected_outcome || '',
     // a new project starts in the signed-in user's own SBU (they can change it)
   } : { ...EMPTY_FORM, company_id: me?.company_id != null ? String(me.company_id) : '' })
   // every SBU of the project (company ids); form.company_id is always the first one
@@ -289,6 +289,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
       status: form.status || 'planning',
       priority: form.priority || 'medium',
       objective: form.objective.trim() || null,
+      expected_outcome: form.expected_outcome.trim() || null,
     }
     if (!limited) {
       const p: any = pr
@@ -315,6 +316,7 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
       status: form.status || 'planning',
       priority: form.priority || 'medium',
       objective: form.objective.trim() || null,
+      expected_outcome: form.expected_outcome.trim() || null,
       start_date: form.start_date,
       baseline_due_date: form.baseline_due_date,
       approved_due_date: form.baseline_due_date,
@@ -389,6 +391,9 @@ export default function ProjectForm({ companies, users: listedUsers, types, onCl
 
         <label>Objective</label>
         <RichTextEditor rows={3} value={form.objective} onChange={(v) => set('objective', v)} placeholder="What should this project achieve?" disabled={lock} />
+
+        <label>Expected Outcome</label>
+        <RichTextEditor rows={3} value={form.expected_outcome} onChange={(v) => set('expected_outcome', v)} placeholder="What result is expected when this project is done?" disabled={lock} />
         </fieldset>
 
         {withTasks && (
