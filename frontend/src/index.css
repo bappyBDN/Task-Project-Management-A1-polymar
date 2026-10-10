@@ -418,12 +418,12 @@ tr.clickable, .clickable { cursor: pointer; }
 .gantt-bar.todo { background: #8a97ab; }
 .gantt-bar.active { background: #2f6fde; }
 .gantt-bar.review { background: #7a5af5; }
-.gantt-bar.held { background: #d9a514; }
+.gantt-bar.held { background: #d64545; }
 .gantt-bar.done { background: #1e9e5a; }
 .gantt-bar.cancelled { background: repeating-linear-gradient(135deg, #dfe4ec, #dfe4ec 5px, #eef1f5 5px, #eef1f5 10px); }
 .gantt-bar.critical { box-shadow: inset 0 0 0 2px var(--navy); }
 .gantt-progress { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(0, 0, 0, .24); }
-.gantt-late { position: absolute; right: 0; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, #d64545, #d64545 5px, #e87070 5px, #e87070 10px); }
+.gantt-late { position: absolute; right: 0; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, #d9a514, #d9a514 5px, #f0c95a 5px, #f0c95a 10px); }
 .gantt-label { position: absolute; white-space: nowrap; color: var(--muted); z-index: 1; }
 .gantt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
 .gantt-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -431,9 +431,9 @@ tr.clickable, .clickable { cursor: pointer; }
 .gantt-key.todo { background: #8a97ab; }
 .gantt-key.active { background: #2f6fde; }
 .gantt-key.review { background: #7a5af5; }
-.gantt-key.held { background: #d9a514; }
+.gantt-key.held { background: #d64545; }
 .gantt-key.done { background: #1e9e5a; }
-.gantt-key.late { background: repeating-linear-gradient(135deg, #d64545, #d64545 3px, #e87070 3px, #e87070 6px); }
+.gantt-key.late { background: repeating-linear-gradient(135deg, #d9a514, #d9a514 3px, #f0c95a 3px, #f0c95a 6px); }
 .gantt-key.critical { background: #fff; box-shadow: inset 0 0 0 2px var(--navy); }
 .gantt-key.plan { height: 4px; background: #b9c2d0; }
 .gantt-key.today { width: 0; height: 14px; border-left: 2px solid var(--gold); border-radius: 0; }

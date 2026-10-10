@@ -329,7 +329,7 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
                           {lateW > 0 && <span className="gantt-late" style={{ width: Math.min(lateW, w) }} />}
                         </div>
                         <div className="gantt-label small" style={{ top: i * ROW + 7, left: left + w + 6, lineHeight: `${ROW - 18}px` }}>
-                          {Math.round(t.progress_pct)}%{t.slip_days > 0 && <strong style={{ color: 'var(--red)' }}> +{t.slip_days}d</strong>}
+                          {Math.round(t.progress_pct)}%{t.slip_days > 0 && <strong style={{ color: 'var(--warn)' }}> +{t.slip_days}d</strong>}
                         </div>
                       </div>
                     )
@@ -384,7 +384,7 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
                         <td className="small">{userName(t.responsible_id)}</td>
                         <td className="small">{fmtDate(t.plan_finish)}</td>
                         <td className="small">{fmtDate(t.finish)}</td>
-                        <td><span className="badge red">+{days(t.slip_days)}</span></td>
+                        <td><span className="badge amber">+{days(t.slip_days)}</span></td>
                         <td className="small">
                           <span className={`badge ${t.cause === 'dependency' ? 'gray' : 'amber'}`} style={{ marginRight: 6 }}>{t.cause === 'dependency' ? 'Pushed' : 'Source'}</span>
                           {why(t)}
