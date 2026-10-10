@@ -178,6 +178,7 @@ class ProjectUpdate(BaseModel):
 class ProjectOut(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    actual_due_date: Optional[date] = None  # the day it was completed (set by the server)
     gantt_enabled: bool = False
     sbu_ids: list[int] = []
     created_at: Optional[datetime] = None
@@ -578,19 +579,22 @@ class NotificationOut(BaseModel):
 
 # ---------------------------------------------------------------- Dashboards
 class RoleKpiOut(BaseModel):
-    """The KPI over the tasks a person answers for in one role (routers/kpi.py ROLES)."""
+    """The KPI of one role (routers/kpi.py): over tasks for Responsible / Accountable /
+    Reviewer, over the projects they manage for Project Manager."""
     role: str               # responsible / accountable / reviewer / project_manager
-    assigned: int
+    unit: str = "tasks"     # what is counted: tasks / projects
+    assigned: int           # tasks; for projects, the due ones (completed or past due)
     completed: int
     completed_on_time: int
-    tcr: float
-    otr: float
-    kpi: Optional[float] = None  # None = no task in this role
+    not_counted: int = 0    # projects still running inside their due date
+    tcr: float              # completion rate, %
+    otr: float              # on-time rate, %
+    kpi: Optional[float] = None  # None = nothing to score in this role
 
 
 class UserKpiOut(BaseModel):
-    """One person's KPI over the tasks they answer for - as Responsible, Accountable,
-    Reviewer or the project's Manager, each task counted once (routers/kpi.py)."""
+    """One person's KPI (routers/kpi.py): the tasks they answer for as Responsible,
+    Accountable or Reviewer (each task once) and the projects they manage."""
     user_id: int
     name: str
     employee_id: Optional[str] = None
@@ -608,7 +612,9 @@ class UserKpiOut(BaseModel):
     tcr: float              # Task Completion Rate, %
     otr: float              # On-Time Delivery Rate, %
     otsr: Optional[float] = None       # On-Time Start Rate, %; None = no task to judge
-    total_kpi: Optional[float] = None  # TCR x 0.60 + OTR x 0.40; None = no tasks assigned
+    task_kpi: Optional[float] = None     # TCR x 0.60 + OTR x 0.40; None = no tasks
+    project_kpi: Optional[float] = None  # the same over managed projects; None = none due yet
+    total_kpi: Optional[float] = None    # the one there is, or their average; None = nothing to score
     rating: str             # excellent / good / fair / needs_attention / no_tasks
     roles: list[RoleKpiOut] = []  # the same score, role by role
 
@@ -627,8 +633,20 @@ class UserKpiTaskOut(BaseModel):
     started_on_time: Optional[bool] = None  # None = start not judged
 
 
+class UserKpiProjectOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    status: str
+    state: str                             # completed / overdue (both counted) / running (not counted)
+    due_date: Optional[date] = None
+    completed_date: Optional[date] = None
+    on_time: Optional[bool] = None         # None = not completed yet
+
+
 class UserKpiDetailOut(UserKpiOut):
     tasks: list[UserKpiTaskOut] = []
+    projects: list[UserKpiProjectOut] = []  # the projects the person manages
 
 
 class TaskKpiOut(BaseModel):

@@ -41,6 +41,12 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
   const r = RATING[kpi.rating] ?? RATING.no_tasks
   const score = kpi.total_kpi ?? null
   const deg = score === null ? 0 : Math.max(0, Math.min(100, score)) * 3.6
+  const num = (v?: number | null) => (v === null || v === undefined ? null : Number(v.toFixed(1)))
+  const taskKpi = num(kpi.task_kpi), projectKpi = num(kpi.project_kpi)
+  const both = taskKpi !== null && projectKpi !== null
+  const formula = both ? 'Total KPI = average of the Task KPI and the Project KPI'
+    : projectKpi !== null ? 'Total KPI = Project KPI = completion × 60% + on time × 40%'
+      : 'Total KPI = TCR × 60% + OTR × 40%'
   return (
     <div className="card kpic">
       <div className="kpic-top">
@@ -57,17 +63,18 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
       </div>
 
       <div className="kpic-body">
-        <div className="kpic-score" title="Total KPI = Task Completion Rate × 60% + On-Time Delivery Rate × 40%">
+        <div className="kpic-score" title={`${formula}. Task KPI = Task Completion Rate × 60% + On-Time Delivery Rate × 40%. Project KPI = the same over the projects managed.`}>
           <div className="kpic-ring" style={{ background: `conic-gradient(${r.hex} ${deg}deg, #e3e8f0 0)` }}>
             <div><strong>{score === null ? '—' : Number(score.toFixed(1))}</strong><span>out of 100</span></div>
           </div>
           <div className="small muted">Total KPI</div>
+          {both && <div className="small muted">Task {taskKpi} · Project {projectKpi}</div>}
         </div>
 
         <div className="kpic-rates">
           <Rate name="Task Completion Rate" short="TCR" value={kpi.assigned ? kpi.tcr : null} weight="60% of the score"
             detail={`${kpi.completed} of ${kpi.assigned} task${kpi.assigned === 1 ? '' : 's'} completed`}
-            hint="Completed tasks ÷ all the tasks this person answers for as Responsible, Accountable, Reviewer or the project's Manager (each task once; cancelled tasks are left out)" />
+            hint="Completed tasks ÷ all the tasks this person answers for as Responsible, Accountable or Reviewer (each task once; cancelled tasks are left out)" />
           <Rate name="On-Time Delivery Rate" short="OTR" value={kpi.completed ? kpi.otr : null} weight="40% of the score"
             detail={`${kpi.completed_on_time} of ${kpi.completed} completed task${kpi.completed === 1 ? '' : 's'} finished on time`}
             hint="Tasks completed on or before the approved (or baseline) due date ÷ total completed tasks" />
@@ -81,12 +88,22 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
         <div className="kpic-roles">
           {kpi.roles.map((r) => {
             const has = r.kpi !== null && r.kpi !== undefined
+            const projects = r.unit === 'projects'
+            const running = r.not_counted ?? 0
+            const waiting = running ? `${running} project${running === 1 ? '' : 's'} still running` : ''
             return (
               <div key={r.role} className={`kpic-role${has ? '' : ' none'}`}
-                title={has ? `As ${ROLE_NAME[r.role]}: TCR ${pct(r.tcr)} × 60% + OTR ${pct(r.completed ? r.otr : null)} × 40%` : `No tasks as ${ROLE_NAME[r.role]}`}>
+                title={projects
+                  ? 'Scored on the projects managed: completed ÷ due projects × 60% + completed on time ÷ completed × 40%. A due project is completed or past its due date; one still running inside its due date is not counted yet.'
+                  : has ? `As ${ROLE_NAME[r.role]}: TCR ${pct(r.tcr)} × 60% + OTR ${pct(r.completed ? r.otr : null)} × 40%` : `No tasks as ${ROLE_NAME[r.role]}`}>
                 <div className="small muted">As {ROLE_NAME[r.role]}</div>
                 <strong style={has ? { color: toneOf(r.kpi!) } : undefined}>{has ? Number(r.kpi!.toFixed(1)) : '—'}</strong>
-                <div className="small muted">{has ? `${r.completed} of ${r.assigned} done · ${r.completed_on_time} on time` : 'No tasks'}</div>
+                <div className="small muted">
+                  {projects
+                    ? (has ? `${r.completed} of ${r.assigned} due project${r.assigned === 1 ? '' : 's'} done · ${r.completed_on_time} on time` : waiting || 'No projects')
+                    : (has ? `${r.completed} of ${r.assigned} done · ${r.completed_on_time} on time` : 'No tasks')}
+                  {projects && has && waiting && <div>{waiting}</div>}
+                </div>
               </div>
             )
           })}
@@ -96,7 +113,7 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
       <div className="kpic-foot small muted">
         <span>{kpi.open} open</span>
         <span style={kpi.overdue ? { color: 'var(--red)', fontWeight: 600 } : undefined}>{kpi.overdue} overdue</span>
-        <span>Total KPI = TCR × 60% + OTR × 40%</span>
+        <span>{formula}</span>
       </div>
     </div>
   )

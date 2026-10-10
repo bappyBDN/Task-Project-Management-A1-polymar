@@ -62,7 +62,7 @@ export default function UserKpiPanel() {
           <div>
             <div className="section-title" style={{ margin: 0 }}>User KPI</div>
             <div className="small muted">
-              {rows ? `${rows.length} people · ${scored.length} with tasks · average KPI ${average === null ? '—' : Number(average.toFixed(1))}` : 'Loading…'}
+              {rows ? `${rows.length} people · ${scored.length} with a score · average KPI ${average === null ? '—' : Number(average.toFixed(1))}` : 'Loading…'}
             </div>
           </div>
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search a user"
@@ -79,11 +79,11 @@ export default function UserKpiPanel() {
               <KpiCard kpi={detail} title="KPI Card" showPerson />
               <div className="card mt" style={{ padding: 0 }}>
                 <div className="spread" style={{ padding: '12px 14px 0' }}>
-                  <div className="section-title" style={{ margin: 0 }}>Tasks behind this KPI ({detail.tasks.length})</div>
+                  <div className="section-title" style={{ margin: 0 }}>Tasks behind the Task KPI ({detail.tasks.length})</div>
                   <button className="btn sm" onClick={() => setOpenId(null)}>Close</button>
                 </div>
                 {detail.tasks.length === 0 ? (
-                  <div className="empty">This person has no tasks as Responsible, Accountable, Reviewer or Project Manager.</div>
+                  <div className="empty">This person has no tasks as Responsible, Accountable or Reviewer.</div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table>
@@ -109,6 +109,34 @@ export default function UserKpiPanel() {
                   </div>
                 )}
               </div>
+              {!!detail.projects?.length && (
+                <div className="card mt" style={{ padding: 0 }}>
+                  <div className="section-title" style={{ margin: 0, padding: '12px 14px 0' }}>Projects managed — behind the Project KPI ({detail.projects.length})</div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table>
+                      <thead>
+                        <tr><th>Project</th><th>Status</th><th>Due</th><th>Completed</th><th>Delivery</th><th>In the score</th></tr>
+                      </thead>
+                      <tbody>
+                        {detail.projects.map((p) => (
+                          <tr key={p.id} onClick={() => navigate(`/projects/${p.id}`)} style={{ cursor: 'pointer' }}>
+                            <td><span className="muted small">{p.code}</span> {p.name}</td>
+                            <td><span className="badge gray">{label(p.status)}</span></td>
+                            <td className="small">{fmtDate(p.due_date ?? undefined)}</td>
+                            <td className="small">{fmtDate(p.completed_date ?? undefined)}</td>
+                            <td>{yesNo(p.on_time, 'On time', 'Late')}</td>
+                            <td>
+                              {p.state === 'completed' ? <span className="badge green">Completed</span>
+                                : p.state === 'overdue' ? <span className="badge red">Overdue, not completed</span>
+                                  : <span className="badge gray" title="Still running inside its due date: not counted yet">Running — not counted</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -122,7 +150,7 @@ export default function UserKpiPanel() {
             <table>
               <thead>
                 <tr>
-                  <th>#</th><th>User</th><th>SBU / Department</th><th>Tasks</th><th>Completed</th><th title="Score in each role: R = Responsible, A = Accountable, C = Reviewer, PM = Project Manager">By Role</th>
+                  <th>#</th><th>User</th><th>SBU / Department</th><th title="Tasks as Responsible, Accountable or Reviewer">Tasks</th><th>Completed</th><th title="Score in each role: R = Responsible, A = Accountable, C = Reviewer, PM = Project Manager">By Role</th>
                   <th title="Task Completion Rate">TCR</th><th title="On-Time Delivery Rate">OTR</th><th title="On-Time Start Rate">OTSR</th>
                   <th>Total KPI</th><th>Rating</th>
                 </tr>
@@ -143,7 +171,7 @@ export default function UserKpiPanel() {
                       <td>{r.completed}{r.overdue > 0 && <div className="small" style={{ color: 'var(--red)' }}>{r.overdue} overdue</div>}</td>
                       <td className="small" style={{ whiteSpace: 'nowrap' }}>
                         {(r.roles ?? []).filter((x) => x.kpi !== null && x.kpi !== undefined).map((x) => (
-                          <span key={x.role} className="badge gray" style={{ marginRight: 4 }} title={`As ${ROLE_NAME[x.role]}: ${x.completed} of ${x.assigned} done, ${x.completed_on_time} on time`}>
+                          <span key={x.role} className="badge gray" style={{ marginRight: 4 }} title={`As ${ROLE_NAME[x.role]}: ${x.completed} of ${x.assigned}${x.unit === 'projects' ? ' due projects' : ''} done, ${x.completed_on_time} on time`}>
                             {ROLE_SHORT[x.role]} {Number(x.kpi!.toFixed(1))}
                           </span>
                         ))}

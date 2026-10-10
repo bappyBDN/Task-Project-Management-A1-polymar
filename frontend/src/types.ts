@@ -375,20 +375,38 @@ export interface Notification {
   link?: string | null
   link_label?: string | null
 }
-/** The KPI over the tasks a person answers for in one role. */
+/** The KPI of one role: over tasks for Responsible / Accountable / Reviewer, over the
+ *  projects they manage for Project Manager. */
 export interface RoleKpi {
   role: 'responsible' | 'accountable' | 'reviewer' | 'project_manager'
+  unit?: 'tasks' | 'projects'
+  /** tasks; for projects, the due ones (completed or past due) */
   assigned: number
   completed: number
   completed_on_time: number
+  /** projects still running inside their due date (not counted yet) */
+  not_counted?: number
   tcr: number
   otr: number
-  /** null = no task in this role */
+  /** null = nothing to score in this role */
   kpi?: number | null
 }
 
-/** One person's KPI over the tasks they answer for - as Responsible, Accountable, Reviewer
- *  or the project's Manager, each task counted once (GET /kpi/...). */
+export interface UserKpiProject {
+  id: number
+  code: string
+  name: string
+  status: string
+  /** completed / overdue (both counted) or running (not counted yet) */
+  state: 'completed' | 'overdue' | 'running'
+  due_date?: string | null
+  completed_date?: string | null
+  /** null = not completed yet */
+  on_time?: boolean | null
+}
+
+/** One person's KPI: the tasks they answer for as Responsible, Accountable or Reviewer
+ *  (each task once) and the projects they manage (GET /kpi/...). */
 export interface UserKpi {
   user_id: number
   name: string
@@ -409,7 +427,11 @@ export interface UserKpi {
   otr: number
   /** null = no task whose start can be judged */
   otsr?: number | null
-  /** TCR x 0.60 + OTR x 0.40; null = no tasks assigned */
+  /** TCR x 0.60 + OTR x 0.40; null = no tasks */
+  task_kpi?: number | null
+  /** the same over the projects they manage; null = none due yet */
+  project_kpi?: number | null
+  /** the one there is, or their average; null = nothing to score */
   total_kpi?: number | null
   rating: string
   /** the same score, role by role */
@@ -435,4 +457,6 @@ export interface UserKpiTask {
 
 export interface UserKpiDetail extends UserKpi {
   tasks: UserKpiTask[]
+  /** the projects the person manages */
+  projects?: UserKpiProject[]
 }

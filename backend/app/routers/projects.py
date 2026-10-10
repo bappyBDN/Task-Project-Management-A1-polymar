@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -118,8 +120,18 @@ def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session 
     # Admin / PMO or task Responsible / Accountable on this project (see app/permissions.py).
     data = permissions.check_project_edit(db, current_user, project, data)
     new_sbus = services.patched_sbus(project, data)
+    old_status = project.status
     for k, v in data.items():
         setattr(project, k, v)
+    # the day it was completed (read by the Manager's KPI, routers/kpi.py), stamped when the
+    # status becomes completed / closed - not on a later edit of a project completed long
+    # ago; cleared when it is re-opened
+    done = ("completed", "closed")
+    if project.status in done:
+        if project.actual_due_date is None and old_status not in done:
+            project.actual_due_date = date.today()
+    elif project.actual_due_date is not None and project.status != "cancelled":
+        project.actual_due_date = None
     if new_sbus is not None:
         _change_sbus(db, current_user, project, new_sbus)
     services.audit(db, current_user.name, "project", project.id, "updated", new_value=project.name)
