@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../auth'
+import PasswordInput from '../components/PasswordInput'
 import logo from '../assets/anwars-logo.jpg'
 
 export default function Login() {
@@ -48,13 +49,12 @@ export default function Login() {
         </div>
         <div className="field" style={{ marginBottom: '20px' }}>
           <label htmlFor="login-password">Password</label>
-          <input
+          <PasswordInput
             id="login-password"
-            type="password"
             autoComplete="current-password"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '8px' }}
+            style={{ padding: '8px' }}
             required
           />
         </div>

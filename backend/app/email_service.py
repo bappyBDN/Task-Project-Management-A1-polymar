@@ -436,6 +436,34 @@ def send_signup_invite_email(to_email: str, inviter_name: str, signup_link: str)
     return _send([to_email], subject, _layout("Invitation", "You Have Been Added to the System", inner, preheader=f"{inviter_name} has added you. Please sign up now."), text_body=text_body)
 
 
+def send_finish_signup_email(to_email: str, signup_link: str) -> bool:
+    """Forgot Password asked for an address that was added by email only and has not signed
+    up yet: there is no password to reset, so the mail explains that and leads to Sign Up,
+    where they enter their details and choose the password."""
+    e = html.escape
+    subject = f"Finish signing up to set your password | {SYSTEM_NAME}"
+    inner = (
+        _greeting(None)
+        + _p(f"We received a request to reset the password for <b>{e(to_email)}</b> on the <b>{SYSTEM_NAME}</b>.")
+        + _note("This email address has been added to the system, but <b>sign-up is not finished yet</b>, "
+                "so there is no password to reset. Please complete the sign-up - you choose your "
+                "password on that form and can log in straight away.")
+        + _button("Complete Sign Up", signup_link)
+        + _link_fallback(signup_link)
+        + _small("If you did not request this, you can safely ignore this email.")
+        + _signoff()
+    )
+    text_body = (
+        f"Dear Colleague,\n\n"
+        f"We received a request to reset the password for {to_email} on the {SYSTEM_NAME}.\n"
+        f"This email address has been added to the system, but sign-up is not finished yet, so there is "
+        f"no password to reset. Please complete the sign-up - you choose your password on that form:\n"
+        f"{signup_link}\n\n"
+        f"If you did not request this, please ignore this email.\n" + TEXT_SIGNOFF
+    )
+    return _send([to_email], subject, _layout("Account Security", "Finish Signing Up", inner, preheader="Sign-up is not finished yet: complete it to choose your password."), text_body=text_body)
+
+
 # ---------------------------------------------------------------- Meeting invitation
 MEETING_TZ_OFFSET_HOURS = 6       # Bangladesh Standard Time (UTC+6, no daylight saving)
 MEETING_TZ_LABEL = "Bangladesh Time"

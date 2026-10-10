@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import SearchableSelect from './SearchableSelect'
+import PasswordInput from './PasswordInput'
 import { isPendingSbu } from './SbuSelect'
 import SbuMultiSelect from './SbuMultiSelect'
 import InviteUserModal from './InviteUserModal'
@@ -150,8 +151,8 @@ export default function SignupForm({ onSuccess, forOther = false, submitLabel = 
       </div>
       {!forOther && (
         <div className="form-row">
-          <div><label>Password *</label><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-          <div><label>Confirm Password *</label><input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div>
+          <div><label>Password *</label><PasswordInput autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+          <div><label>Confirm Password *</label><PasswordInput autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div>
         </div>
       )}
 

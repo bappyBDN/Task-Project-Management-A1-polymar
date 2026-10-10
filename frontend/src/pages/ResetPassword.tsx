@@ -1,6 +1,7 @@
 // src/pages/ResetPassword.tsx
 import { useState, useEffect } from 'react'
 import { api } from '../api'
+import PasswordInput from '../components/PasswordInput'
 
 export default function ResetPassword() {
   const [token, setToken] = useState('')
@@ -54,11 +55,11 @@ export default function ResetPassword() {
         <form onSubmit={handleSubmit}>
           <div className="field mb">
             <label htmlFor="rp-new">New Password</label>
-            <input id="rp-new" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} required />
+            <PasswordInput id="rp-new" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} required />
           </div>
           <div className="field mb">
             <label htmlFor="rp-confirm">Confirm Password</label>
-            <input id="rp-confirm" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={busy} required />
+            <PasswordInput id="rp-confirm" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={busy} required />
           </div>
           <button type="submit" className="btn primary" style={{ width: '100%' }} disabled={busy || !token}>
             {busy ? 'Updating...' : 'Update Password'}

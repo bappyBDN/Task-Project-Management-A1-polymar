@@ -369,11 +369,16 @@ def signup(request: SignupRequest, db: Session = Depends(get_db)):
 
 @router.post("/forgot-password")
 def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == request.email).first()
+    # any capitals: the address is matched the way sign-up matches it
+    user = db.query(User).filter(func.lower(User.email) == str(request.email).strip().lower()).first()
 
     if user and is_invited(user):
-        # not signed up yet: the invitation again, not a password link
-        send_signup_invite(user, "Your colleague")
+        # Added by email only and not signed up yet: there is no password to reset and the
+        # account has no name / Employee ID. They choose a password on the Sign Up page -
+        # the email says so (it used to be the plain "you have been added" invitation).
+        link = f"{settings.frontend_url}/signup?email={quote(user.email)}"
+        if not email_service.send_finish_signup_email(to_email=user.email, signup_link=link):
+            print(f"[auth] Finish-sign-up email NOT sent to {user.email}. Sign-up link: {link}")
     elif user:
         token = secrets.token_urlsafe(32)
         user.reset_token = token

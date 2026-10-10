@@ -459,3 +459,9 @@ tr.clickable, .clickable { cursor: pointer; }
 .kpic-weight { margin-left: 8px; padding: 1px 7px; border-radius: 99px; background: #eef1f5; font-size: 11px; }
 .kpic-foot { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .kpic-foot span:last-child { margin-left: auto; }
+
+/* password box with a show / hide button (Login) */
+.pw-field { position: relative; }
+.pw-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 6px; }
+.pw-toggle:hover { color: var(--navy); background: #f3f5f9; }
+.pw-toggle:focus-visible { outline: 2px solid var(--gold); }
