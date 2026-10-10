@@ -8,6 +8,7 @@ import SbuMultiSelect from '../components/SbuMultiSelect'
 import { sbuName, userSbuIds } from '../org'
 import DuplicatesPanel from '../components/DuplicatesPanel'
 import UserKpiPanel from '../components/UserKpiPanel'
+import InviteUserModal from '../components/InviteUserModal'
 import { clearPrivilegedCache } from '../usePrivileged'
 
 const ROLES = ['group_executive', 'coo', 'business_head', 'functional_head', 'department_head', 'sponsor', 'pmo', 'pm', 'team_lead', 'employee', 'reviewer', 'auditor', 'admin']
@@ -120,6 +121,8 @@ export default function AdminPanel() {
   const [userSearch, setUserSearch] = useState('') // Users tab: search box
   const [showOrgModal, setShowOrgModal] = useState<'company' | 'function' | 'department' | null>(null)
   const [showQuickUser, setShowQuickUser] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
+  const [resending, setResending] = useState<number | null>(null)
 
   const load = () => {
     api.get<User[]>('/organizations/users').then(setUsers)
@@ -218,6 +221,16 @@ export default function AdminPanel() {
     await api.patch(`/organizations/users/${u.id}`, { is_active: true })
     setMsg(`Activated ${u.name}. They can log in again.`)
     load()
+  })
+
+  // Invited, not signed up yet: the same endpoint sends the sign-up link again.
+  const resendInvite = (u: User) => run(async () => {
+    setResending(u.id)
+    try {
+      const r = await api.post<{ email_sent: boolean }>('/organizations/users/invite', { email: u.email })
+      if (!r.email_sent) throw new Error(`The invitation email could not be sent to ${u.email}. Ask them to open the Sign Up page and register with this email.`)
+      setMsg(`Invitation sent again to ${u.email}`)
+    } finally { setResending(null) }
   })
 
   const removeUser = (u: User) => run(async () => {
@@ -442,6 +455,7 @@ export default function AdminPanel() {
         <>
           <div className="row mb" style={{ flexWrap: 'wrap' }}>
             <button className="btn primary" onClick={openCreate}>+ New User</button>
+            <button className="btn" onClick={() => setShowInvite(true)} title="Email a sign-up link: they fill in their own details">Invite User</button>
             <input type="search" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} aria-label="Search users"
               placeholder="Search users: name, employee ID, email, designation, role, SBU…" style={{ flex: 1, minWidth: 220, maxWidth: 440 }} />
             {userSearch.trim() && <span className="small muted">{shownUsers.length} of {users.length} users</span>}
@@ -480,6 +494,9 @@ export default function AdminPanel() {
                     <td>
                       <div className="row">
                         <button className="btn sm" onClick={() => openEdit(u)}>Edit</button>
+                        {u.is_active && u.employee_id.startsWith('INVITED-') && (
+                          <button className="btn sm" onClick={() => resendInvite(u)} disabled={resending === u.id}>{resending === u.id ? 'Sending…' : 'Resend Invite'}</button>
+                        )}
                         {u.role !== 'admin' && (
                           <>
                             {u.is_active && <button className="btn sm danger" onClick={() => deactivate(u)} onBlur={() => setConfirmDeactivate((id) => (id === u.id ? null : id))}>{confirmDeactivate === u.id ? 'Click again to confirm' : 'Deactivate'}</button>}
@@ -622,6 +639,11 @@ export default function AdminPanel() {
 
       {showOrgModal && (
         <OrgModal kind={showOrgModal} onClose={() => setShowOrgModal(null)} onCreated={(o) => createdOrg(showOrgModal, o)} />
+      )}
+
+      {showInvite && (
+        <InviteUserModal title="Invite User" inviteOnly onClose={() => setShowInvite(false)}
+          onInvited={() => { setShowInvite(false); load() }} />
       )}
 
       {showQuickUser && (
