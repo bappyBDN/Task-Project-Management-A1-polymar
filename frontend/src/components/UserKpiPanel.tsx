@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { UserKpi, UserKpiDetail } from '../types'
 import { STATUS_COLORS, fmtDate, label } from '../constants'
-import KpiCard, { RATING, pct } from './KpiCard'
+import KpiCard, { RATING, ROLE_NAME, ROLE_SHORT, pct } from './KpiCard'
 
 // User KPI: everyone's KPI in one list, with a search box to find a person and open their
 // KPI card and the tasks behind it. For admin and the privileged roles (the server checks).
@@ -83,17 +83,18 @@ export default function UserKpiPanel() {
                   <button className="btn sm" onClick={() => setOpenId(null)}>Close</button>
                 </div>
                 {detail.tasks.length === 0 ? (
-                  <div className="empty">No tasks are assigned to this person as Responsible.</div>
+                  <div className="empty">This person has no tasks as Responsible, Accountable, Reviewer or Project Manager.</div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table>
                       <thead>
-                        <tr><th>Task</th><th>Status</th><th>Planned Start</th><th>Actual Start</th><th>Start</th><th>Due</th><th>Completed</th><th>Delivery</th></tr>
+                        <tr><th>Task</th><th>Role</th><th>Status</th><th>Planned Start</th><th>Actual Start</th><th>Start</th><th>Due</th><th>Completed</th><th>Delivery</th></tr>
                       </thead>
                       <tbody>
                         {detail.tasks.map((t) => (
                           <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
                             <td><span className="muted small">{t.code}</span> {t.title}</td>
+                            <td className="small" style={{ whiteSpace: 'nowrap' }}>{(t.roles ?? []).map((r) => ROLE_NAME[r] ?? r).join(', ') || '—'}</td>
                             <td><span className={`badge ${STATUS_COLORS[t.status] ?? 'gray'}`}>{label(t.status)}</span></td>
                             <td className="small">{fmtDate(t.planned_start_date ?? undefined)}</td>
                             <td className="small">{fmtDate(t.actual_start_date ?? undefined)}</td>
@@ -121,7 +122,7 @@ export default function UserKpiPanel() {
             <table>
               <thead>
                 <tr>
-                  <th>#</th><th>User</th><th>SBU / Department</th><th>Assigned</th><th>Completed</th>
+                  <th>#</th><th>User</th><th>SBU / Department</th><th>Tasks</th><th>Completed</th><th title="Score in each role: R = Responsible, A = Accountable, C = Reviewer, PM = Project Manager">By Role</th>
                   <th title="Task Completion Rate">TCR</th><th title="On-Time Delivery Rate">OTR</th><th title="On-Time Start Rate">OTSR</th>
                   <th>Total KPI</th><th>Rating</th>
                 </tr>
@@ -140,6 +141,14 @@ export default function UserKpiPanel() {
                       <td className="small">{r.company || '—'}<div className="muted">{r.department || ''}</div></td>
                       <td>{r.assigned}</td>
                       <td>{r.completed}{r.overdue > 0 && <div className="small" style={{ color: 'var(--red)' }}>{r.overdue} overdue</div>}</td>
+                      <td className="small" style={{ whiteSpace: 'nowrap' }}>
+                        {(r.roles ?? []).filter((x) => x.kpi !== null && x.kpi !== undefined).map((x) => (
+                          <span key={x.role} className="badge gray" style={{ marginRight: 4 }} title={`As ${ROLE_NAME[x.role]}: ${x.completed} of ${x.assigned} done, ${x.completed_on_time} on time`}>
+                            {ROLE_SHORT[x.role]} {Number(x.kpi!.toFixed(1))}
+                          </span>
+                        ))}
+                        {!(r.roles ?? []).some((x) => x.kpi !== null && x.kpi !== undefined) && <span className="muted">—</span>}
+                      </td>
                       <td>{r.assigned ? pct(r.tcr) : '—'}</td>
                       <td>{r.completed ? pct(r.otr) : '—'}</td>
                       <td>{pct(r.otsr)}</td>

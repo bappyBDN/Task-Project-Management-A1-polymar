@@ -375,7 +375,20 @@ export interface Notification {
   link?: string | null
   link_label?: string | null
 }
-/** One person's KPI over the tasks they are Responsible for (GET /kpi/...). */
+/** The KPI over the tasks a person answers for in one role. */
+export interface RoleKpi {
+  role: 'responsible' | 'accountable' | 'reviewer' | 'project_manager'
+  assigned: number
+  completed: number
+  completed_on_time: number
+  tcr: number
+  otr: number
+  /** null = no task in this role */
+  kpi?: number | null
+}
+
+/** One person's KPI over the tasks they answer for - as Responsible, Accountable, Reviewer
+ *  or the project's Manager, each task counted once (GET /kpi/...). */
 export interface UserKpi {
   user_id: number
   name: string
@@ -399,6 +412,8 @@ export interface UserKpi {
   /** TCR x 0.60 + OTR x 0.40; null = no tasks assigned */
   total_kpi?: number | null
   rating: string
+  /** the same score, role by role */
+  roles?: RoleKpi[]
 }
 
 export interface UserKpiTask {
@@ -406,6 +421,8 @@ export interface UserKpiTask {
   code: string
   title: string
   status: string
+  /** the person's roles on this task */
+  roles?: string[]
   planned_start_date?: string | null
   actual_start_date?: string | null
   due_date?: string | null

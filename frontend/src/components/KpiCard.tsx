@@ -12,6 +12,11 @@ export const RATING: Record<string, { text: string; tone: string; hex: string }>
   no_tasks: { text: 'No tasks yet', tone: 'gray', hex: '#b9c2d0' },
 }
 
+export const ROLE_NAME: Record<string, string> = {
+  responsible: 'Responsible', accountable: 'Accountable', reviewer: 'Reviewer', project_manager: 'Project Manager',
+}
+export const ROLE_SHORT: Record<string, string> = { responsible: 'R', accountable: 'A', reviewer: 'C', project_manager: 'PM' }
+
 export const pct = (v?: number | null) => (v === null || v === undefined ? '—' : `${Number(v.toFixed(1))}%`)
 
 const toneOf = (v: number) => (v >= 70 ? '#1e9e5a' : v >= 50 ? '#d9a514' : '#d64545')
@@ -61,8 +66,8 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
 
         <div className="kpic-rates">
           <Rate name="Task Completion Rate" short="TCR" value={kpi.assigned ? kpi.tcr : null} weight="60% of the score"
-            detail={`${kpi.completed} of ${kpi.assigned} assigned task${kpi.assigned === 1 ? '' : 's'} completed`}
-            hint="Completed tasks ÷ total assigned tasks (the tasks this person is Responsible for; cancelled tasks are left out)" />
+            detail={`${kpi.completed} of ${kpi.assigned} task${kpi.assigned === 1 ? '' : 's'} completed`}
+            hint="Completed tasks ÷ all the tasks this person answers for as Responsible, Accountable, Reviewer or the project's Manager (each task once; cancelled tasks are left out)" />
           <Rate name="On-Time Delivery Rate" short="OTR" value={kpi.completed ? kpi.otr : null} weight="40% of the score"
             detail={`${kpi.completed_on_time} of ${kpi.completed} completed task${kpi.completed === 1 ? '' : 's'} finished on time`}
             hint="Tasks completed on or before the approved (or baseline) due date ÷ total completed tasks" />
@@ -71,6 +76,22 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false }: {
             hint="Tasks started on or before the planned start date ÷ tasks with a planned start that have started or should have. Shown for information; not part of the score." />
         </div>
       </div>
+
+      {!!kpi.roles?.length && (
+        <div className="kpic-roles">
+          {kpi.roles.map((r) => {
+            const has = r.kpi !== null && r.kpi !== undefined
+            return (
+              <div key={r.role} className={`kpic-role${has ? '' : ' none'}`}
+                title={has ? `As ${ROLE_NAME[r.role]}: TCR ${pct(r.tcr)} × 60% + OTR ${pct(r.completed ? r.otr : null)} × 40%` : `No tasks as ${ROLE_NAME[r.role]}`}>
+                <div className="small muted">As {ROLE_NAME[r.role]}</div>
+                <strong style={has ? { color: toneOf(r.kpi!) } : undefined}>{has ? Number(r.kpi!.toFixed(1)) : '—'}</strong>
+                <div className="small muted">{has ? `${r.completed} of ${r.assigned} done · ${r.completed_on_time} on time` : 'No tasks'}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       <div className="kpic-foot small muted">
         <span>{kpi.open} open</span>

@@ -577,8 +577,20 @@ class NotificationOut(BaseModel):
 
 
 # ---------------------------------------------------------------- Dashboards
+class RoleKpiOut(BaseModel):
+    """The KPI over the tasks a person answers for in one role (routers/kpi.py ROLES)."""
+    role: str               # responsible / accountable / reviewer / project_manager
+    assigned: int
+    completed: int
+    completed_on_time: int
+    tcr: float
+    otr: float
+    kpi: Optional[float] = None  # None = no task in this role
+
+
 class UserKpiOut(BaseModel):
-    """One person's KPI over the tasks they are Responsible for (routers/kpi.py)."""
+    """One person's KPI over the tasks they answer for - as Responsible, Accountable,
+    Reviewer or the project's Manager, each task counted once (routers/kpi.py)."""
     user_id: int
     name: str
     employee_id: Optional[str] = None
@@ -598,6 +610,7 @@ class UserKpiOut(BaseModel):
     otsr: Optional[float] = None       # On-Time Start Rate, %; None = no task to judge
     total_kpi: Optional[float] = None  # TCR x 0.60 + OTR x 0.40; None = no tasks assigned
     rating: str             # excellent / good / fair / needs_attention / no_tasks
+    roles: list[RoleKpiOut] = []  # the same score, role by role
 
 
 class UserKpiTaskOut(BaseModel):
@@ -605,6 +618,7 @@ class UserKpiTaskOut(BaseModel):
     code: str
     title: str
     status: str
+    roles: list[str] = []   # the person's roles on this task
     planned_start_date: Optional[date] = None
     actual_start_date: Optional[date] = None
     due_date: Optional[date] = None

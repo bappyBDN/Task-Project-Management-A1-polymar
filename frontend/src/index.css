@@ -465,3 +465,7 @@ tr.clickable, .clickable { cursor: pointer; }
 .pw-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 6px; }
 .pw-toggle:hover { color: var(--navy); background: #f3f5f9; }
 .pw-toggle:focus-visible { outline: 2px solid var(--gold); }
+.kpic-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+.kpic-role { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.kpic-role strong { display: block; font-size: 20px; line-height: 1.3; color: var(--navy); }
+.kpic-role.none strong { color: var(--muted); }
