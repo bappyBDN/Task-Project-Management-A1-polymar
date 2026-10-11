@@ -1,6 +1,7 @@
 import { ReactNode } from 'react'
 import { RoleKpi, UserKpi } from '../types'
 import { label } from '../constants'
+import { sbuLabel } from '../org'
 
 // KPI gauge cards (see backend app/routers/kpi.py for how the score is worked out).
 // KpiCard = one person's KPI: the total and a card per role. Used on the KPI page, where
@@ -33,6 +34,8 @@ export const num = (v?: number | null) => (known(v) ? String(Number(v.toFixed(1)
 export const pct = (v?: number | null) => (known(v) ? `${Number(v.toFixed(1))}%` : '—')
 export const ratingOf = (v?: number | null) =>
   !known(v) ? 'no_tasks' : v >= 85 ? 'excellent' : v >= 70 ? 'good' : v >= 50 ? 'fair' : 'needs_attention'
+export const initialsOf = (name?: string) =>
+  (name ?? '').split(/[\s.@_-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?'
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** Half-circle gauge, 0 to 100, with a pointer at the value. */
@@ -61,15 +64,29 @@ export function Gauge({ value }: { value?: number | null }) {
   )
 }
 
-export function GaugeCard({ title, sub, value, children, foot, onClick, active, hint }: {
+export function GaugeCard({ title, sub, value, children, foot, onClick, active, hint, person }: {
   title: ReactNode; sub?: ReactNode; value?: number | null; children?: ReactNode; foot?: ReactNode
   onClick?: () => void; active?: boolean; hint?: string
+  /** the card of one employee: their name sits in a green band, with their initials */
+  person?: boolean
 }) {
   const r = RATING[ratingOf(value)]
   const body = (
     <>
-      <div className="kg-title">{title}</div>
-      {sub && <div className="kg-sub small muted">{sub}</div>}
+      {person ? (
+        <div className="kg-person">
+          <span className="kg-avatar" aria-hidden>{initialsOf(typeof title === 'string' ? title : '')}</span>
+          <div style={{ minWidth: 0 }}>
+            <div className="kg-title">{title}</div>
+            {sub && <div className="kg-sub small">{sub}</div>}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="kg-title">{title}</div>
+          {sub && <div className="kg-sub small muted">{sub}</div>}
+        </>
+      )}
       <div className="kg-top">
         <strong className="kg-val">{num(value)}</strong>
         <span className="small muted">Target: {TARGET}</span>
@@ -137,9 +154,14 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false, act
         <div>
           <div className="section-title" style={{ margin: 0 }}>{title}</div>
           {showPerson && (
-            <div className="small muted" style={{ marginTop: 2 }}>
-              <strong style={{ color: 'var(--navy)' }}>{kpi.name}</strong>
-              {[kpi.employee_id, kpi.designation, kpi.role && label(kpi.role), kpi.company, kpi.department].filter(Boolean).map((x) => ` · ${x}`).join('')}
+            <div className="kg-person banner">
+              <span className="kg-avatar" aria-hidden>{initialsOf(kpi.name)}</span>
+              <div style={{ minWidth: 0 }}>
+                <div className="kg-title">{kpi.name}</div>
+                <div className="kg-sub small">
+                  {[kpi.employee_id, kpi.designation, kpi.role && label(kpi.role), kpi.company && sbuLabel(kpi.company), kpi.department].filter(Boolean).join(' · ') || '—'}
+                </div>
+              </div>
             </div>
           )}
         </div>
