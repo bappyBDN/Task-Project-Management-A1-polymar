@@ -7,6 +7,7 @@ import SbuSelect, { sbuKey } from '../components/SbuSelect'
 import SbuMultiSelect from '../components/SbuMultiSelect'
 import { sbuName, userSbuIds } from '../org'
 import DuplicatesPanel from '../components/DuplicatesPanel'
+import Guide from './Guide'
 import InviteUserModal from '../components/InviteUserModal'
 import { clearPrivilegedCache } from '../usePrivileged'
 
@@ -93,7 +94,7 @@ function OrgTreeNode({
 
 export default function AdminPanel() {
   // Added 'emails' to tab state
-  const [tab, setTab] = useState<'users' | 'tasks' | 'roles' | 'hierarchy' | 'emails' | 'duplicates'>('users')
+  const [tab, setTab] = useState<'users' | 'tasks' | 'roles' | 'hierarchy' | 'emails' | 'duplicates' | 'guide'>('users')
   const [users, setUsers] = useState<User[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -322,7 +323,10 @@ export default function AdminPanel() {
         <button className={`btn ${tab === 'hierarchy' ? 'primary' : ''}`} onClick={() => setTab('hierarchy')}>Hierarchy Mapping</button>
         <button className={`btn ${tab === 'emails' ? 'primary' : ''}`} onClick={() => setTab('emails')}>System Emails</button>
         <button className={`btn ${tab === 'duplicates' ? 'primary' : ''}`} onClick={() => setTab('duplicates')}>Duplicates</button>
+        <button className={`btn ${tab === 'guide' ? 'primary' : ''}`} onClick={() => setTab('guide')}>User Guide</button>
       </div>
+
+      {tab === 'guide' && <Guide adminFirst embedded />}
 
       {tab === 'duplicates' && (
         <DuplicatesPanel

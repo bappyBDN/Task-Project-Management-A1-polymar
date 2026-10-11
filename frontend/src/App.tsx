@@ -21,6 +21,7 @@ import Kanban from './pages/Kanban'
 import Notifications from './pages/Notifications'
 import AdminPanel from './pages/AdminPanel'
 import Kpi from './pages/Kpi'
+import Guide from './pages/Guide'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import { label } from './constants'
@@ -43,6 +44,7 @@ const ICONS: Record<string, string> = {
   audit: 'M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9zM14 3v6h6M8 13h8M8 17h5',
   admin: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
   kpi: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  guide: 'M4 19.5A2.5 2.5 0 016.5 17H20V3H6.5A2.5 2.5 0 004 5.5zM4 19.5A2.5 2.5 0 006.5 22H20v-5M9 7h7M9 11h5',
   signout: 'M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9',
 }
 
@@ -72,6 +74,10 @@ const GOVERNANCE: NavItem[] = [
   { to: '/audit', label: 'Audit Trail', icon: 'audit' },
 ]
 
+const HELP: NavItem[] = [
+  { to: '/guide', label: 'User Guide', icon: 'guide' },
+]
+
 const ADMIN: NavItem[] = [
   { to: '/admin', label: 'Admin Panel', icon: 'admin' },
 ]
@@ -84,6 +90,7 @@ function buildSections(isAdmin: boolean): NavSection[] {
     { section: 'Governance', items: GOVERNANCE },
   ]
   if (isAdmin) sections.push({ section: 'Administration', items: ADMIN })
+  sections.push({ section: 'Help', items: HELP })
   return sections
 }
 
@@ -232,6 +239,7 @@ export default function App() {
           <Route path="/audit" element={<Audit />} />
           {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
           <Route path="/kpi" element={<Kpi />} />
+          <Route path="/guide" element={<Guide />} />
           <Route path="/user-kpi" element={<Navigate to="/kpi" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
