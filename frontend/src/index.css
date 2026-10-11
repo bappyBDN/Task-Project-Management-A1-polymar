@@ -443,7 +443,7 @@ tr.clickable, .clickable { cursor: pointer; }
 .gantt-chip { display: inline-flex; align-items: center; gap: 6px; background: #eef3fb; color: var(--navy); border: 1px solid #d5e0f0; border-radius: 999px; padding: 3px 6px 3px 10px; font-size: 12px; margin: 0 6px 6px 0; }
 .gantt-chip button { border: 0; background: none; color: var(--red); cursor: pointer; font-weight: 700; padding: 0 4px; }
 
-/* KPI gauge cards (components/KpiCard.tsx): My Dashboard and the KPI page */
+/* KPI gauge cards (components/KpiCard.tsx): the KPI page */
 .kpic-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .kg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 14px; }
 .kg { display: flex; flex-direction: column; min-width: 0; padding: 14px 14px 12px; text-align: left; font: inherit; color: inherit; }

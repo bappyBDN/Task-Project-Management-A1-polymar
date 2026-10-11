@@ -3,8 +3,8 @@ import { RoleKpi, UserKpi } from '../types'
 import { label } from '../constants'
 
 // KPI gauge cards (see backend app/routers/kpi.py for how the score is worked out).
-// KpiCard = one person's KPI: the total and a card per role. Used on My Dashboard and the
-// KPI page; GaugeCard / Gauge are also used there for SBU, department and people cards.
+// KpiCard = one person's KPI: the total and a card per role. Used on the KPI page, where
+// GaugeCard / Gauge are also used for the SBU, department and people cards.
 
 export const RATING: Record<string, { text: string; tone: string }> = {
   excellent: { text: 'Excellent', tone: 'green' },
