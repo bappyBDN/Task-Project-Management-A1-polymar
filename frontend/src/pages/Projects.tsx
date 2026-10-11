@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { Company, Project, Task, User } from '../types'
+import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, METHODOLOGIES, PROJECT_STATUSES, fmtDate, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import ProjectForm, { errText } from '../components/ProjectForm'
-import { inAnySbu, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
+import { inAnySbu, inName, nameFilterItems, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
+
+const NO_FILTER = { name: '', company_id: '', function_id: '', department_id: '', status: '', health: '', type: '', manager_id: '', methodology: '' }
 
 
 export default function Projects() {
@@ -17,7 +19,9 @@ export default function Projects() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
-  const [filter, setFilter] = useState({ company_id: '', status: '', health: '', type: '', manager_id: '', methodology: '' })
+  const [functions, setFunctions] = useState<Function[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [filter, setFilter] = useState(NO_FILTER)
   const [showForm, setShowForm] = useState(false)
   const navigate = useNavigate()
 
@@ -28,6 +32,8 @@ export default function Projects() {
     api.get<Task[]>('/tasks').then(setTasks)
     api.get<User[]>('/organizations/users').then(setUsers)
     api.get<Company[]>('/organizations/companies').then(setCompanies)
+    api.get<Function[]>('/organizations/functions').then(setFunctions).catch(() => {})
+    api.get<Department[]>('/organizations/departments').then(setDepartments).catch(() => {})
   }, [])
 
   const open = (p: Project) => navigate(`/projects/${p.id}`)
@@ -88,7 +94,14 @@ export default function Projects() {
   }
 
   const filtered = useMemo(() => {
+    const words = filter.name.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return projects.filter((p) => {
+      if (words.length && !words.every((w) => `${p.code} ${p.name}`.toLowerCase().includes(w))) return false
+      // the project's own function, or that of any of its tasks; a project has no department
+      // of its own, so that one is always its tasks'
+      if (filter.function_id && !inName(functions, p.function_id, filter.function_id)
+        && !(tasksByProject.get(p.id) ?? []).some((t) => inName(functions, t.function_id, filter.function_id))) return false
+      if (filter.department_id && !(tasksByProject.get(p.id) ?? []).some((t) => inName(departments, t.department_id, filter.department_id))) return false
       if (filter.company_id && !inAnySbu(companies, [...projectCompanyIds(p)], filter.company_id)) return false
       if (filter.status && p.status !== filter.status) return false
       if (filter.health && p.health !== filter.health) return false
@@ -97,9 +110,9 @@ export default function Projects() {
       if (filter.manager_id && !projectPeopleIds(p).has(Number(filter.manager_id))) return false
       return true
     })
-  }, [projects, filter, tasksByProject, companies])
+  }, [projects, filter, tasksByProject, companies, functions, departments])
 
-  const isFiltered = filter.company_id || filter.status || filter.health || filter.type || filter.methodology || filter.manager_id
+  const isFiltered = filter.name.trim() || filter.function_id || filter.department_id || filter.company_id || filter.status || filter.health || filter.type || filter.methodology || filter.manager_id
   const personOrCompany = Boolean(filter.company_id || filter.manager_id)
   const shownTasks = useMemo(
     () => (personOrCompany ? filtered.flatMap((p) => matchingTasks(p).map((t) => ({ t, p }))) : []),
@@ -114,6 +127,8 @@ export default function Projects() {
     return [...standard, ...extra]
   }
   const companyItems = sbuFilterItems(companies)
+  const functionItems = nameFilterItems(functions, 'All')
+  const departmentItems = nameFilterItems(departments, 'All')
   const statusItems = [{ value: '', label: 'All' }, ...fullList(PROJECT_STATUSES, projects.map((p) => p.status)).map((s) => ({ value: s, label: label(s) }))]
   const healthItems = [{ value: '', label: 'All' }, ...fullList(Object.keys(HEALTH_COLORS), projects.map((p) => p.health)).map((h) => ({ value: h, label: label(h) }))]
   const typeItems = [{ value: '', label: 'All' }, ...Array.from(new Set(projects.map((p) => p.project_type))).map((t) => ({ value: t, label: label(t) }))]
@@ -136,9 +151,21 @@ export default function Projects() {
       </div>
 
       <div className="filters">
+        <div className="field" style={{ minWidth: 220 }}>
+          <label>Project Name</label>
+          <input type="search" value={filter.name} onChange={(e) => setFilter({ ...filter, name: e.target.value })} placeholder="Search name or code…" />
+        </div>
         <div className="field" style={{ minWidth: 190 }}>
           <label>SBU</label>
           <SearchableSelect value={filter.company_id} items={companyItems} onChange={(v) => setFilter({ ...filter, company_id: v })} placeholder="Search SBU…" />
+        </div>
+        <div className="field" style={{ minWidth: 180 }}>
+          <label>Function</label>
+          <SearchableSelect value={filter.function_id} items={functionItems} onChange={(v) => setFilter({ ...filter, function_id: v })} placeholder="Search function…" />
+        </div>
+        <div className="field" style={{ minWidth: 180 }}>
+          <label>Department</label>
+          <SearchableSelect value={filter.department_id} items={departmentItems} onChange={(v) => setFilter({ ...filter, department_id: v })} placeholder="Search department…" />
         </div>
         <div className="field" style={{ minWidth: 150 }}>
           <label>Status</label>
@@ -161,7 +188,7 @@ export default function Projects() {
           <SearchableSelect value={filter.manager_id} items={managerItems} onChange={(v) => setFilter({ ...filter, manager_id: v })} placeholder="Type to search…" />
         </div>
         {isFiltered && (
-          <button className="btn sm" onClick={() => setFilter({ company_id: '', status: '', health: '', type: '', manager_id: '', methodology: '' })}>
+          <button className="btn sm" onClick={() => setFilter(NO_FILTER)}>
             Clear
           </button>
         )}
