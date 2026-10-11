@@ -99,7 +99,7 @@ export default function ProfileForm({ onClose, onSaved }: { onClose: () => void;
     .map((u) => ({ value: String(u.id), label: `${u.name} — ${label(u.role)}` }))
   // a department belongs to a function: once a function is chosen, list only its departments
   const deptItems = departments
-    .filter((d) => !form.function_id || !d.function_id || d.function_id === form.function_id)
+    .filter((d) => !form.function_id || !d.function_id || d.function_id === form.function_id || d.id === form.department_id)
     .map((d) => ({ value: String(d.id), label: d.name }))
 
   return (

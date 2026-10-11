@@ -53,7 +53,8 @@ export default function SearchableSelect({
 
   const selected = items.find((o) => o.value === value)
   const filtered = items.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
-  const isCustom = value !== '' && !items.some((o) => o.value === value)
+  // only a typed-in value is shown as is: an id whose name isn't in the list (yet) stays blank
+  const isCustom = allowCustom && value !== '' && !items.some((o) => o.value === value)
   const hasExactMatch = query.trim() !== '' && items.some((o) => o.label.toLowerCase() === query.trim().toLowerCase())
 
   useEffect(() => {
