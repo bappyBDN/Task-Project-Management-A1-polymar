@@ -189,6 +189,34 @@ class GanttToggle(BaseModel):
     enabled: bool
 
 
+class SubtaskIn(BaseModel):
+    """A subtask of a task (routers/subtasks.py): all it needs of its own."""
+    task_id: int
+    title: str = Field(min_length=1, max_length=240)
+    description: Optional[str] = None
+    expected_deliverable: Optional[str] = None
+    progress_pct: float = 0.0
+
+
+class SubtaskUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=240)
+    description: Optional[str] = None
+    expected_deliverable: Optional[str] = None
+    progress_pct: Optional[float] = None
+
+
+class SubtaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    task_id: int
+    title: str
+    description: Optional[str] = None
+    expected_deliverable: Optional[str] = None
+    progress_pct: float = 0.0
+    created_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
 class TaskDependenciesOut(BaseModel):
     depends_on_ids: list[int]
 

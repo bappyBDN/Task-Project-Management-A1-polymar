@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { GanttData, GanttTask, Project, Task, User } from '../types'
+import { useAuth } from '../auth'
+import { GanttData, GanttTask, Project, Subtask, Task, User } from '../types'
 import { fmtDate as formatDate, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
 
 // Optional Gantt chart of a project (see backend app/gantt.py). Off: this renders nothing
 // (or only the switch, for whoever may turn it on) and the page is exactly as before.
 // On: the tasks on a timeline with their dependencies, and what is extending the schedule.
+// A task can also be broken into subtasks (optional, backend routers/subtasks.py): they open
+// under the task from its ▸ and take the task's people and dates.
 
 interface Props {
   project: Project
@@ -21,9 +24,11 @@ interface Props {
 }
 
 const ROW = 34
-const NAMES = 250
+const NAMES = 300
 const MS_DAY = 86400000
 const DONE = ['completed', 'closed']
+
+const EMPTY_SUB = { id: 0, task_id: 0, title: '', description: '', expected_deliverable: '', progress_pct: '0' }
 
 const day = (d: string) => Math.round(Date.parse(d) / MS_DAY)
 const fmtDate = (d?: string | null) => formatDate(d ?? undefined)
@@ -45,6 +50,7 @@ const LEGEND: [string, string][] = [
 
 export default function ProjectGantt({ project, tasks, users, canToggle, onProject, onChanged }: Props) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const enabled = !!project.gantt_enabled
   const [data, setData] = useState<GanttData | null>(null)
   const [err, setErr] = useState('')
@@ -56,6 +62,13 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
   const [depOn, setDepOn] = useState<string[]>([])
   const [depErr, setDepErr] = useState('')
   const [depSaving, setDepSaving] = useState(false)
+  // subtasks: all of the project's, which tasks are opened, and the one being added / edited
+  const [subs, setSubs] = useState<Subtask[]>([])
+  const [open, setOpen] = useState<Set<number>>(new Set())
+  const [subForm, setSubForm] = useState<typeof EMPTY_SUB | null>(null)
+  const [subErr, setSubErr] = useState('')
+  const [subSaving, setSubSaving] = useState(false)
+  const [subDelete, setSubDelete] = useState(false)
 
   // anything that moves the schedule
   const signature = tasks.map((t) => [t.id, t.status, t.progress_pct, t.planned_start_date, t.baseline_due_date,
@@ -73,6 +86,14 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
     }).catch((e) => { if (!stale) setErr(e.message || 'Could not load the Gantt chart.') })
     return () => { stale = true }
   }, [project.id, enabled, signature, version])
+
+  useEffect(() => {
+    if (!enabled) { setSubs([]); return }
+    let stale = false
+    // an older server without subtasks: the chart simply has none
+    api.get<Subtask[]>(`/subtasks?project_id=${project.id}`).then((l) => { if (!stale) setSubs(l) }).catch(() => { if (!stale) setSubs([]) })
+    return () => { stale = true }
+  }, [project.id, enabled, version])
 
   // a long project opens around today instead of at its first month
   const scroller = useRef<HTMLDivElement>(null)
@@ -124,6 +145,59 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
     }
   }
 
+  // whoever may change a task's subtasks (the server checks again)
+  const canSub = (taskId: number) => {
+    const t = tasks.find((x) => x.id === taskId)
+    return canToggle || (!!user && !!t && [t.responsible_id, t.accountable_id].includes(user.id))
+  }
+  const toggleOpen = (taskId: number) => setOpen((cur) => {
+    const next = new Set(cur)
+    if (next.has(taskId)) next.delete(taskId); else next.add(taskId)
+    return next
+  })
+  const newSub = (taskId: number) => { setSubForm({ ...EMPTY_SUB, task_id: taskId }); setSubErr(''); setSubDelete(false) }
+  const editSub = (sub: Subtask) => {
+    setSubForm({ id: sub.id, task_id: sub.task_id, title: sub.title, description: sub.description ?? '',
+      expected_deliverable: sub.expected_deliverable ?? '', progress_pct: String(sub.progress_pct ?? 0) })
+    setSubErr('')
+    setSubDelete(false)
+  }
+  const saveSub = async () => {
+    if (!subForm || subSaving) return
+    if (!subForm.title.trim()) { setSubErr('Give the subtask a title.'); return }
+    const progress = Number(subForm.progress_pct)
+    if (!Number.isFinite(progress) || progress < 0 || progress > 100) { setSubErr('Progress must be between 0 and 100.'); return }
+    setSubSaving(true)
+    setSubErr('')
+    const body = { title: subForm.title.trim(), description: subForm.description.trim() || null,
+      expected_deliverable: subForm.expected_deliverable.trim() || null, progress_pct: progress }
+    try {
+      if (subForm.id) await api.patch(`/subtasks/${subForm.id}`, body)
+      else await api.post('/subtasks', { ...body, task_id: subForm.task_id })
+      setOpen((cur) => new Set(cur).add(subForm.task_id))
+      setSubForm(null)
+      setVersion((n) => n + 1)
+    } catch (e: any) {
+      setSubErr(e.message || 'Could not save the subtask.')
+    } finally {
+      setSubSaving(false)
+    }
+  }
+  const removeSub = async () => {
+    if (!subForm?.id || subSaving) return
+    if (!subDelete) { setSubDelete(true); return } // second click deletes
+    setSubSaving(true)
+    try {
+      await api.del(`/subtasks/${subForm.id}`)
+      setSubForm(null)
+      setVersion((n) => n + 1)
+    } catch (e: any) {
+      setSubErr(e.message || 'Could not delete the subtask.')
+    } finally {
+      setSubSaving(false)
+    }
+  }
+
   if (!enabled && !canToggle) return null
 
   const head = (
@@ -159,7 +233,19 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
   const rows = [...(data?.tasks ?? [])].sort((a, b) =>
     (a.start ?? '9999').localeCompare(b.start ?? '9999') || (a.finish ?? '9999').localeCompare(b.finish ?? '9999') || a.id - b.id)
   const byId = new Map(rows.map((t) => [t.id, t]))
-  const rowOf = new Map(rows.map((t, i) => [t.id, i]))
+  const subsOf = new Map<number, Subtask[]>()
+  subs.forEach((sub) => { if (byId.has(sub.task_id)) subsOf.set(sub.task_id, [...(subsOf.get(sub.task_id) ?? []), sub]) })
+  // what is drawn, top to bottom: each task, and under an opened one its subtasks
+  type Line = { key: string; t: GanttTask; sub?: Subtask }
+  const lines: Line[] = rows.flatMap((t) => [
+    { key: `t${t.id}`, t },
+    ...(open.has(t.id) ? (subsOf.get(t.id) ?? []).map((sub) => ({ key: `s${sub.id}`, t, sub })) : []),
+  ])
+  const rowOf = new Map(lines.flatMap((l, i) => (l.sub ? [] : [[l.t.id, i] as [number, number]])))
+  const subAvg = (taskId: number) => {
+    const l = subsOf.get(taskId) ?? []
+    return l.length ? Math.round(l.reduce((n, x) => n + (x.progress_pct || 0), 0) / l.length) : null
+  }
   const userName = (uid?: number | null) => users.find((u) => u.id === uid)?.name ?? '—'
   const info = data?.project
   const today = data?.today
@@ -200,6 +286,12 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
     `Scheduled: ${fmtDate(t.start)} → ${fmtDate(t.finish)}${t.slip_days ? ` (+${t.slip_days} day${t.slip_days === 1 ? '' : 's'})` : ''}`,
     t.depends_on.length ? `Depends on: ${t.depends_on.map((i) => byId.get(i)?.code ?? `#${i}`).join(', ')}` : '',
     why(t), t.critical ? 'On the critical path' : '',
+    subsOf.has(t.id) ? `Subtasks: ${subsOf.get(t.id)!.length}, ${subAvg(t.id)}% done on average` : '',
+  ].filter(Boolean).join('\n')
+  const subTip = (sub: Subtask, t: GanttTask) => [
+    `Subtask of ${t.code}: ${sub.title}`, `${Math.round(sub.progress_pct)}% done`,
+    sub.description ? `Description: ${sub.description}` : '', sub.expected_deliverable ? `Expected deliverable: ${sub.expected_deliverable}` : '',
+    `Dates and people: as ${t.code} (${fmtDate(t.start)} → ${fmtDate(t.finish)}, ${userName(t.responsible_id)})`,
   ].filter(Boolean).join('\n')
 
   // ---- dependency arrows (finish of one task -> start of the task that depends on it)
@@ -268,6 +360,44 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
           </div>
         )
       })()}
+      {subForm && (() => {
+        const t = byId.get(subForm.task_id)
+        const setF = (k: keyof typeof EMPTY_SUB, v: string) => setSubForm((f) => (f ? { ...f, [k]: v } : f))
+        return (
+          <div className="modal-backdrop">
+            <div className="modal" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
+              <h2>{subForm.id ? 'Edit subtask' : 'Add subtask'}</h2>
+              {subErr && <div className="alert error">{subErr}</div>}
+              {t && (
+                <div className="alert info">
+                  Subtask of <strong>{t.code} — {t.title}</strong>. Its project, people and dates are the task's:
+                  Responsible {userName(t.responsible_id)}, {fmtDate(t.start)} → {fmtDate(t.finish)}.
+                </div>
+              )}
+              <label>Subtask Title *</label>
+              <input value={subForm.title} maxLength={240} autoFocus onChange={(e) => setF('title', e.target.value)} placeholder="What is this piece of the task?" />
+              <label>Description</label>
+              <textarea rows={3} value={subForm.description} onChange={(e) => setF('description', e.target.value)} />
+              <label>Expected Deliverable</label>
+              <textarea rows={2} value={subForm.expected_deliverable} onChange={(e) => setF('expected_deliverable', e.target.value)} />
+              <label>Progress %</label>
+              <div className="row">
+                <input type="range" min={0} max={100} step={5} value={Number(subForm.progress_pct) || 0} onChange={(e) => setF('progress_pct', e.target.value)} style={{ flex: 1 }} aria-label="Progress" />
+                <input type="number" min={0} max={100} value={subForm.progress_pct} onChange={(e) => setF('progress_pct', e.target.value)} style={{ width: 90 }} aria-label="Progress %" />
+              </div>
+              <div className="modal-actions">
+                {!!subForm.id && (
+                  <button className="btn danger" style={{ marginRight: 'auto' }} onClick={removeSub} disabled={subSaving}>
+                    {subDelete ? 'Click again to delete' : 'Delete subtask'}
+                  </button>
+                )}
+                <button className="btn" onClick={() => setSubForm(null)}>Cancel</button>
+                <button className="btn primary" onClick={saveSub} disabled={subSaving}>{subSaving ? 'Saving…' : 'Save'}</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
       {err && <div className="alert error">{err}</div>}
       {!data && !err && <div className="small muted">Loading the schedule…</div>}
 
@@ -278,8 +408,23 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
           <div className="gantt">
             <div className="gantt-names" style={{ width: NAMES }}>
               <div className="gantt-head">Task</div>
-              {rows.map((t) => (
-                <div key={t.id} className="gantt-name" style={{ height: ROW }} title={tip(t)} onClick={() => navigate(`/tasks/${t.id}`)}>
+              {lines.map(({ key, t, sub }) => sub ? (
+                <div key={key} className="gantt-name sub" style={{ height: ROW }} title={subTip(sub, t)}
+                  onClick={() => (canSub(t.id) ? editSub(sub) : navigate(`/tasks/${t.id}`))}>
+                  <span className="muted" aria-hidden>↳</span> {sub.title}
+                </div>
+              ) : (
+                <div key={key} className="gantt-name" style={{ height: ROW }} title={tip(t)} onClick={() => navigate(`/tasks/${t.id}`)}>
+                  {(subsOf.has(t.id) || canSub(t.id)) && (
+                    <button className={`gantt-link${subsOf.has(t.id) ? ' has' : ''}`} aria-expanded={open.has(t.id)}
+                      title={subsOf.has(t.id) ? `${open.has(t.id) ? 'Hide' : 'Show'} the ${subsOf.get(t.id)!.length} subtask${subsOf.get(t.id)!.length === 1 ? '' : 's'}` : 'Add a subtask (optional)'}
+                      onClick={(e) => { e.stopPropagation(); if (subsOf.has(t.id)) toggleOpen(t.id); else newSub(t.id) }}>
+                      {subsOf.has(t.id) ? `${open.has(t.id) ? '▾' : '▸'} ${subsOf.get(t.id)!.length}` : '＋'}
+                    </button>
+                  )}
+                  {open.has(t.id) && subsOf.has(t.id) && canSub(t.id) && (
+                    <button className="gantt-link" title="Add another subtask" onClick={(e) => { e.stopPropagation(); newSub(t.id) }}>＋</button>
+                  )}
                   {canToggle && (
                     <button className="gantt-link" title={t.depends_on.length ? `Depends on ${t.depends_on.map((i) => byId.get(i)?.code ?? `#${i}`).join(', ')} - click to change` : 'Choose the tasks this one depends on'}
                       onClick={(e) => { e.stopPropagation(); openDeps(t.id) }}>⛓{t.depends_on.length || ''}</button>
@@ -294,13 +439,13 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
                   {months.map((m) => <div key={m.left} className="gantt-month" style={{ left: m.left, width: m.width }}>{m.width > 46 ? m.text : ''}</div>)}
                   {weeks.map((w) => <div key={w.left} className="gantt-tick" style={{ left: w.left, width: DAY >= 20 ? DAY : undefined }}>{w.text}</div>)}
                 </div>
-                <div style={{ position: 'relative', height: rows.length * ROW }}>
+                <div style={{ position: 'relative', height: lines.length * ROW }}>
                   {weeks.map((w) => <div key={w.left} className="gantt-grid" style={{ left: w.left }} />)}
-                  {rows.map((t, i) => <div key={t.id} className="gantt-rowline" style={{ top: (i + 1) * ROW - 1 }} />)}
+                  {lines.map((l, i) => <div key={l.key} className="gantt-rowline" style={{ top: (i + 1) * ROW - 1 }} />)}
                   {info?.planned_due && <div className="gantt-mark due" style={{ left: x(info.planned_due) + DAY }} title={`Project due date: ${fmtDate(info.planned_due)}`} />}
                   {today && <div className="gantt-mark today" style={{ left: x(today) + DAY / 2 }} title={`Today: ${fmtDate(today)}`} />}
 
-                  <svg width={width} height={rows.length * ROW} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
+                  <svg width={width} height={lines.length * ROW} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
                     <defs>
                       <marker id="gantt-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#7d8aa0" /></marker>
                       <marker id="gantt-arrow-crit" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#0b1f3a" /></marker>
@@ -311,17 +456,29 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
                     ))}
                   </svg>
 
-                  {rows.map((t, i) => {
+                  {lines.map(({ key, t, sub }, i) => {
                     if (!t.start || !t.finish) {
-                      return <div key={t.id} className="gantt-nodate small muted" style={{ top: i * ROW, height: ROW }}>No dates set</div>
+                      return <div key={key} className="gantt-nodate small muted" style={{ top: i * ROW, height: ROW }}>{sub ? `${Math.round(sub.progress_pct)}%` : 'No dates set'}</div>
                     }
                     const left = x(t.start), w = (day(t.finish) - day(t.start) + 1) * DAY
+                    if (sub) {
+                      // a subtask has no dates of its own: it runs over its task's
+                      return (
+                        <div key={key}>
+                          <div className="gantt-bar sub" style={{ top: i * ROW + 11, left, width: w, height: ROW - 24 }} title={subTip(sub, t)}
+                            onClick={() => (canSub(t.id) ? editSub(sub) : navigate(`/tasks/${t.id}`))}>
+                            <span className="gantt-progress" style={{ width: `${Math.max(0, Math.min(100, sub.progress_pct))}%` }} />
+                          </div>
+                          <div className="gantt-label small" style={{ top: i * ROW + 7, left: left + w + 6, lineHeight: `${ROW - 18}px` }}>{Math.round(sub.progress_pct)}%</div>
+                        </div>
+                      )
+                    }
                     // the part of the bar past the due date
                     const lateFrom = t.slip_days && t.plan_finish ? Math.max(day(t.plan_finish) + 1, day(t.start)) : null
                     const lateW = lateFrom !== null ? (day(t.finish) - lateFrom + 1) * DAY : 0
                     const moved = t.plan_start && t.plan_finish && (t.plan_start !== t.start || t.plan_finish !== t.finish)
                     return (
-                      <div key={t.id}>
+                      <div key={key}>
                         {moved && <div className="gantt-plan" style={{ top: i * ROW + ROW - 8, left: x(t.plan_start!), width: (day(t.plan_finish!) - day(t.plan_start!) + 1) * DAY }} />}
                         <div className={`gantt-bar ${tone(t)} ${t.critical ? 'critical' : ''}`} style={{ top: i * ROW + 7, left, width: w, height: ROW - 18 }}
                           title={tip(t)} onClick={() => navigate(`/tasks/${t.id}`)}>
@@ -330,6 +487,7 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
                         </div>
                         <div className="gantt-label small" style={{ top: i * ROW + 7, left: left + w + 6, lineHeight: `${ROW - 18}px` }}>
                           {Math.round(t.progress_pct)}%{t.slip_days > 0 && <strong style={{ color: 'var(--warn)' }}> +{t.slip_days}d</strong>}
+                          {subAvg(t.id) !== null && <span title="Average progress of its subtasks"> · subtasks {subAvg(t.id)}%</span>}
                         </div>
                       </div>
                     )
@@ -341,6 +499,7 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
 
           <div className="gantt-legend small muted">
             {LEGEND.map(([k, text]) => <span key={k}><i className={`gantt-key ${k}`} /> {text}</span>)}
+            <span><i className="gantt-key sub" /> Subtask (▸ on a task opens them)</span>
             <span><i className="gantt-key critical" /> Critical path</span>
             <span><i className="gantt-key plan" /> Original plan</span>
             <span><i className="gantt-key today" /> Today</span>

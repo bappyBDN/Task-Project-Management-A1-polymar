@@ -80,6 +80,7 @@ def hard_delete_task(db: Session, task: models.Task, keep_approval_id: Optional[
         (models.TaskDependency.task_id == task_id) | (models.TaskDependency.depends_on_task_id == task_id)
     ).delete(synchronize_session=False)
     db.query(models.RaciEntry).filter(models.RaciEntry.task_id == task_id).delete(synchronize_session=False)
+    db.query(models.TaskSubtask).filter(models.TaskSubtask.task_id == task_id).delete(synchronize_session=False)
     db.query(models.ProgressUpdate).filter(models.ProgressUpdate.task_id == task_id).delete(synchronize_session=False)
     db.query(models.DelayRca).filter(models.DelayRca.task_id == task_id).delete(synchronize_session=False)
     approvals = db.query(models.Approval).filter(

@@ -94,6 +94,19 @@ export interface GanttTask {
   extends_project: boolean
 }
 
+/** An optional piece of a task, shown under it on the Gantt chart. People and dates are
+ *  the parent task's; only these are its own. */
+export interface Subtask {
+  id: number
+  task_id: number
+  title: string
+  description?: string | null
+  expected_deliverable?: string | null
+  progress_pct: number
+  created_by?: string | null
+  updated_at?: string | null
+}
+
 export interface GanttData {
   enabled: boolean
   today?: string

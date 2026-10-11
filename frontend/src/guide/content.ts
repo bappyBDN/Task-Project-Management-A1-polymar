@@ -284,6 +284,20 @@ const USER_GUIDE: Chapter[] = [
             t('**Critical** tasks are the chain with no spare day that decides the project\'s last finish date.', '**Critical** টাস্ক হলো সেই ধারাবাহিক টাস্কগুলো যাদের কোনো বাড়তি দিন নেই এবং যারা প্রজেক্টের শেষ তারিখ নির্ধারণ করে।'),
             t('Switching the chart off deletes nothing.', 'চার্ট বন্ধ করলে কিছুই মুছে যায় না।'),
           ),
+          h('Subtasks (optional)', 'সাবটাস্ক (ঐচ্ছিক)'),
+          p('A task can be broken into subtasks on the chart. Use them only where they help; a task without subtasks works exactly as before.',
+            'চার্টে একটি টাস্ককে সাবটাস্কে ভাগ করা যায়। যেখানে দরকার শুধু সেখানেই ব্যবহার করুন; সাবটাস্ক ছাড়া টাস্ক আগের মতোই কাজ করে।'),
+          steps(
+            t('On the task\'s row in the chart click **＋**.', 'চার্টে টাস্কের সারিতে **＋**-এ ক্লিক করুন।'),
+            t('Give a **Subtask Title** (required), and if you wish a **Description**, the **Expected Deliverable** and the **Progress %**. Nothing else is asked: the project, people and dates are taken from the task.', '**Subtask Title** দিন (আবশ্যক), এবং চাইলে **Description**, **Expected Deliverable** ও **Progress %**। আর কিছু চাওয়া হয় না: প্রজেক্ট, ব্যক্তি ও তারিখ টাস্ক থেকেই নেওয়া হয়।'),
+            t('Click **▸** on the task to open its subtasks and **▾** to close them. Each one is drawn as a thin bar under the task, with its progress.', 'সাবটাস্ক খুলতে টাস্কের **▸**-এ এবং বন্ধ করতে **▾**-এ ক্লিক করুন। প্রতিটি সাবটাস্ক টাস্কের নিচে অগ্রগতিসহ একটি চিকন বার হিসেবে দেখায়।'),
+            t('Click a subtask to change its progress or text, or to delete it.', 'অগ্রগতি বা লেখা বদলাতে, অথবা মুছতে সাবটাস্কে ক্লিক করুন।'),
+          ),
+          list(
+            t('Who can add or change subtasks: the task\'s Responsible and Accountable, the Project Manager, admin / privileged roles and the SBU\'s COO. Everyone who sees the task sees its subtasks.', 'কে সাবটাস্ক যোগ বা পরিবর্তন করতে পারেন: টাস্কের Responsible ও Accountable, Project Manager, অ্যাডমিন / প্রিভিলেজড রোল এবং SBU-এর COO। যাঁরা টাস্ক দেখেন তাঁরা সবাই সাবটাস্ক দেখেন।'),
+            t('A subtask needs no approval and is not counted in the KPI. It does not change the task\'s own progress - the chart shows the average of the subtasks beside it, and you still update the task\'s progress yourself.', 'সাবটাস্কের অনুমোদন লাগে না এবং এটি KPI-তে গণনা হয় না। এটি টাস্কের নিজের অগ্রগতি বদলায় না — চার্টে পাশে সাবটাস্কগুলোর গড় দেখায়, আর টাস্কের অগ্রগতি আপনাকেই আপডেট করতে হয়।'),
+            t('Deleting a task deletes its subtasks.', 'টাস্ক মুছলে তার সাবটাস্কও মুছে যায়।'),
+          ),
         ],
       },
       {

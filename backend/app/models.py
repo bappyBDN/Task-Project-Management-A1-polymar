@@ -285,6 +285,18 @@ class TaskDependency(Base, TimestampMixin):
     dependency_type: Mapped[str] = mapped_column(String(24), default="finish_to_start")
 
 
+class TaskSubtask(Base, TimestampMixin):
+    """An optional piece of a task, shown under it on the Gantt chart (routers/subtasks.py).
+    Not a task itself: people, dates and everything else are the parent task's."""
+    __tablename__ = "task_subtasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    expected_deliverable: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    progress_pct: Mapped[float] = mapped_column(Float, default=0.0)
+
+
 class ProgressUpdate(Base, TimestampMixin):
     __tablename__ = "progress_updates"
     id: Mapped[int] = mapped_column(primary_key=True)
