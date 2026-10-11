@@ -212,9 +212,6 @@ export default function TaskDetail() {
             )}
           </div>
 
-          <TaskSubtasks task={task} canEdit={canEdit || isProjectManager}
-            info={`Its people and dates are the task's: Responsible ${owner?.name ?? '—'}, due ${fmtDate(task.approved_due_date || task.baseline_due_date)}.`} />
-
           <div className="card mt">
             <div className="section-title" style={{ marginTop: 0 }}>Deadline Governance</div>
             <table>
@@ -267,6 +264,9 @@ export default function TaskDetail() {
               </div>
             ))}
           </div>
+
+          <TaskSubtasks task={task} canEdit={canEdit || isProjectManager}
+            info={`Its people and dates are the task's: Responsible ${owner?.name ?? '—'}, due ${fmtDate(task.approved_due_date || task.baseline_due_date)}.`} />
 
           {task.status !== 'completed' && task.status !== 'closed' && (
             <div className="card mt">
