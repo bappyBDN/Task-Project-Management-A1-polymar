@@ -8,6 +8,7 @@ import { DELAY_CATEGORIES, HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDat
 import { RichTextEditor, RichTextView } from '../components/RichText'
 import TaskForm from '../components/TaskForm'
 import CommentsPanel from '../components/CommentsPanel'
+import TaskSubtasks from '../components/TaskSubtasks'
 import { overseesSbu, sbuIdsOf, sbuNames } from '../org'
 
 export default function TaskDetail() {
@@ -210,6 +211,9 @@ export default function TaskDetail() {
               </div>
             )}
           </div>
+
+          <TaskSubtasks task={task} canEdit={canEdit || isProjectManager}
+            info={`Its people and dates are the task's: Responsible ${owner?.name ?? '—'}, due ${fmtDate(task.approved_due_date || task.baseline_due_date)}.`} />
 
           <div className="card mt">
             <div className="section-title" style={{ marginTop: 0 }}>Deadline Governance</div>

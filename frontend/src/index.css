@@ -409,6 +409,21 @@ tr.clickable, .clickable { cursor: pointer; }
 .gantt-name.sub:hover { background: #e9eef7; }
 .gantt-bar.sub { background: #9db4dd; border-radius: 4px; }
 .gantt-key.sub { background: #9db4dd; height: 8px; }
+/* Subtasks card on the task page (components/TaskSubtasks.tsx) */
+.subtask-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.subtask-summary .progress { flex: 1 1 160px; }
+.subtask-list { display: grid; gap: 8px; }
+.subtask { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fafbfd; }
+.subtask.click { cursor: pointer; transition: border-color .15s, background .15s; }
+.subtask.click:hover { border-color: var(--gold); background: #fff; }
+.subtask-no { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--navy); color: #fff; font-size: 12px; font-weight: 700; }
+.subtask-no.done { background: var(--green); }
+.subtask-body { flex: 1; min-width: 0; }
+.subtask-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--navy); overflow-wrap: anywhere; }
+.subtask-head .badge { flex: none; }
+.subtask-text { margin-top: 3px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.subtask-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.subtask-bar .progress { flex: 1; }
 .gantt-month { position: absolute; top: 0; height: 22px; line-height: 22px; padding-left: 6px; border-left: 1px solid var(--line); box-sizing: border-box; white-space: nowrap; overflow: hidden; color: var(--navy); }
 .gantt-tick { position: absolute; top: 22px; height: 21px; line-height: 21px; padding-left: 3px; font-weight: 500; text-transform: none; letter-spacing: 0; box-sizing: border-box; border-left: 1px solid #e3e8ef; }
 .gantt-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: #eef1f5; }

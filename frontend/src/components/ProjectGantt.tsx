@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { GanttData, GanttTask, Project, Subtask, Task, User } from '../types'
 import { fmtDate as formatDate, label } from '../constants'
 import SearchableSelect from './SearchableSelect'
+import SubtaskModal from './SubtaskModal'
 
 // Optional Gantt chart of a project (see backend app/gantt.py). Off: this renders nothing
 // (or only the switch, for whoever may turn it on) and the page is exactly as before.
@@ -27,8 +28,6 @@ const ROW = 34
 const NAMES = 300
 const MS_DAY = 86400000
 const DONE = ['completed', 'closed']
-
-const EMPTY_SUB = { id: 0, task_id: 0, title: '', description: '', expected_deliverable: '', progress_pct: '0' }
 
 const day = (d: string) => Math.round(Date.parse(d) / MS_DAY)
 const fmtDate = (d?: string | null) => formatDate(d ?? undefined)
@@ -65,10 +64,7 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
   // subtasks: all of the project's, which tasks are opened, and the one being added / edited
   const [subs, setSubs] = useState<Subtask[]>([])
   const [open, setOpen] = useState<Set<number>>(new Set())
-  const [subForm, setSubForm] = useState<typeof EMPTY_SUB | null>(null)
-  const [subErr, setSubErr] = useState('')
-  const [subSaving, setSubSaving] = useState(false)
-  const [subDelete, setSubDelete] = useState(false)
+  const [subForm, setSubForm] = useState<{ taskId: number; sub: Subtask | null } | null>(null)
 
   // anything that moves the schedule
   const signature = tasks.map((t) => [t.id, t.status, t.progress_pct, t.planned_start_date, t.baseline_due_date,
@@ -155,47 +151,12 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
     if (next.has(taskId)) next.delete(taskId); else next.add(taskId)
     return next
   })
-  const newSub = (taskId: number) => { setSubForm({ ...EMPTY_SUB, task_id: taskId }); setSubErr(''); setSubDelete(false) }
-  const editSub = (sub: Subtask) => {
-    setSubForm({ id: sub.id, task_id: sub.task_id, title: sub.title, description: sub.description ?? '',
-      expected_deliverable: sub.expected_deliverable ?? '', progress_pct: String(sub.progress_pct ?? 0) })
-    setSubErr('')
-    setSubDelete(false)
-  }
-  const saveSub = async () => {
-    if (!subForm || subSaving) return
-    if (!subForm.title.trim()) { setSubErr('Give the subtask a title.'); return }
-    const progress = Number(subForm.progress_pct)
-    if (!Number.isFinite(progress) || progress < 0 || progress > 100) { setSubErr('Progress must be between 0 and 100.'); return }
-    setSubSaving(true)
-    setSubErr('')
-    const body = { title: subForm.title.trim(), description: subForm.description.trim() || null,
-      expected_deliverable: subForm.expected_deliverable.trim() || null, progress_pct: progress }
-    try {
-      if (subForm.id) await api.patch(`/subtasks/${subForm.id}`, body)
-      else await api.post('/subtasks', { ...body, task_id: subForm.task_id })
-      setOpen((cur) => new Set(cur).add(subForm.task_id))
-      setSubForm(null)
-      setVersion((n) => n + 1)
-    } catch (e: any) {
-      setSubErr(e.message || 'Could not save the subtask.')
-    } finally {
-      setSubSaving(false)
-    }
-  }
-  const removeSub = async () => {
-    if (!subForm?.id || subSaving) return
-    if (!subDelete) { setSubDelete(true); return } // second click deletes
-    setSubSaving(true)
-    try {
-      await api.del(`/subtasks/${subForm.id}`)
-      setSubForm(null)
-      setVersion((n) => n + 1)
-    } catch (e: any) {
-      setSubErr(e.message || 'Could not delete the subtask.')
-    } finally {
-      setSubSaving(false)
-    }
+  const newSub = (taskId: number) => setSubForm({ taskId, sub: null })
+  const editSub = (sub: Subtask) => setSubForm({ taskId: sub.task_id, sub })
+  const subSaved = () => {
+    if (subForm) setOpen((cur) => new Set(cur).add(subForm.taskId))
+    setSubForm(null)
+    setVersion((n) => n + 1)
   }
 
   if (!enabled && !canToggle) return null
@@ -361,41 +322,11 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
         )
       })()}
       {subForm && (() => {
-        const t = byId.get(subForm.task_id)
-        const setF = (k: keyof typeof EMPTY_SUB, v: string) => setSubForm((f) => (f ? { ...f, [k]: v } : f))
+        const t = byId.get(subForm.taskId)
         return (
-          <div className="modal-backdrop">
-            <div className="modal" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
-              <h2>{subForm.id ? 'Edit subtask' : 'Add subtask'}</h2>
-              {subErr && <div className="alert error">{subErr}</div>}
-              {t && (
-                <div className="alert info">
-                  Subtask of <strong>{t.code} — {t.title}</strong>. Its project, people and dates are the task's:
-                  Responsible {userName(t.responsible_id)}, {fmtDate(t.start)} → {fmtDate(t.finish)}.
-                </div>
-              )}
-              <label>Subtask Title *</label>
-              <input value={subForm.title} maxLength={240} autoFocus onChange={(e) => setF('title', e.target.value)} placeholder="What is this piece of the task?" />
-              <label>Description</label>
-              <textarea rows={3} value={subForm.description} onChange={(e) => setF('description', e.target.value)} />
-              <label>Expected Deliverable</label>
-              <textarea rows={2} value={subForm.expected_deliverable} onChange={(e) => setF('expected_deliverable', e.target.value)} />
-              <label>Progress %</label>
-              <div className="row">
-                <input type="range" min={0} max={100} step={5} value={Number(subForm.progress_pct) || 0} onChange={(e) => setF('progress_pct', e.target.value)} style={{ flex: 1 }} aria-label="Progress" />
-                <input type="number" min={0} max={100} value={subForm.progress_pct} onChange={(e) => setF('progress_pct', e.target.value)} style={{ width: 90 }} aria-label="Progress %" />
-              </div>
-              <div className="modal-actions">
-                {!!subForm.id && (
-                  <button className="btn danger" style={{ marginRight: 'auto' }} onClick={removeSub} disabled={subSaving}>
-                    {subDelete ? 'Click again to delete' : 'Delete subtask'}
-                  </button>
-                )}
-                <button className="btn" onClick={() => setSubForm(null)}>Cancel</button>
-                <button className="btn primary" onClick={saveSub} disabled={subSaving}>{subSaving ? 'Saving…' : 'Save'}</button>
-              </div>
-            </div>
-          </div>
+          <SubtaskModal taskId={subForm.taskId} sub={subForm.sub} onClose={() => setSubForm(null)} onSaved={subSaved}
+            info={t && <>Subtask of <strong>{t.code} — {t.title}</strong>. Its project, people and dates are the task's:
+              Responsible {userName(t.responsible_id)}, {fmtDate(t.start)} → {fmtDate(t.finish)}.</>} />
         )
       })()}
       {err && <div className="alert error">{err}</div>}
