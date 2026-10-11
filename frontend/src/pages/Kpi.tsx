@@ -199,7 +199,7 @@ export default function Kpi() {
   const shown = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
     const rows = !words.length ? group : group.filter((r) => {
-      const hay = [r.name, r.employee_id, r.designation, r.role && label(r.role), ...sbusOf(r), r.function, r.department, r.manager]
+      const hay = [r.name, r.employee_id, r.designation, r.role && label(r.role), ...sbusOf(r), r.function, r.department]
         .filter(Boolean).join(' ').toLowerCase()
       return words.every((w) => hay.includes(w))
     })
@@ -227,6 +227,14 @@ export default function Kpi() {
     !sbu && sbuNames.length > 1 ? sbuNames.map((n) => ({ kind: 'sbu' as const, name: n, rows: inWho.filter((p) => sbusOf(p).includes(n)) }))
       : !dept && deptNames.length > 1 ? deptNames.map((n) => ({ kind: 'dept' as const, name: n, rows: inSbu.filter((p) => p.department === n) }))
         : []
+  // the group cards follow the same order as the people below them
+  const groupScore = (rows: KpiPerson[]) => groupOf(rows).total
+  breakdown.sort((a, b) => {
+    if (sort === 'name') return a.name.localeCompare(b.name)
+    const x = groupScore(a.rows), y = groupScore(b.rows)
+    return (known(x) ? 0 : 1) - (known(y) ? 0 : 1) || (sort === 'high' ? (y ?? 0) - (x ?? 0) : (x ?? 0) - (y ?? 0)) || a.name.localeCompare(b.name)
+  })
+  const searching = !!q.trim()
   const filtered = !!(q.trim() || sbu || dept || who !== 'all')
 
   return (
@@ -298,7 +306,7 @@ export default function Kpi() {
               </select>
             )}
             <input type="search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search a person"
-              placeholder="Search: name, employee ID, SBU, department, manager…" />
+              placeholder="Search: name, employee ID, designation, SBU, department…" />
             <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort">
               <option value="high">Highest score first</option>
               <option value="low">Lowest score first</option>
@@ -311,17 +319,21 @@ export default function Kpi() {
             {filtered && <button className="btn sm" onClick={() => { setQ(''); setSbu(''); setDept(''); setWho('all') }}>Clear</button>}
           </div>
 
-          <div className="kg-grid mb">
-            <GroupCard title={groupTitle} sub="Overall" rows={group} />
-            {breakdown.map((b) => (
-              <GroupCard key={b.kind + b.name} title={b.name} sub={b.kind === 'sbu' ? 'SBU' : 'Department'} rows={b.rows}
-                onClick={() => (b.kind === 'sbu' ? (setSbu(b.name), setDept('')) : setDept(b.name))}
-                hint={`Show the people of ${b.name}`} />
-            ))}
-          </div>
+          {/* while searching, the people found come straight under the search box */}
+          {!searching && (
+            <div className="kg-grid mb">
+              <GroupCard title={groupTitle} sub="Overall" rows={group} />
+              {breakdown.map((b) => (
+                <GroupCard key={b.kind + b.name} title={b.name} sub={b.kind === 'sbu' ? 'SBU' : 'Department'} rows={b.rows}
+                  onClick={() => (b.kind === 'sbu' ? (setSbu(b.name), setDept('')) : setDept(b.name))}
+                  hint={`Show the people of ${b.name}`} />
+              ))}
+            </div>
+          )}
 
           <div className="section-title" style={{ marginTop: 8 }}>
-            {groupTitle} — {shown.length} {shown.length === 1 ? 'person' : 'people'}{q.trim() ? ' matching the search' : ''}
+            {groupTitle} — {shown.length} {shown.length === 1 ? 'person' : 'people'}{searching ? ` matching “${q.trim()}”` : ''}
+            <span className="small muted" style={{ fontWeight: 400 }}> · {sort === 'high' ? 'highest score first' : sort === 'low' ? 'lowest score first' : 'by name'}</span>
           </div>
           {shown.length === 0 ? (
             <div className="card empty">No one matches these filters.</div>
