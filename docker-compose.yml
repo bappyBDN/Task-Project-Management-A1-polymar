@@ -33,6 +33,19 @@ services:
       BACKLOG_STALE_DAYS: ${BACKLOG_STALE_DAYS:-7}
     restart: unless-stopped
 
+  # Read-only data API for collecting data (data-api/README.md). Its own service: it shares
+  # nothing with the backend but the database, which it can only read. It gives out no data
+  # until DATA_API_KEY (at least 24 characters) is set on the server.
+  data-api:
+    build: ./data-api
+    container_name: anwar-data-api
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DATA_API_KEY: ${DATA_API_KEY:-}
+    ports:
+      - "0.0.0.0:8090:8090"
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     container_name: anwar-frontend
