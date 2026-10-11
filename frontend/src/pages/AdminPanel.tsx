@@ -7,7 +7,6 @@ import SbuSelect, { sbuKey } from '../components/SbuSelect'
 import SbuMultiSelect from '../components/SbuMultiSelect'
 import { sbuName, userSbuIds } from '../org'
 import DuplicatesPanel from '../components/DuplicatesPanel'
-import UserKpiPanel from '../components/UserKpiPanel'
 import InviteUserModal from '../components/InviteUserModal'
 import { clearPrivilegedCache } from '../usePrivileged'
 
@@ -94,7 +93,7 @@ function OrgTreeNode({
 
 export default function AdminPanel() {
   // Added 'emails' to tab state
-  const [tab, setTab] = useState<'users' | 'tasks' | 'roles' | 'hierarchy' | 'emails' | 'duplicates' | 'kpi'>('users')
+  const [tab, setTab] = useState<'users' | 'tasks' | 'roles' | 'hierarchy' | 'emails' | 'duplicates'>('users')
   const [users, setUsers] = useState<User[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -319,14 +318,11 @@ export default function AdminPanel() {
       <div className="row mb">
         <button className={`btn ${tab === 'users' ? 'primary' : ''}`} onClick={() => setTab('users')}>Users ({users.length})</button>
         <button className={`btn ${tab === 'tasks' ? 'primary' : ''}`} onClick={() => setTab('tasks')}>All Tasks ({tasks.length})</button>
-        <button className={`btn ${tab === 'kpi' ? 'primary' : ''}`} onClick={() => setTab('kpi')}>User KPI</button>
         <button className={`btn ${tab === 'roles' ? 'primary' : ''}`} onClick={() => setTab('roles')}>Privileged Roles</button>
         <button className={`btn ${tab === 'hierarchy' ? 'primary' : ''}`} onClick={() => setTab('hierarchy')}>Hierarchy Mapping</button>
         <button className={`btn ${tab === 'emails' ? 'primary' : ''}`} onClick={() => setTab('emails')}>System Emails</button>
         <button className={`btn ${tab === 'duplicates' ? 'primary' : ''}`} onClick={() => setTab('duplicates')}>Duplicates</button>
       </div>
-
-      {tab === 'kpi' && <UserKpiPanel />}
 
       {tab === 'duplicates' && (
         <DuplicatesPanel

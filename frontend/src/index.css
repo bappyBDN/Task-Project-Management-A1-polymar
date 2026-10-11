@@ -443,29 +443,36 @@ tr.clickable, .clickable { cursor: pointer; }
 .gantt-chip { display: inline-flex; align-items: center; gap: 6px; background: #eef3fb; color: var(--navy); border: 1px solid #d5e0f0; border-radius: 999px; padding: 3px 6px 3px 10px; font-size: 12px; margin: 0 6px 6px 0; }
 .gantt-chip button { border: 0; background: none; color: var(--red); cursor: pointer; font-weight: 700; padding: 0 4px; }
 
-/* KPI card (components/KpiCard.tsx): My Dashboard and User KPI */
-.kpic-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.kpic-body { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; margin-top: 14px; }
-.kpic-score { text-align: center; flex: none; }
-.kpic-ring { width: 124px; height: 124px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 6px; }
-.kpic-ring > div { width: 96px; height: 96px; border-radius: 50%; background: var(--card, #fff); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.kpic-ring strong { font-size: 28px; line-height: 1; color: var(--navy); }
-.kpic-ring span { font-size: 11px; color: var(--muted); margin-top: 3px; }
-.kpic-rates { flex: 1; min-width: 240px; display: grid; gap: 12px; }
-.kpic-rate-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
-.kpic-rate-val { font-weight: 700; color: var(--navy); }
-.kpic-bar { height: 8px; border-radius: 9px; background: #e3e8f0; overflow: hidden; margin: 5px 0 3px; }
-.kpic-bar i { display: block; height: 100%; border-radius: 9px; }
-.kpic-weight { margin-left: 8px; padding: 1px 7px; border-radius: 99px; background: #eef1f5; font-size: 11px; }
-.kpic-foot { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
-.kpic-foot span:last-child { margin-left: auto; }
+/* KPI gauge cards (components/KpiCard.tsx): My Dashboard and the KPI page */
+.kpic-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.kg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 14px; }
+.kg { display: flex; flex-direction: column; min-width: 0; padding: 14px 14px 12px; text-align: left; font: inherit; color: inherit; }
+button.kg { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+button.kg:hover { box-shadow: 0 4px 14px rgba(11,31,58,.12); transform: translateY(-1px); }
+button.kg:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button.kg.on { box-shadow: 0 0 0 2px var(--navy); }
+.kg-title { font-size: 14px; font-weight: 700; color: var(--navy); line-height: 1.25; overflow-wrap: anywhere; }
+.kg-sub { margin-top: 2px; overflow-wrap: anywhere; }
+.kg-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; margin-top: 8px; }
+.kg-val { font-size: 28px; line-height: 1; font-weight: 700; color: var(--navy); }
+.kg-gauge { display: block; width: 100%; max-width: 190px; margin: 2px auto 0; }
+.kg-tick { font-size: 10px; fill: var(--muted); }
+.kg-pill { text-align: center; margin-top: 2px; }
+.kg-lines { margin-top: 10px; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.kg-foot { margin-top: auto; padding-top: 10px; }
+.kg-lines + .kg-foot { border-top: 1px solid var(--line); }
+.kg-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.kpi-how { margin: 14px 0 0; }
+.kpi-how summary { cursor: pointer; font-weight: 600; color: var(--navy); font-size: 13px; }
+.kpi-how ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.kpi-how p { margin: 10px 0 0; }
+.kpi-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.kpi-filters select { width: auto; max-width: 100%; }
+.kpi-filters input[type=search] { flex: 1 1 240px; width: auto; min-width: 0; }
+.kpi-table { overflow-x: auto; }
 
 /* password box with a show / hide button (Login) */
 .pw-field { position: relative; }
 .pw-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 6px; }
 .pw-toggle:hover { color: var(--navy); background: #f3f5f9; }
 .pw-toggle:focus-visible { outline: 2px solid var(--gold); }
-.kpic-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
-.kpic-role { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-.kpic-role strong { display: block; font-size: 20px; line-height: 1.3; color: var(--navy); }
-.kpic-role.none strong { color: var(--muted); }

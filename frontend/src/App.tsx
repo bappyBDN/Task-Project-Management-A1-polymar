@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth'
 import { api, STORAGE_MODE } from './api'
 import { store } from './store'
@@ -20,8 +20,7 @@ import Raci from './pages/Raci'
 import Kanban from './pages/Kanban'
 import Notifications from './pages/Notifications'
 import AdminPanel from './pages/AdminPanel'
-import UserKpi from './pages/UserKpi'
-import { useIsPrivileged } from './usePrivileged'
+import Kpi from './pages/Kpi'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import { label } from './constants'
@@ -62,6 +61,7 @@ const WORKSPACE: NavItem[] = [
   { to: '/kanban', label: 'Kanban', icon: 'kanban' },
   { to: '/projects', label: 'Projects', icon: 'projects' },
   { to: '/backlog', label: 'Backlog', icon: 'backlog' },
+  { to: '/kpi', label: 'KPI', icon: 'kpi' },
 ]
 
 const GOVERNANCE: NavItem[] = [
@@ -76,7 +76,7 @@ const ADMIN: NavItem[] = [
   { to: '/admin', label: 'Admin Panel', icon: 'admin' },
 ]
 
-function buildSections(isAdmin: boolean, seesKpi: boolean): NavSection[] {
+function buildSections(isAdmin: boolean): NavSection[] {
   const sections: NavSection[] = [
     // the Tasks page (every task in one list) is for admins; everyone else opens a project's
     // tasks from the project page
@@ -84,8 +84,6 @@ function buildSections(isAdmin: boolean, seesKpi: boolean): NavSection[] {
     { section: 'Governance', items: GOVERNANCE },
   ]
   if (isAdmin) sections.push({ section: 'Administration', items: ADMIN })
-  // the privileged roles have no Admin Panel: they open User KPI from the menu (admins: its tab there)
-  else if (seesKpi) sections.push({ section: 'Administration', items: [{ to: '/user-kpi', label: 'User KPI', icon: 'kpi' }] })
   return sections
 }
 
@@ -136,7 +134,6 @@ export default function App() {
   // close the phone menu after navigating
   useEffect(() => { setNavOpen(false) }, [location.pathname])
   const badges = useNavBadges(user?.id, location.pathname)
-  const isPrivileged = useIsPrivileged(user?.role)
 
   if (loading) {
     return (
@@ -156,7 +153,7 @@ export default function App() {
 
   // ---- Logged in → main layout ----
   const isAdmin = user.role === 'admin'
-  const sections = buildSections(isAdmin, isPrivileged)
+  const sections = buildSections(isAdmin)
 
   return (
     <div className="app">
@@ -234,7 +231,8 @@ export default function App() {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/audit" element={<Audit />} />
           {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
-          {isPrivileged && <Route path="/user-kpi" element={<UserKpi />} />}
+          <Route path="/kpi" element={<Kpi />} />
+          <Route path="/user-kpi" element={<Navigate to="/kpi" replace />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

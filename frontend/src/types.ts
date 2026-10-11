@@ -376,20 +376,24 @@ export interface Notification {
   link_label?: string | null
 }
 /** The KPI of one role: over tasks for Responsible / Accountable / Reviewer, over the
- *  projects they manage for Project Manager. */
+ *  projects they manage for Project Manager (backend app/routers/kpi.py). */
 export interface RoleKpi {
   role: 'responsible' | 'accountable' | 'reviewer' | 'project_manager'
   unit?: 'tasks' | 'projects'
-  /** tasks; for projects, the due ones (completed or past due) */
+  /** the counted ones: completed, past due or running against a plan */
   assigned: number
   completed: number
   completed_on_time: number
-  /** projects still running inside their due date (not counted yet) */
+  /** open and past the due date */
+  overdue?: number
+  /** open, inside their dates */
+  running?: number
+  /** open with the planned start still ahead, or with no due date */
   not_counted?: number
-  /** average progress of the due projects still open, %; null = none */
-  open_progress?: number | null
-  tcr: number
-  otr: number
+  /** average achievement against the plan, % */
+  delivery?: number | null
+  /** on-time rate, %; null = nothing completed or past due yet */
+  on_time?: number | null
   /** null = nothing to score in this role */
   kpi?: number | null
 }
@@ -399,10 +403,15 @@ export interface UserKpiProject {
   code: string
   name: string
   status: string
-  /** completed / overdue (both counted) or running (not counted yet) */
-  state: 'completed' | 'overdue' | 'running'
+  /** completed / overdue / running (counted) or not_due (not counted yet) */
+  state: 'completed' | 'overdue' | 'running' | 'not_due'
   /** overall progress (100 when completed) */
   progress_pct?: number
+  /** where the plan says it should be today; null = no due date */
+  expected_pct?: number | null
+  /** its points in Delivery; null = not counted */
+  achievement?: number | null
+  start_date?: string | null
   due_date?: string | null
   completed_date?: string | null
   /** null = not completed yet */
@@ -417,23 +426,32 @@ export interface UserKpi {
   employee_id?: string | null
   designation?: string | null
   role?: string | null
+  /** the first SBU */
   company?: string | null
+  /** every SBU of the person */
+  companies?: string[]
+  function?: string | null
   department?: string | null
+  reports_to_id?: number | null
+  /** counted tasks */
   assigned: number
   completed: number
   open: number
   overdue: number
+  not_counted?: number
   completed_on_time: number
   /** tasks whose start could be judged (the On-Time Start denominator) */
   start_judged: number
   started_on_time: number
-  tcr: number
-  otr: number
+  /** average achievement of the tasks against their plan, % */
+  delivery?: number | null
+  /** On-Time rate of the tasks, % */
+  on_time?: number | null
   /** null = no task whose start can be judged */
   otsr?: number | null
-  /** TCR x 0.60 + OTR x 0.40; null = no tasks */
+  /** Delivery x 0.60 + On-Time x 0.40; null = no tasks */
   task_kpi?: number | null
-  /** the same over the projects they manage; null = none due yet */
+  /** the same over the projects they manage; null = none counted yet */
   project_kpi?: number | null
   /** the one there is, or their average; null = nothing to score */
   total_kpi?: number | null
@@ -449,6 +467,10 @@ export interface UserKpiTask {
   status: string
   /** the person's roles on this task */
   roles?: string[]
+  state?: 'completed' | 'overdue' | 'running' | 'not_due'
+  progress_pct?: number
+  expected_pct?: number | null
+  achievement?: number | null
   planned_start_date?: string | null
   actual_start_date?: string | null
   due_date?: string | null
@@ -463,4 +485,31 @@ export interface UserKpiDetail extends UserKpi {
   tasks: UserKpiTask[]
   /** the projects the person manages */
   projects?: UserKpiProject[]
+}
+
+/** A row of the KPI page: someone the viewer may see. */
+export interface KpiPerson extends UserKpi {
+  /** who they report to */
+  manager?: string | null
+  /** why the viewer sees them: self / direct_report / team / department / function / sbu / all */
+  relation?: string[]
+}
+
+export interface KpiScope {
+  level: 'all' | 'sbu' | 'function' | 'department' | 'team' | 'self'
+  sees_all?: boolean
+  headed?: 'sbu' | 'function' | 'department' | null
+  /** the SBUs the viewer heads */
+  sbus?: string[]
+  /** the Function / Department they head */
+  unit?: string | null
+  team_size?: number
+  direct_reports?: number
+  /** people shown besides themselves */
+  people?: number
+}
+
+export interface KpiOverview {
+  scope: KpiScope
+  people: KpiPerson[]
 }
