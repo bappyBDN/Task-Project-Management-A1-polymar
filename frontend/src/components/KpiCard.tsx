@@ -115,13 +115,14 @@ export function RoleChips({ roles }: { roles?: { role: string; kpi?: number | nu
   )
 }
 
-function RoleCard({ r }: { r: RoleKpi }) {
+function RoleCard({ r, onClick, active }: { r: RoleKpi; onClick?: () => void; active?: boolean }) {
   const projects = r.unit === 'projects'
   const unit = projects ? 'project' : 'task'
   const has = known(r.kpi)
   const waiting = r.not_counted ?? 0
   return (
-    <GaugeCard title={`As ${ROLE_NAME[r.role]}`} value={r.kpi}
+    <GaugeCard title={`As ${ROLE_NAME[r.role]}`} value={r.kpi} onClick={onClick} active={active}
+      sub={onClick ? (projects ? 'Click to see only these projects' : 'Click to see only these tasks') : undefined}
       hint={projects
         ? 'Scored on the projects managed. Each project counts by its progress against its plan: completed = 100; open = 100 minus the points it is behind where it should be today (a project past its due date that is 90% done scores 90).'
         : `Scored on the tasks where this person is the ${ROLE_NAME[r.role]}, each measured against its own plan.`}
@@ -144,8 +145,13 @@ function RoleCard({ r }: { r: RoleKpi }) {
   )
 }
 
-export default function KpiCard({ kpi, title = 'My KPI', showPerson = false, action }: {
+/** What a KPI card is narrowed to: everything behind the Total KPI, or one role. */
+export type KpiPick = 'all' | RoleKpi['role']
+
+export default function KpiCard({ kpi, title = 'My KPI', showPerson = false, action, picked, onPick }: {
   kpi: UserKpi; title?: string; showPerson?: boolean; action?: ReactNode
+  /** given, the cards are buttons: the Total card picks 'all', a role card that role */
+  picked?: KpiPick; onPick?: (pick: KpiPick) => void
 }) {
   const both = known(kpi.task_kpi) && known(kpi.project_kpi)
   return (
@@ -169,6 +175,8 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false, act
       </div>
       <div className="kg-grid">
         <GaugeCard title="Total KPI" value={kpi.total_kpi}
+          onClick={onPick && (() => onPick('all'))} active={picked === 'all'}
+          sub={onPick ? 'Click to see everything behind it' : undefined}
           hint="Total KPI = the Task KPI (all the person's tasks, each once), the Project KPI (the projects they manage), or their average when they have both."
           foot={both ? 'Average of the Task KPI and the Project KPI' : known(kpi.project_kpi) ? 'Total KPI = Project KPI' : known(kpi.task_kpi) ? 'Total KPI = Task KPI' : undefined}>
           <div>Task KPI {num(kpi.task_kpi)} · Project KPI {num(kpi.project_kpi)}</div>
@@ -180,7 +188,9 @@ export default function KpiCard({ kpi, title = 'My KPI', showPerson = false, act
             Started on time: {kpi.start_judged ? `${kpi.started_on_time} of ${kpi.start_judged} (${pct(kpi.otsr)})` : '—'}
           </div>
         </GaugeCard>
-        {(kpi.roles ?? []).map((r) => <RoleCard key={r.role} r={r} />)}
+        {(kpi.roles ?? []).map((r) => (
+          <RoleCard key={r.role} r={r} onClick={onPick && (() => onPick(r.role))} active={picked === r.role} />
+        ))}
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import { api } from '../api'
 import { KpiOverview, KpiPerson, UserKpiDetail } from '../types'
 import { STATUS_COLORS, fmtDate, label } from '../constants'
 import { sbuLabel } from '../org'
-import KpiCard, { GaugeCard, RATING, ROLE_NAME, RoleChips, TARGET, initialsOf, known, num, pct, ratingOf } from '../components/KpiCard'
+import KpiCard, { GaugeCard, KpiPick, RATING, ROLE_NAME, RoleChips, TARGET, initialsOf, known, num, pct, ratingOf } from '../components/KpiCard'
 
 // KPI: your own KPI cards (My KPI tab), and the KPI of the people you may see - your team (everyone who
 // reports to you), the department / function / SBU you head, or everyone for admin, the
@@ -62,10 +62,26 @@ function GroupCard({ title, sub, rows, onClick, active, hint }: {
   )
 }
 
-function Detail({ userId, onClose }: { userId: number; onClose: () => void }) {
+type TaskRow = UserKpiDetail['tasks'][number]
+
+/** The tasks of one project (or of none), as the project list shows them. */
+function projectsOf(tasks: TaskRow[]) {
+  const map = new Map<number, { id: number; code: string; name: string; tasks: TaskRow[] }>()
+  for (const t of tasks) {
+    const id = t.project_id ?? 0 // 0 = tasks outside any project
+    if (!map.has(id)) map.set(id, { id, code: t.project_code ?? '', name: id ? (t.project_name ?? 'Project') : 'No project', tasks: [] })
+    map.get(id)!.tasks.push(t)
+  }
+  // tasks outside any project last
+  return [...map.values()].sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || a.name.localeCompare(b.name))
+}
+
+function Detail({ userId, role = 'all', onClose }: { userId: number; role?: KpiPick; onClose: () => void }) {
   const navigate = useNavigate()
   const [detail, setDetail] = useState<UserKpiDetail | null>(null)
   const [err, setErr] = useState('')
+  const [pick, setPick] = useState<KpiPick>(role)
+  const [openProject, setOpenProject] = useState<number | null>(null)
   useEffect(() => {
     let stale = false
     setDetail(null)
@@ -81,6 +97,16 @@ function Detail({ userId, onClose }: { userId: number; onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // the role picked on the card: its tasks only (Project Manager has projects, not tasks)
+  const tasks = useMemo(() => (!detail || pick === 'project_manager' ? []
+    : pick === 'all' ? detail.tasks : detail.tasks.filter((t) => t.roles?.includes(pick))), [detail, pick])
+  const groups = useMemo(() => projectsOf(tasks), [tasks])
+  const open = groups.find((g) => g.id === openProject)
+  const managed = detail?.projects ?? []
+  const managedIds = new Set(managed.map((p) => p.id))
+  const asRole = pick === 'all' ? 'Responsible, Accountable or Reviewer' : ROLE_NAME[pick]
+  const choose = (p: KpiPick) => { setPick(p); setOpenProject(null) }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" style={{ width: 1180 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="KPI card">
@@ -88,46 +114,106 @@ function Detail({ userId, onClose }: { userId: number; onClose: () => void }) {
         {!detail && !err && <div className="small muted">Loading the KPI…</div>}
         {detail && (
           <>
-            <KpiCard kpi={detail} title="KPI Card" showPerson action={<button className="btn sm" onClick={onClose}>Close</button>} />
+            <KpiCard kpi={detail} title="KPI Card" showPerson picked={pick} onPick={choose}
+              action={<button className="btn sm" onClick={onClose}>Close</button>} />
 
-            <div className="section-title">Tasks behind the score ({detail.tasks.length})</div>
-            {detail.tasks.length === 0 ? (
-              <div className="small muted">No tasks as Responsible, Accountable or Reviewer.</div>
-            ) : (
-              <div className="kpi-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Task</th><th>Role</th><th>Status</th><th>In the score</th>
-                      <th title="How far the task is">Progress</th><th title="How far its plan says it should be today">Expected</th>
-                      <th title="Its points in Delivery: 100 minus the points it is behind its plan">Points</th>
-                      <th>Due</th><th>Completed</th><th>Delivery</th><th title="Started on or before the planned start">Start</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.tasks.map((t) => (
-                      <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
-                        <td><span className="muted small">{t.code}</span> {t.title}</td>
-                        <td className="small" style={{ whiteSpace: 'nowrap' }}>{(t.roles ?? []).map((r) => ROLE_NAME[r] ?? r).join(', ') || '—'}</td>
-                        <td><span className={`badge ${STATUS_COLORS[t.status] ?? 'gray'}`}>{label(t.status)}</span></td>
-                        <td>{stateBadge(t.state)}</td>
-                        <td className="small">{pct(t.progress_pct)}</td>
-                        <td className="small">{pct(t.expected_pct)}</td>
-                        <td><strong>{num(t.achievement)}</strong></td>
-                        <td className="small">{fmtDate(t.due_date ?? undefined)}</td>
-                        <td className="small">{fmtDate(t.actual_due_date ?? undefined)}</td>
-                        <td>{t.state === 'overdue' ? <span className="badge red">Late</span> : yesNo(t.on_time, 'On time', 'Late')}</td>
-                        <td>{yesNo(t.started_on_time, 'On time', 'Late')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            {pick !== 'project_manager' && (
+              <>
+                <div className="section-title">
+                  {pick === 'all' ? 'Projects behind the score' : `Projects with tasks as ${asRole}`} ({groups.length} · {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'})
+                </div>
+                {groups.length === 0 ? (
+                  <div className="small muted">No tasks as {asRole}.</div>
+                ) : !open ? (
+                  <div className="kpi-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Project</th><th title={`Tasks as ${asRole}`}>Tasks</th><th>Completed</th><th>Past due</th><th>Running</th>
+                          <th title="Planned start still ahead, or no due date">Not counted</th>
+                          <th title="Average progress of these tasks">Progress</th>
+                          <th title="Average points of the counted tasks: 100 minus the points a task is behind its plan">Points</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groups.map((g) => {
+                          const count = (s: string) => g.tasks.filter((t) => (t.state ?? 'running') === s).length
+                          const overdue = count('overdue')
+                          return (
+                            <tr key={g.id} onClick={() => setOpenProject(g.id)} style={{ cursor: 'pointer' }} title="Show the tasks of this project">
+                              <td>
+                                {g.code && <span className="muted small">{g.code} </span>}<strong>{g.name}</strong>
+                                {managedIds.has(g.id) && <span className="badge gold" style={{ marginLeft: 6 }} title="This person manages the project">Project Manager</span>}
+                              </td>
+                              <td><strong>{g.tasks.length}</strong></td>
+                              <td>{count('completed')}</td>
+                              <td style={overdue ? { color: 'var(--red)', fontWeight: 600 } : undefined}>{overdue}</td>
+                              <td>{count('running')}</td>
+                              <td>{count('not_due')}</td>
+                              <td className="small">{pct(average(g.tasks.map((t) => t.progress_pct)))}</td>
+                              <td><strong>{num(average(g.tasks.map((t) => t.achievement)))}</strong></td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <>
+                    <div className="spread mb" style={{ flexWrap: 'wrap', gap: 8 }}>
+                      <div className="kpi-path" aria-label="Showing">
+                        <button type="button" onClick={() => setOpenProject(null)}>All projects ({groups.length})</button>
+                        <span aria-hidden>›</span>
+                        <button type="button" disabled>{[open.code, open.name].filter(Boolean).join(' ')} — {open.tasks.length} {open.tasks.length === 1 ? 'task' : 'tasks'} as {asRole}</button>
+                      </div>
+                      <div className="row" style={{ gap: 6 }}>
+                        <button className="btn sm" onClick={() => setOpenProject(null)}>← Back to the projects</button>
+                        {open.id > 0 && <button className="btn sm" onClick={() => navigate(`/projects/${open.id}`)}>Open the project</button>}
+                      </div>
+                    </div>
+                    <div className="kpi-table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Task</th><th>Role</th><th>Status</th><th>In the score</th>
+                            <th title="How far the task is">Progress</th><th title="How far its plan says it should be today">Expected</th>
+                            <th title="Its points in Delivery: 100 minus the points it is behind its plan">Points</th>
+                            <th>Due</th><th>Completed</th><th>Delivery</th><th title="Started on or before the planned start">Start</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {open.tasks.map((t) => (
+                            <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
+                              <td><span className="muted small">{t.code}</span> {t.title}</td>
+                              <td className="small" style={{ whiteSpace: 'nowrap' }}>{(t.roles ?? []).map((r) => ROLE_NAME[r] ?? r).join(', ') || '—'}</td>
+                              <td><span className={`badge ${STATUS_COLORS[t.status] ?? 'gray'}`}>{label(t.status)}</span></td>
+                              <td>{stateBadge(t.state)}</td>
+                              <td className="small">{pct(t.progress_pct)}</td>
+                              <td className="small">{pct(t.expected_pct)}</td>
+                              <td><strong>{num(t.achievement)}</strong></td>
+                              <td className="small">{fmtDate(t.due_date ?? undefined)}</td>
+                              <td className="small">{fmtDate(t.actual_due_date ?? undefined)}</td>
+                              <td>{t.state === 'overdue' ? <span className="badge red">Late</span> : yesNo(t.on_time, 'On time', 'Late')}</td>
+                              <td>{yesNo(t.started_on_time, 'On time', 'Late')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </>
             )}
 
-            {!!detail.projects?.length && (
+            {pick === 'project_manager' && managed.length === 0 && (
               <>
-                <div className="section-title">Projects managed — behind the Project Manager score ({detail.projects.length})</div>
+                <div className="section-title">Projects managed (0)</div>
+                <div className="small muted">This person is not the Project Manager of any project.</div>
+              </>
+            )}
+            {(pick === 'all' || pick === 'project_manager') && managed.length > 0 && (
+              <>
+                <div className="section-title">Projects managed — behind the Project Manager score ({managed.length})</div>
                 <div className="kpi-table">
                   <table>
                     <thead>
@@ -139,7 +225,7 @@ function Detail({ userId, onClose }: { userId: number; onClose: () => void }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {detail.projects.map((p) => (
+                      {managed.map((p) => (
                         <tr key={p.id} onClick={() => navigate(`/projects/${p.id}`)} style={{ cursor: 'pointer' }}>
                           <td><span className="muted small">{p.code}</span> {p.name}</td>
                           <td><span className="badge gray">{label(p.status)}</span></td>
@@ -231,7 +317,9 @@ export default function Kpi() {
   const [sort, setSort] = useState<'high' | 'low' | 'name'>('high')
   const [view, setView] = useState<'cards' | 'table'>('cards')
   const [limit, setLimit] = useState(PAGE)
-  const [openId, setOpenId] = useState<number | null>(null)
+  // the KPI card opened, and the role its list starts on (a role card clicked on the page)
+  const [opened, setOpened] = useState<{ id: number; role?: KpiPick } | null>(null)
+  const setOpenId = (id: number, role?: KpiPick) => setOpened({ id, role })
 
   useEffect(() => {
     api.get<KpiOverview>('/kpi/overview').then((d) => {
@@ -401,8 +489,8 @@ export default function Kpi() {
       )}
 
       {me && tab === 'me' && (
-        <KpiCard kpi={me} title="My KPI" action={
-          <button className="btn sm" onClick={() => setOpenId(me.user_id)}>See the tasks and projects behind it</button>
+        <KpiCard kpi={me} title="My KPI" onPick={(role) => setOpenId(me.user_id, role)} action={
+          <button className="btn sm" onClick={() => setOpenId(me.user_id)}>See the projects and tasks behind it</button>
         } />
       )}
       {data && tab === 'me' && others.length === 0 && <div className="small muted mt">{scopeText}</div>}
@@ -459,8 +547,8 @@ export default function Kpi() {
             <div className="card empty">{searching ? 'No employee matches this search.' : 'No one matches these filters.'}</div>
           ) : only ? (
             // the one person searched for: their whole KPI card
-            <KpiCard kpi={only} title="KPI Card" showPerson action={
-              <button className="btn sm" onClick={() => setOpenId(only.user_id)}>See the tasks and projects behind it</button>
+            <KpiCard kpi={only} title="KPI Card" showPerson onPick={(role) => setOpenId(only.user_id, role)} action={
+              <button className="btn sm" onClick={() => setOpenId(only.user_id)}>See the projects and tasks behind it</button>
             } />
           ) : view === 'cards' ? (
             <div className="kg-grid">
@@ -535,7 +623,7 @@ export default function Kpi() {
         </details>
       )}
 
-      {openId !== null && <Detail userId={openId} onClose={() => setOpenId(null)} />}
+      {opened && <Detail userId={opened.id} role={opened.role} onClose={() => setOpened(null)} />}
     </>
   )
 }

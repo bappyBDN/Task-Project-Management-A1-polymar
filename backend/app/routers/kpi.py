@@ -178,6 +178,9 @@ class _Data:
             for role, uid in people.items():
                 if uid is not None and (user_id is None or uid == user_id):
                     self.tasks.setdefault(uid, {}).setdefault(t.id, (t, verdict, []))[2].append(role)
+        # project id -> (code, name), to say which project a task belongs to
+        self.project_names = {pid: (code, name) for pid, code, name in
+                              db.query(models.Project.id, models.Project.code, models.Project.name).all()}
         # user id -> [(project, verdict)] for the projects they manage
         self.projects: dict[int, list] = {}
         q = db.query(models.Project).filter(models.Project.manager_id.isnot(None))
@@ -228,6 +231,9 @@ class _Data:
             rows.sort(key=lambda r: (r[1]["due"] or date.max, r[0].id))
             out["tasks"] = [{
                 "id": t.id, "code": t.code, "title": t.title, "status": (t.status or "").lower(), "roles": r,
+                "project_id": t.project_id,
+                "project_code": self.project_names.get(t.project_id, (None, None))[0],
+                "project_name": self.project_names.get(t.project_id, (None, None))[1],
                 "state": j["state"], "progress_pct": j["progress"], "expected_pct": j["expected"],
                 "achievement": j["achievement"],
                 "planned_start_date": t.planned_start_date, "actual_start_date": t.actual_start_date,

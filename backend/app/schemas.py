@@ -659,6 +659,9 @@ class UserKpiTaskOut(BaseModel):
     title: str
     status: str
     roles: list[str] = []   # the person's roles on this task
+    project_id: Optional[int] = None        # None = a task outside any project
+    project_code: Optional[str] = None
+    project_name: Optional[str] = None
     state: str = "running"                  # completed / overdue / running (counted) / not_due (not counted)
     progress_pct: float = 0.0
     expected_pct: Optional[float] = None    # where the plan says it should be today; None = no due date

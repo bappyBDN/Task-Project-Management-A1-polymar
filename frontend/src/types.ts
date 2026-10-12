@@ -480,6 +480,10 @@ export interface UserKpiTask {
   status: string
   /** the person's roles on this task */
   roles?: string[]
+  /** null = a task outside any project */
+  project_id?: number | null
+  project_code?: string | null
+  project_name?: string | null
   state?: 'completed' | 'overdue' | 'running' | 'not_due'
   progress_pct?: number
   expected_pct?: number | null

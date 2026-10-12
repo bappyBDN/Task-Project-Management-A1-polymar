@@ -657,7 +657,8 @@ const USER_GUIDE: Chapter[] = [
           list(
             t('An example: a task past its due date that is 90% done scores 90 points and counts as late.', 'উদাহরণ: মেয়াদ পার হওয়া একটি টাস্ক ৯০% সম্পন্ন হলে ৯০ পয়েন্ট পায় এবং "দেরি" হিসেবে গণনা হয়।'),
             t('A task whose planned start is still ahead, or that has no due date, is not counted yet. Cancelled and deleted tasks are left out.', 'যে টাস্কের Planned Start এখনো আসেনি বা যার শেষ তারিখ নেই, তা এখনো গণনা হয় না। Cancelled ও মুছে ফেলা টাস্ক বাদ থাকে।'),
-            t('On the **KPI** page, click **See the tasks and projects behind it** to see the points of every task.', '**KPI** পেজে **See the tasks and projects behind it**-এ ক্লিক করলে প্রতিটি টাস্কের পয়েন্ট দেখা যায়।'),
+            t('On the **KPI** page, click **See the projects and tasks behind it**. The list is by project: click a project to see its tasks and the points of each.', '**KPI** পেজে **See the projects and tasks behind it**-এ ক্লিক করুন। তালিকাটি প্রজেক্ট অনুযায়ী: কোনো প্রজেক্টে ক্লিক করলে তার টাস্ক ও প্রতিটির পয়েন্ট দেখা যায়।'),
+            t('Click a role card to narrow the list: **As Responsible** shows only the tasks where the person is Responsible, **As Project Manager** only the projects they manage. **Total KPI** shows everything again.', 'তালিকা ছোট করতে রোল কার্ডে ক্লিক করুন: **As Responsible** শুধু সেই টাস্ক দেখায় যেখানে ব্যক্তি Responsible, **As Project Manager** শুধু তাঁর পরিচালিত প্রজেক্ট। **Total KPI** আবার সব দেখায়।'),
           ),
         ],
       },
@@ -729,7 +730,7 @@ const USER_GUIDE: Chapter[] = [
             [t('The button shows "✓ Submitted" and I cannot submit again.', 'বাটনে "✓ Submitted" দেখাচ্ছে, আবার সাবমিট করা যাচ্ছে না।'), t('A request is pending, or it was rejected. After a rejection, save a new progress update, then submit again.', 'একটি অনুরোধ অপেক্ষমাণ, অথবা প্রত্যাখ্যাত হয়েছে। প্রত্যাখ্যানের পর নতুন করে অগ্রগতি আপডেট সেভ করে আবার সাবমিট করুন।')],
             [t('My approval request is not being decided.', 'আমার অনুরোধে সিদ্ধান্ত আসছে না।'), t('Open **Approvals** to see who it is with and remind them. An admin or the SBU\'s COO can also decide it.', '**Approvals** খুলে দেখুন এটি কার কাছে আছে এবং তাঁকে মনে করিয়ে দিন। অ্যাডমিন বা SBU-এর COO-ও সিদ্ধান্ত দিতে পারেন।')],
             [t('A person is not in the list.', 'কোনো ব্যক্তি তালিকায় নেই।'), t('Choose **+ new user** in the person field, enter their email and they are invited.', 'ব্যক্তির ঘরে **+ new user** বেছে তাঁর ইমেইল দিন — তাঁকে আমন্ত্রণ পাঠানো হবে।')],
-            [t('My KPI looks too low.', 'আমার KPI অনেক কম দেখাচ্ছে।'), t('Open **KPI → See the tasks and projects behind it**. Look for tasks with old progress, tasks past due, and tasks completed late.', '**KPI → See the tasks and projects behind it** খুলুন। পুরোনো অগ্রগতির টাস্ক, মেয়াদোত্তীর্ণ টাস্ক ও দেরিতে সম্পন্ন টাস্ক খুঁজুন।')],
+            [t('My KPI looks too low.', 'আমার KPI অনেক কম দেখাচ্ছে।'), t('Open **KPI → See the projects and tasks behind it**. Look for tasks with old progress, tasks past due, and tasks completed late.', '**KPI → See the projects and tasks behind it** খুলুন। পুরোনো অগ্রগতির টাস্ক, মেয়াদোত্তীর্ণ টাস্ক ও দেরিতে সম্পন্ন টাস্ক খুঁজুন।')],
             [t('I did not get an email.', 'ইমেইল পাইনি।'), t('Check the spam folder. Approvals are shown only inside the system, under Notifications.', 'স্প্যাম ফোল্ডার দেখুন। অনুমোদনের বার্তা শুধু সিস্টেমের ভেতরে Notifications-এ আসে।')],
           ),
         ],
