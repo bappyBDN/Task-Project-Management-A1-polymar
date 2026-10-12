@@ -538,7 +538,7 @@ const USER_GUIDE: Chapter[] = [
           table(
             [t('Action', 'কাজ'), t('Who can', 'কে পারেন')],
             [t('Create a project', 'প্রজেক্ট তৈরি'), t('Anyone', 'যে কেউ')],
-            [t('**✎ Edit Project**', '**✎ Edit Project**'), t('Admin / privileged roles, the COO of its SBU, and anyone Responsible or Accountable on one of its tasks', 'অ্যাডমিন / প্রিভিলেজড রোল, SBU-এর COO, এবং প্রজেক্টের যেকোনো টাস্কের Responsible বা Accountable')],
+            [t('**✎ Edit Project**', '**✎ Edit Project**'), t('Admin / privileged roles, the COO of its SBU, the Project Manager, and anyone Responsible or Accountable on one of its tasks', 'অ্যাডমিন / প্রিভিলেজড রোল, SBU-এর COO, Project Manager, এবং প্রজেক্টের যেকোনো টাস্কের Responsible বা Accountable')],
             [t('Add / edit / remove associated people', 'সংশ্লিষ্ট ব্যক্তি যোগ / এডিট / বাদ'), t('Whoever can edit the project, plus its Manager and Owner', 'যাঁরা প্রজেক্ট এডিট করতে পারেন, সাথে Manager ও Owner')],
             [t('Switch the Gantt chart on / off, set dependencies', 'Gantt চার্ট চালু / বন্ধ, নির্ভরশীলতা ঠিক করা'), t('The same people as above', 'উপরের একই ব্যক্তিরা')],
             [t('Methodology link and approvers', 'Methodology লিংক ও অনুমোদনকারী'), t('The Project Manager, admin / privileged roles', 'Project Manager, অ্যাডমিন / প্রিভিলেজড রোল')],

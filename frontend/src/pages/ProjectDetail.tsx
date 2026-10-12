@@ -80,17 +80,17 @@ export default function ProjectDetail() {
   }
 
   const companyName = sbuNames(companies, sbuIdsOf(project)) ?? '—'
-  // Admin / PMO, or anyone Responsible / Accountable on one of this project's tasks, can edit
-  // the whole project (same rule as app/permissions.py on the server).
+  // Admin / PMO, the project's Manager, or anyone Responsible / Accountable on one of this
+  // project's tasks, can edit the whole project (same rule as app/permissions.py on the server).
+  const isProjectManager = !!user && !!project.manager_id && project.manager_id === user.id
   const isProjectRA = !!user && tasks.some((t) => t.responsible_id === user.id || t.accountable_id === user.id)
   // ...and so can the COO of the project's SBU
-  const canEdit = isPrivileged || isProjectRA || overseesSbu(user, companies, sbuIdsOf(project))
+  const canEdit = isPrivileged || isProjectManager || isProjectRA || overseesSbu(user, companies, sbuIdsOf(project))
   // associated people: also the project's Manager / Owner / Sponsor (same rule as the server)
   const canManageAssociates = canEdit || (!!user && [project.manager_id, project.owner_id, project.sponsor_id].includes(user.id))
 
   // Only the project's Manager deletes it (the server checks this too). Every task under the
   // project is deleted permanently with it.
-  const isProjectManager = !!user && !!project.manager_id && project.manager_id === user.id
   const removeProject = async () => {
     if (deleting) return
     const n = tasks.length

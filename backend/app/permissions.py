@@ -23,6 +23,7 @@ Tasks
 
 Projects
   admin / privileged role                               -> every field
+  the project's Manager                                 -> every field
   Responsible / Accountable on a (live) task of project -> every field
   anyone else                                           -> no edits
 """
@@ -176,7 +177,7 @@ def is_project_ra(db: Session, user: models.User, project: models.Project) -> bo
 
 
 def can_edit_project(db: Session, user: models.User, project: models.Project) -> bool:
-    return can_manage(db, user, project) or is_project_ra(db, user, project)
+    return can_manage(db, user, project) or user.id == project.manager_id or is_project_ra(db, user, project)
 
 
 def can_manage_associates(db: Session, user: models.User, project: models.Project) -> bool:
@@ -187,5 +188,5 @@ def can_manage_associates(db: Session, user: models.User, project: models.Projec
 
 def check_project_edit(db: Session, user: models.User, project: models.Project, data: dict) -> dict:
     if not can_edit_project(db, user, project):
-        raise HTTPException(403, "Only an admin / PMO or a Responsible / Accountable person on this project's tasks can edit this project.")
+        raise HTTPException(403, "Only an admin / PMO, the Project Manager or a Responsible / Accountable person on this project's tasks can edit this project.")
     return data
