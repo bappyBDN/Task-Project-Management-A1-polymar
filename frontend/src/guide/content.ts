@@ -328,11 +328,12 @@ const USER_GUIDE: Chapter[] = [
         blocks: [
           steps(
             t('Open the project and click **+ New Task** in its Tasks section (admins can also use the Tasks page).', 'প্রজেক্ট খুলে Tasks অংশে **+ New Task**-এ ক্লিক করুন (অ্যাডমিন Tasks পেজ থেকেও পারেন)।'),
-            t('Fill in the form. Almost every field is required: **Task Title**, **Project**, **Category**, **SBU**, **Function**, **Department**, **Task Type**, **Priority**, **Status**, **Description**, **Expected Deliverable**, **Responsible**, **Accountable**, **Reviewer**, **Planned Start** and **Baseline Due Date**. **Informed** is optional.', 'ফর্ম পূরণ করুন। প্রায় সব ঘরই আবশ্যক: **Task Title**, **Project**, **Category**, **SBU**, **Function**, **Department**, **Task Type**, **Priority**, **Status**, **Description**, **Expected Deliverable**, **Responsible**, **Accountable**, **Reviewer**, **Planned Start** ও **Baseline Due Date**। **Informed** ঐচ্ছিক।'),
+            t('Fill in the form. Almost every field is required: **Task Title**, **Project**, **Category**, **Function**, **Department**, **Task Type**, **Priority**, **Status**, **Description**, **Expected Deliverable**, **Responsible**, **Accountable**, **Reviewer**, **Planned Start** and **Baseline Due Date**. **Informed** is optional.', 'ফর্ম পূরণ করুন। প্রায় সব ঘরই আবশ্যক: **Task Title**, **Project**, **Category**, **Function**, **Department**, **Task Type**, **Priority**, **Status**, **Description**, **Expected Deliverable**, **Responsible**, **Accountable**, **Reviewer**, **Planned Start** ও **Baseline Due Date**। **Informed** ঐচ্ছিক।'),
             t('Save. The task code (TSK-0001…) is given automatically; the Responsible and Informed people are notified.', 'Save করুন। টাস্ক কোড (TSK-0001…) স্বয়ংক্রিয়ভাবে আসে; Responsible ও Informed ব্যক্তি নোটিফিকেশন পান।'),
           ),
           list(
-            t('SBU, Function and Department are filled from your profile or the project; change them if the task belongs elsewhere.', 'SBU, Function ও Department আপনার প্রোফাইল বা প্রজেক্ট থেকে পূরণ হয়; টাস্ক অন্য জায়গার হলে বদলে দিন।'),
+            t('The SBU is not chosen on the task: **Project SBU** always comes from the project, and changes with it.', 'টাস্কে SBU বাছতে হয় না: **Project SBU** সবসময় প্রজেক্ট থেকে আসে এবং প্রজেক্টের সাথে বদলায়।'),
+            t('**Built by** (Function and Department) is the team that builds the task. It is filled from your profile; change it if another team builds it.', '**Built by** (Function ও Department) হলো যে দল টাস্কটি করছে। এটি আপনার প্রোফাইল থেকে পূরণ হয়; অন্য দল করলে বদলে দিন।'),
             t('Category, Task Type, Priority and Status are lists you can also type into; a new value is added to the list.', 'Category, Task Type, Priority ও Status-এর তালিকায় নতুন মান টাইপও করা যায়; সেটি তালিকায় যোগ হয়।'),
             t('The planned start cannot be after the baseline due date.', 'Planned Start, Baseline Due Date-এর পরে হতে পারে না।'),
             t('In a project with the Gantt chart on, **Depends on** lets you choose the tasks that must finish first.', 'Gantt চার্ট চালু থাকা প্রজেক্টে **Depends on** দিয়ে আগে শেষ হতে হবে এমন টাস্ক বাছা যায়।'),
@@ -517,7 +518,7 @@ const USER_GUIDE: Chapter[] = [
         blocks: [
           table(
             [t('What', 'বিষয়'), t('Responsible', 'Responsible'), t('Accountable', 'Accountable'), t('Reviewer / Informed', 'Reviewer / Informed'), t('Admin, privileged, SBU\'s COO', 'অ্যাডমিন, প্রিভিলেজড, SBU-এর COO')],
-            [t('Title, description, deliverable, category, type, priority, project, SBU, function, department, planned start', 'শিরোনাম, বিবরণ, ডেলিভারেবল, ক্যাটাগরি, ধরন, অগ্রাধিকার, প্রজেক্ট, SBU, ফাংশন, ডিপার্টমেন্ট, Planned Start'), t('Yes', 'হ্যাঁ'), t('Yes', 'হ্যাঁ'), t('No', 'না'), t('Yes', 'হ্যাঁ')],
+            [t('Title, description, deliverable, category, type, priority, project, function, department, planned start', 'শিরোনাম, বিবরণ, ডেলিভারেবল, ক্যাটাগরি, ধরন, অগ্রাধিকার, প্রজেক্ট, ফাংশন, ডিপার্টমেন্ট, Planned Start'), t('Yes', 'হ্যাঁ'), t('Yes', 'হ্যাঁ'), t('No', 'না'), t('Yes', 'হ্যাঁ')],
             [t('Progress, status, blocker, forecast, remarks', 'অগ্রগতি, স্ট্যাটাস, Blocker, Forecast, Remarks'), t('Yes', 'হ্যাঁ'), t('Yes', 'হ্যাঁ'), t('No', 'না'), t('Yes', 'হ্যাঁ')],
             [t('The Responsible person', 'Responsible ব্যক্তি'), t('Yes', 'হ্যাঁ'), t('Yes', 'হ্যাঁ'), t('No', 'না'), t('Yes', 'হ্যাঁ')],
             [t('Accountable, Reviewer, Informed', 'Accountable, Reviewer, Informed'), t('Yes', 'হ্যাঁ'), t('No', 'না'), t('No', 'না'), t('Yes', 'হ্যাঁ')],

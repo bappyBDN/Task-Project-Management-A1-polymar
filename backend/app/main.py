@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
-from app import models
+from app import models, services
 from app.config import settings
 from app.database import engine, SessionLocal
 from app import auth  # 👈 login / forgot-password / reset-password
@@ -79,6 +79,31 @@ def backfill_task_starts():
 
 
 backfill_task_starts()
+
+
+def sync_task_sbus():
+    """The SBU is chosen once, on the project: every task of a project is on that project's
+    SBUs. Tasks saved with other SBUs before that rule are moved to their project's (each
+    move is in the audit trail). A task without a project, of a project with no SBU, or
+    (for now) with several SBUs of its own is left as it is."""
+    db = SessionLocal()
+    try:
+        project_sbus = {p.id: p.sbu_ids for p in db.query(models.Project).all()}
+        moved = 0
+        for task in db.query(models.Task).filter(models.Task.project_id.isnot(None)).all():
+            new, old = project_sbus.get(task.project_id), task.sbu_ids
+            if new and not services.keeps_own_sbus(task, new) and services.set_sbus(db, task, new, "system"):
+                services.audit(db, "system", "task", task.id, "sbus_changed",
+                               previous_value=services.sbu_names(db, old), new_value=services.sbu_names(db, new),
+                               reason="A task follows its project's SBU")
+                moved += 1
+        if moved:
+            db.commit()
+    finally:
+        db.close()
+
+
+sync_task_sbus()
 
 app = FastAPI(title=settings.app_name)
 

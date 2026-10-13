@@ -198,6 +198,12 @@ label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); 
 .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
 .form-row.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
+/* titled boxes grouping related fields (task: Project SBU / Built by) */
+.field-boxes { display: grid; grid-template-columns: 1fr 2fr; gap: 14px; margin-top: 12px; }
+.field-box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.field-box-title { font-size: 12px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.field-box .form-row label { margin-top: 0; }
+
 .section-title { font-size: 15px; font-weight: 700; color: var(--navy); margin: 24px 0 12px; }
 
 .progress { height: 8px; background: #e8ecf3; border-radius: 999px; overflow: hidden; min-width: 80px; }
@@ -278,6 +284,7 @@ tr.clickable, .clickable { cursor: pointer; }
   .main { margin-left: 0; padding: 16px; min-width: 0; }
   .topbar { flex-wrap: wrap; gap: 10px; }
   .form-row, .form-row.three, .form-row.four { grid-template-columns: 1fr; gap: 0; }
+  .field-boxes { grid-template-columns: 1fr; }
   .filters .field { min-width: 0; flex: 1 1 140px; }
   .modal { padding: 18px; }
   .modal-backdrop { padding: 16px 10px; }

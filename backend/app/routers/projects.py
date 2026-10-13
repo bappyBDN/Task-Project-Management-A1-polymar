@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app import gantt, models, permissions, schemas, services
 from app.auth import get_current_user
 from app.database import get_db
-from app.visibility import Scope, get_scope, sbu_key
+from app.visibility import Scope, get_scope
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -77,19 +77,18 @@ def create_project(payload: schemas.ProjectBase, db: Session = Depends(get_db),
 
 
 def _change_sbus(db: Session, user: models.User, project: models.Project, sbu_ids: list[int]):
-    """Set the project's SBUs. Its tasks that were on exactly the project's SBUs follow the
-    project (they only had them because the project did); a task given other SBUs keeps them.
-    Copies of one SBU (other spellings) count as the same SBU, as everywhere."""
+    """Set the project's SBUs. Every task of the project follows: a task is always on its
+    project's SBUs (services.project_sbus) - except, for now, a task with several SBUs of
+    its own (services.keeps_own_sbus)."""
     old = project.sbu_ids
     if not services.set_sbus(db, project, sbu_ids, user.name):
         return
     new = project.sbu_ids
-    key = {c.id: sbu_key(c.name) for c in db.query(models.Company).all()}
-    old_keys = {key.get(c) for c in old}
     moved = 0
-    for task in db.query(models.Task).filter(models.Task.project_id == project.id).all():
-        if old and {key.get(c) for c in task.sbu_ids} == old_keys:
-            moved += services.set_sbus(db, task, new, user.name)
+    if new:
+        for task in db.query(models.Task).filter(models.Task.project_id == project.id).all():
+            if not services.keeps_own_sbus(task, old):
+                moved += services.set_sbus(db, task, new, user.name)
     services.audit(db, user.name, "project", project.id, "sbus_changed",
                    previous_value=services.sbu_names(db, old), new_value=services.sbu_names(db, new),
                    reason=f"{moved} task(s) followed the project" if moved else None)

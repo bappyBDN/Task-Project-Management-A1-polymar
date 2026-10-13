@@ -60,6 +60,20 @@ def patched_sbus(entity, data: dict, field: str = "sbu_ids"):
     return None
 
 
+def project_sbus(db: Session, project_id: Optional[int]) -> list:
+    """The SBUs a task of this project is on. The SBU is chosen once, on the project, and
+    every task of the project follows it; empty when there is no project (or it has no SBU),
+    and only then does a task keep SBUs of its own."""
+    project = db.get(models.Project, project_id) if project_id else None
+    return project.sbu_ids if project else []
+
+
+def keeps_own_sbus(task, project_sbu_ids) -> bool:
+    """For now a task given several SBUs of its own is left exactly as it is - it does not
+    follow its project. (Several SBUs that are simply the project's are not its own.)"""
+    return len(task.sbu_ids) > 1 and set(task.sbu_ids) != set(project_sbu_ids)
+
+
 def sbu_names(db: Session, company_ids) -> str:
     """'Anwar Cement Ltd, Anwar Ispat Ltd' - for the audit trail."""
     names = {c.id: c.name for c in db.query(models.Company).filter(models.Company.id.in_(list(company_ids))).all()} if company_ids else {}

@@ -123,13 +123,13 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db),
     if not data["title"]:
         raise HTTPException(400, "Task title is required")
 
-    # A task picked under a project inherits that project's SBUs / function if left blank.
+    # A task of a project is always on that project's SBUs (whatever the client sent), and
+    # inherits its function if left blank.
     if data.get("project_id"):
         project = db.get(models.Project, data["project_id"])
         if not project:
             raise HTTPException(400, "Selected project does not exist")
-        if not any(sbu_ids):
-            sbu_ids = project.sbu_ids
+        sbu_ids = project.sbu_ids or sbu_ids
         data["function_id"] = data.get("function_id") or project.function_id
 
     user_code = (data.get("code") or "").strip() or None
@@ -223,8 +223,13 @@ def update_task(task_id: int, payload: schemas.TaskUpdate, db: Session = Depends
     old_project_id = task.project_id
     old_informed_id, old_status = task.informed_id, task.status
     new_sbus = services.patched_sbus(task, data)
+    own_sbus = services.keeps_own_sbus(task, services.project_sbus(db, old_project_id))
     for k, v in data.items():
         setattr(task, k, v)
+    # the project's SBUs win: a task only keeps SBUs of its own when it has no project
+    # (or, for now, several of its own)
+    if not own_sbus:
+        new_sbus = services.project_sbus(db, task.project_id) or new_sbus
     if new_sbus is not None:
         services.set_sbus(db, task, new_sbus, current_user.name)
     _normalize(db, task)

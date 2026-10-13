@@ -7,8 +7,7 @@ import SearchableSelect from './SearchableSelect'
 import InviteUserModal from './InviteUserModal'
 import OrgModal from './OrgModal'
 import { RichTextEditor } from './RichText'
-import SbuMultiSelect from './SbuMultiSelect'
-import { sbuIdsOf } from '../org'
+import { sbuIdsOf, sbuNames } from '../org'
 import ProjectForm from './ProjectForm'
 
 interface Props {
@@ -41,7 +40,6 @@ const EMPTY = {
   task_type: '',
   priority: 'medium',
   project_id: '',
-  company_id: '',
   function_id: '',
   department_id: '',
   responsible_id: '',
@@ -71,17 +69,11 @@ function errText(e: any): string {
 }
 
 // null -> '' so <input>/<textarea> stay controlled when editing an existing task.
-// A new task starts with the signed-in user's own SBU / function / department (they can change them).
-// Opened from a project's page, the project is chosen and the SBU is the project's.
+// A new task starts with the signed-in user's own function / department - who builds it (they
+// can change them). The SBU is not on the form: a task is always on its project's SBUs.
 const initialForm = (task?: Task, me?: User | null, project?: Project) => {
-  if (task) return { ...Object.fromEntries(Object.entries({ ...EMPTY, ...task }).map(([k, v]) => [k, v ?? ''])), sbu_ids: sbuIdsOf(task).map(String) }
-  // every SBU of the task (company ids); company_id is always the first one
-  const sbus = sbuIdsOf(project).length ? sbuIdsOf(project) : me?.company_id != null ? [me.company_id] : []
-  return {
-    ...EMPTY, project_id: project?.id ?? '',
-    company_id: sbus[0] ?? '', function_id: me?.function_id ?? '', department_id: me?.department_id ?? '',
-    sbu_ids: sbus.map(String),
-  }
+  if (task) return Object.fromEntries(Object.entries({ ...EMPTY, ...task }).map(([k, v]) => [k, v ?? '']))
+  return { ...EMPTY, project_id: project?.id ?? '', function_id: me?.function_id ?? '', department_id: me?.department_id ?? '' }
 }
 
 export default function TaskForm({ projects, users: listedUsers, companies = [], functions = [], departments = [], onClose, onSaved, onRefresh, task, limited = false, lockApprovers = false, defaultProjectId }: Props) {
@@ -97,7 +89,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
   // people just added by email may not be in the parent's list yet
   const [invited, setInvited] = useState<User[]>([])
   const users = [...listedUsers, ...invited.filter((u) => !listedUsers.some((x) => x.id === u.id))]
-  const [showOrgModal, setShowOrgModal] = useState<'company' | 'function' | 'department' | null>(null)
+  const [showOrgModal, setShowOrgModal] = useState<'function' | 'department' | null>(null)
 
   // dynamic list options
   const [categories, setCategories] = useState<string[]>([])
@@ -116,8 +108,10 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
   const str = (v: any) => (v === null || v === undefined ? '' : String(v))
-  const sbuIds: string[] = form.sbu_ids ?? []
-  const setSbuIds = (ids: string[]) => setForm((f: any) => ({ ...f, sbu_ids: ids, company_id: ids[0] ?? '' }))
+  // the SBU(s) of the chosen project - shown, never chosen here (the server sets them from the project)
+  // (for now a task saved with several SBUs of its own keeps them - the server leaves those alone)
+  const ownSbus = task && sbuIdsOf(task).length > 1 && str(form.project_id) === str(task.project_id) ? sbuIdsOf(task) : null
+  const projectSbu = sbuNames(companies, ownSbus ?? sbuIdsOf(projects.find((p) => String(p.id) === str(form.project_id))))
 
   // --- Gantt projects: the tasks this one depends on --------------------
   // Only for a project with the Gantt option on (see ProjectGantt). The task starts after
@@ -208,7 +202,6 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
     { key: 'title', label: 'Task Title' },
     { key: 'project_id', label: 'Project' },
     { key: 'category', label: 'Category' },
-    { key: 'company_id', label: 'SBU' },
     { key: 'function_id', label: 'Function' },
     { key: 'department_id', label: 'Department' },
     { key: 'task_type', label: 'Task Type' },
@@ -251,8 +244,6 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
       task_type: form.task_type || 'task',
       priority: form.priority || 'medium',
       project_id: form.project_id ? Number(form.project_id) : null,
-      company_id: form.company_id ? Number(form.company_id) : null,
-      sbu_ids: sbuIds.map(Number),
       function_id: form.function_id ? Number(form.function_id) : null,
       department_id: form.department_id ? Number(form.department_id) : null,
       responsible_id: form.responsible_id ? Number(form.responsible_id) : null,
@@ -292,22 +283,16 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
   const functionItems = functions.map((f) => ({ value: String(f.id), label: f.name }))
   const departmentItems = departments.map((dp) => ({ value: String(dp.id), label: dp.name }))
 
-  // SBU / function / department still exactly as filled in from the user's profile
-  const fromProfile = !task && !!user && (['company_id', 'function_id', 'department_id'] as const)
+  // function / department still exactly as filled in from the user's profile
+  const fromProfile = !task && !!user && (['function_id', 'department_id'] as const)
     .some((k) => user[k] != null && str(form[k]) === str(user[k]))
-  // A task belongs to its project's SBUs: follow the project unless the user picked another SBU themselves.
   const onProjectChange = (v: string) => {
     if (v !== str(form.project_id)) setDependsOn([]) // a task only depends on tasks of its own project
     set('project_id', v)
-    const p = projects.find((x) => String(x.id) === v)
-    const untouched = sbuIds.length === 0 || (sbuIds.length === 1 && sbuIds[0] === str(user?.company_id))
-    if (!task && p && sbuIdsOf(p).length && untouched) setSbuIds(sbuIdsOf(p).map(String))
   }
 
   const createdProject = async (p: Project) => {
     set('project_id', String(p.id))
-    // the new project always has an SBU - use it for the task if none picked yet
-    if (!sbuIds.length && sbuIdsOf(p).length) setSbuIds(sbuIdsOf(p).map(String))
     setShowProjectModal(false)
     onRefresh?.() // refresh parent lists WITHOUT closing the task form
   }
@@ -339,12 +324,6 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
     onRefresh?.()
   }
 
-  const removeCompany = async (value: string) => {
-    if (!confirm('Remove this SBU?')) return
-    await api.del(`/organizations/companies/${value}`)
-    if (sbuIds.includes(value)) setSbuIds(sbuIds.filter((x) => x !== value))
-    onRefresh?.()
-  }
   const removeFunction = async (value: string) => {
     if (!confirm('Remove this function?')) return
     await api.del(`/organizations/functions/${value}`)
@@ -358,8 +337,7 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
     onRefresh?.()
   }
 
-  const createdOrg = (kind: 'company' | 'function' | 'department', obj: any) => {
-    if (kind === 'company' && !sbuIds.includes(String(obj.id))) setSbuIds([...sbuIds, String(obj.id)])
+  const createdOrg = (kind: 'function' | 'department', obj: any) => {
     if (kind === 'function') set('function_id', String(obj.id))
     if (kind === 'department') set('department_id', String(obj.id))
     setShowOrgModal(null)
@@ -408,45 +386,43 @@ export default function TaskForm({ projects, users: listedUsers, companies = [],
           </div>
         </div>
 
-        <div className="form-row three">
-          <div>
-            <label>SBU *</label>
-            <SbuMultiSelect
-              values={sbuIds}
-              companies={companies}
-              onChange={setSbuIds}
-              placeholder="Search SBU…"
-              onAddNew={() => setShowOrgModal('company')}
-              addLabel="new SBU"
-              onRemove={(v) => removeCompany(v)}
-            />
+        <div className="field-boxes">
+          <div className="field-box">
+            <div className="field-box-title">Project SBU</div>
+            <div className="small">{projectSbu ?? <span className="muted">{form.project_id ? '—' : 'Choose a project'}</span>}</div>
+            <div className="small muted" style={{ marginTop: 4 }}>Comes from the project.</div>
           </div>
-          <div>
-            <label>Function *</label>
-            <SearchableSelect
-              value={str(form.function_id)}
-              items={functionItems}
-              onChange={(v) => set('function_id', v)}
-              placeholder="Search function…"
-              onAddNew={() => setShowOrgModal('function')}
-              addLabel="new function"
-              onRemove={(v) => removeFunction(v)}
-            />
-          </div>
-          <div>
-            <label>Department *</label>
-            <SearchableSelect
-              value={str(form.department_id)}
-              items={departmentItems}
-              onChange={(v) => set('department_id', v)}
-              placeholder="Search department…"
-              onAddNew={() => setShowOrgModal('department')}
-              addLabel="new department"
-              onRemove={(v) => removeDepartment(v)}
-            />
+          <div className="field-box">
+            <div className="field-box-title">Built by</div>
+            <div className="form-row">
+              <div>
+                <label>Function *</label>
+                <SearchableSelect
+                  value={str(form.function_id)}
+                  items={functionItems}
+                  onChange={(v) => set('function_id', v)}
+                  placeholder="Search function…"
+                  onAddNew={() => setShowOrgModal('function')}
+                  addLabel="new function"
+                  onRemove={(v) => removeFunction(v)}
+                />
+              </div>
+              <div>
+                <label>Department *</label>
+                <SearchableSelect
+                  value={str(form.department_id)}
+                  items={departmentItems}
+                  onChange={(v) => set('department_id', v)}
+                  placeholder="Search department…"
+                  onAddNew={() => setShowOrgModal('department')}
+                  addLabel="new department"
+                  onRemove={(v) => removeDepartment(v)}
+                />
+              </div>
+            </div>
+            {fromProfile && <div className="small muted" style={{ marginTop: 4 }}>Filled in from your profile - change them if another team builds this task.</div>}
           </div>
         </div>
-        {fromProfile && <div className="small muted" style={{ marginTop: 4 }}>SBU, function and department are filled in from your profile - change them if this task belongs elsewhere.</div>}
 
         <div className="form-row three">
           <div>
