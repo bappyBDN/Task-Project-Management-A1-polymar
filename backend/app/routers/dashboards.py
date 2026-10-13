@@ -173,18 +173,29 @@ def org_intelligence(db: Session = Depends(get_db), scope: Scope = Depends(get_s
     for p in projects:
         for name in sbu_names(p):
             row(by_sbu, name)["projects"] += 1
-        row(by_function, functions.get(p.function_id, "Unassigned"))["projects"] += 1
 
-    # Projects have no department of their own: a department's projects are the
-    # projects that have at least one of its tasks.
-    dept_projects = {}
+    # A function's / department's projects are the projects that have at least one of its
+    # tasks (the work is what places a project there; a project has no department at all,
+    # and most have no function of their own). A project also counts under its own function,
+    # and one with no function and no tasks under "Unassigned".
+    seen = {p.id for p in projects}
+    func_projects, dept_projects = {}, {}
     for t in tasks:
-        if t.project_id:
-            key = (departments.get(t.department_id) or "Unassigned").strip().lower()
-            dept_projects.setdefault(key, set()).add(t.project_id)
-    for key, ids in dept_projects.items():
-        if key in by_department:
-            by_department[key]["projects"] = len(ids)
+        if t.project_id in seen:
+            func_projects.setdefault(functions.get(t.function_id, "Unassigned"), set()).add(t.project_id)
+            dept_projects.setdefault(departments.get(t.department_id, "Unassigned"), set()).add(t.project_id)
+    with_tasks = set().union(*func_projects.values()) if func_projects else set()
+    for p in projects:
+        if p.function_id in functions:
+            func_projects.setdefault(functions[p.function_id], set()).add(p.id)
+        elif p.id not in with_tasks:
+            func_projects.setdefault("Unassigned", set()).add(p.id)
+    for bucket, found in ((by_function, func_projects), (by_department, dept_projects)):
+        ids_by_key = {}
+        for name, ids in found.items():  # names differing only in case / spacing are one row
+            ids_by_key.setdefault((name or "Unassigned").strip().lower(), set()).update(ids)
+        for name, ids in found.items():
+            row(bucket, name)["projects"] = len(ids_by_key[(name or "Unassigned").strip().lower()])
 
     def fmt(bucket):
         result = []

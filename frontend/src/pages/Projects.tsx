@@ -9,6 +9,11 @@ import ProjectForm, { errText } from '../components/ProjectForm'
 import { inAnySbu, inName, nameFilterItems, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
 import { usePageState } from '../session'
 
+// Project Responsible column: at most this many task-Responsible names, the rest behind "+N"
+const MAX_RESPONSIBLE = 6
+// one steady colour per person (by id), so the same name looks the same on every row
+const PERSON_COLORS = 8
+
 const NO_FILTER = { name: '', company_id: '', function_id: '', department_id: '', status: '', health: '', type: '', manager_id: '', methodology: '' }
 
 
@@ -80,6 +85,18 @@ export default function Projects() {
     ;[p.manager_id, p.sponsor_id, p.owner_id].forEach((id) => { if (id) s.add(id) })
     ;(tasksByProject.get(p.id) ?? []).forEach((t) => [t.responsible_id, t.accountable_id, t.reviewer_id, t.informed_id].forEach((id) => { if (id) s.add(id) }))
     return s
+  }
+
+  /** Who is Responsible for the project's tasks, the one with the most tasks first.
+   *  Low-priority tasks are left out: the column is about the work that matters. */
+  const responsibleOf = (p: Project) => {
+    const count = new Map<number, number>()
+    ;(tasksByProject.get(p.id) ?? []).forEach((t) => {
+      if (t.responsible_id && (t.priority ?? '').toLowerCase() !== 'low') count.set(t.responsible_id, (count.get(t.responsible_id) ?? 0) + 1)
+    })
+    return [...count.entries()]
+      .map(([id, n]) => ({ id, n, name: users.find((u) => u.id === id)?.name ?? `User #${id}` }))
+      .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name))
   }
 
   /** The project's tasks that match the Company / Employee filters. */
@@ -199,11 +216,11 @@ export default function Projects() {
         {filtered.length} of {projects.length} projects{personOrCompany ? ` · ${shownTasks.length} matching task${shownTasks.length === 1 ? '' : 's'}` : ''}
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <table>
           <thead>
             <tr>
-              <th>Code</th><th>Project</th><th>SBU</th><th>PM</th><th>Tasks</th><th>Type</th><th>Status</th><th>Health</th>
+              <th>Code</th><th>Project</th><th>SBU</th><th>Project Responsible</th><th>Tasks</th><th>Type</th><th>Status</th><th>Health</th>
               <th>Completion</th><th>Baseline</th><th>Forecast</th>{isAdmin && <th></th>}
             </tr>
           </thead>
@@ -221,7 +238,40 @@ export default function Projects() {
                   </Link>
                 </td>
                 <td className="small">{companyName(p)}</td>
-                <td className="small">{manager(p.manager_id) ?? '—'}</td>
+                <td>
+                  {(() => {
+                    // one cell for everyone responsible: the Project Manager first, then the people
+                    // Responsible for its tasks (a PM who also has tasks shows once, as the PM)
+                    const all = responsibleOf(p)
+                    const pm = p.manager_id ? { id: p.manager_id, name: manager(p.manager_id) ?? `User #${p.manager_id}`, n: all.find((r) => r.id === p.manager_id)?.n ?? 0 } : null
+                    const others = all.filter((r) => r.id !== pm?.id)
+                    if (!pm && !others.length) return <span className="small muted">—</span>
+                    // the employee searched for is always among the names shown
+                    const picked = others.find((r) => String(r.id) === filter.manager_id)
+                    const first = others.slice(0, MAX_RESPONSIBLE)
+                    const shown = picked && !first.includes(picked) ? [...first.slice(0, -1), picked] : first
+                    const rest = others.filter((r) => !shown.includes(r))
+                    const tasksOf = (n: number) => `Responsible for ${n} task${n === 1 ? '' : 's'}`
+                    return (
+                      <div className="resp-chips">
+                        {pm && (
+                          <span className={`resp-chip pm${String(pm.id) === filter.manager_id ? ' on' : ''}`}
+                            title={`${pm.name} — Project Manager${pm.n ? `, ${tasksOf(pm.n)}` : ''}`}>
+                            <i>PM</i><span>{pm.name}</span>{pm.n > 1 && <b>{pm.n}</b>}
+                          </span>
+                        )}
+                        {shown.map((r) => (
+                          <span key={r.id} className={`resp-chip c${r.id % PERSON_COLORS}${r === picked ? ' on' : ''}`} title={`${r.name} — ${tasksOf(r.n)}`}>
+                            <span>{r.name}</span>{r.n > 1 && <b>{r.n}</b>}
+                          </span>
+                        ))}
+                        {rest.length > 0 && (
+                          <span className="resp-chip more" title={rest.map((r) => `${r.name} (${r.n})`).join(', ')}>+{rest.length}</span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </td>
                 <td className="small">
                   {personOrCompany
                     ? `${matchingTasks(p).length} of ${(tasksByProject.get(p.id) ?? []).length}`

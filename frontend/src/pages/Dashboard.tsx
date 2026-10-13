@@ -325,7 +325,8 @@ type OrgLists = { companies: Company[]; functions: Function[]; departments: Depa
 
 // which projects a Breakdown row counts: grouped the same way as the server (name, case ignored;
 // "Unassigned" = no SBU / function / department) and SBU copies merged like mergeSbuRows.
-// Projects have no department: a department's projects are those with at least one of its tasks.
+// A function's / department's projects are those with at least one of its tasks; a project also
+// counts under its own function, and one with no function and no tasks under "Unassigned".
 function projectsOf(tab: OrgTab, rowName: string, projects: Project[], org: OrgLists): Project[] {
   const key = (n: string) => (tab === 'bySbu' ? sbuKey(n) : n.trim().toLowerCase())
   const matches = (list: { id: number; name: string }[], id?: number | null) => {
@@ -334,8 +335,12 @@ function projectsOf(tab: OrgTab, rowName: string, projects: Project[], org: OrgL
   }
   let keep: (p: Project) => boolean
   if (tab === 'bySbu') keep = (p) => (sbuIdsOf(p).length ? sbuIdsOf(p).some((id) => matches(org.companies, id)) : matches(org.companies, null))
-  else if (tab === 'byFunction') keep = (p) => matches(org.functions, p.function_id)
-  else {
+  else if (tab === 'byFunction') {
+    const ids = new Set(org.tasks.filter((t) => t.project_id && matches(org.functions, t.function_id)).map((t) => t.project_id))
+    const withTasks = new Set(org.tasks.map((t) => t.project_id))
+    const ownFunction = (p: Project) => org.functions.some((f) => f.id === p.function_id)
+    keep = (p) => ids.has(p.id) || (ownFunction(p) ? matches(org.functions, p.function_id) : rowName === 'Unassigned' && !withTasks.has(p.id))
+  } else {
     const ids = new Set(org.tasks.filter((t) => t.project_id && matches(org.departments, t.department_id)).map((t) => t.project_id))
     keep = (p) => ids.has(p.id)
   }
@@ -568,7 +573,7 @@ export default function Dashboard() {
   const [trends, setTrends] = useState<Trends | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [kpi, setKpi] = usePageState<KpiKey | null>('kpi', null) // KPI card clicked: My Tasks shows only those tasks
-  const [view, setView] = usePageState<'tasks' | 'projects'>('view', 'tasks') // what the list under the cards shows
+  const [view, setView] = usePageState<'tasks' | 'projects'>('list', 'projects') // what the list under the cards shows (projects first)
   const myTasksRef = useRef<HTMLDivElement>(null)
 
   // "Live": bump `tick` every minute (and when the user comes back to the tab)

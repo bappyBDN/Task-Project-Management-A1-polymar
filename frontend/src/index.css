@@ -198,6 +198,25 @@ label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); 
 .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
 .form-row.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
+/* Projects list: the Project Manager and the people Responsible for the project's tasks, one coloured chip each */
+.resp-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 165px; max-width: 300px; }
+.resp-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 1.5; white-space: nowrap; border: 1px solid transparent; max-width: 100%; }
+.resp-chip > span { overflow: hidden; text-overflow: ellipsis; max-width: 165px; }
+.resp-chip b { flex: none; font-size: 10px; font-weight: 700; min-width: 15px; padding: 0 4px; border-radius: 999px; text-align: center; background: rgba(255,255,255,0.75); }
+.resp-chip.c0 { background: #e3f0ff; color: #1553a8; }
+.resp-chip.c1 { background: #e3f5ea; color: #17703c; }
+.resp-chip.c2 { background: #fdf0d9; color: #8a5a0b; }
+.resp-chip.c3 { background: #f1e8ff; color: #5b34a6; }
+.resp-chip.c4 { background: #fde6ec; color: #a61d47; }
+.resp-chip.c5 { background: #dff4f4; color: #0f6566; }
+.resp-chip.c6 { background: #ffe9dc; color: #a4480f; }
+.resp-chip.c7 { background: #e8ebf7; color: #33427f; }
+.resp-chip.pm { background: var(--navy); color: #fff; }
+.resp-chip.pm i { font-style: normal; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; padding: 0 5px; margin-left: -4px; border-radius: 999px; background: var(--gold); color: var(--navy); }
+.resp-chip.pm b { background: rgba(255,255,255,0.2); }
+.resp-chip.on { border-color: currentColor; box-shadow: 0 0 0 2px rgba(11,31,58,0.10); }
+.resp-chip.more { background: #eef1f5; color: var(--muted); cursor: help; }
+
 /* titled boxes grouping related fields (task: Project SBU / Built by) */
 .field-boxes { display: grid; grid-template-columns: 1fr 2fr; gap: 14px; margin-top: 12px; }
 .field-box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
