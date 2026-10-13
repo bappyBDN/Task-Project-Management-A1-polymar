@@ -7,6 +7,7 @@ import { HEALTH_COLORS, METHODOLOGIES, PROJECT_STATUSES, fmtDate, label } from '
 import SearchableSelect from '../components/SearchableSelect'
 import ProjectForm, { errText } from '../components/ProjectForm'
 import { inAnySbu, inName, nameFilterItems, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
+import { usePageState } from '../session'
 
 const NO_FILTER = { name: '', company_id: '', function_id: '', department_id: '', status: '', health: '', type: '', manager_id: '', methodology: '' }
 
@@ -21,7 +22,7 @@ export default function Projects() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
-  const [filter, setFilter] = useState(NO_FILTER)
+  const [filter, setFilter] = usePageState('filter', NO_FILTER)
   const [showForm, setShowForm] = useState(false)
   const navigate = useNavigate()
 
@@ -213,6 +214,7 @@ export default function Projects() {
                 <td>
                   <Link
                     to={`/projects/${p.id}`}
+                    onClick={(e) => e.stopPropagation()}
                     style={{ color: 'var(--green)', fontWeight: 600, textDecoration: 'underline' }}
                   >
                     {p.name}

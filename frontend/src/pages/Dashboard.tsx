@@ -8,6 +8,7 @@ import { mergeSbuRows, sbuIdsOf } from '../org'
 import { sbuKey } from '../components/SbuSelect'
 import ProfileForm from '../components/ProfileForm'
 import { CommentReplies, REPLY_CSS, addReply, commenterLabel, fmtDateTime } from '../components/CommentsPanel'
+import { usePageState } from '../session'
 
 /* Dashboard wired to the FastAPI backend (app/routers/dashboards.py + /tasks).
    Renders page content only — sidebar/topbar come from the app Layout. Scoped under .dsb-root.
@@ -342,7 +343,7 @@ function projectsOf(tab: OrgTab, rowName: string, projects: Project[], org: OrgL
 }
 
 function Breakdown({ data }: { data: Record<OrgTab, OrgRow[]> | null }) {
-  const [tab, setTab] = useState<OrgTab>('bySbu')
+  const [tab, setTab] = usePageState<OrgTab>('orgTab', 'bySbu')
   const [openRow, setOpenRow] = useState<string | null>(null) // row whose projects are listed
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [org, setOrg] = useState<OrgLists>({ companies: [], functions: [], departments: [], tasks: [] })
@@ -556,9 +557,9 @@ export default function Dashboard() {
   // names for the My Tasks table (project, its manager, the task's Responsible person)
   const [projects, setProjects] = useState<Project[]>([])
   const [people, setPeople] = useState<User[]>([])
-  const [sort, setSort] = useState<{ key: TaskSort; desc: boolean }>({ key: 'project', desc: false })
-  const [projectFilter, setProjectFilter] = useState('')       // '' = all, 'none' = no project, else project id
-  const [responsibleFilter, setResponsibleFilter] = useState('') // '' = all, else user id
+  const [sort, setSort] = usePageState<{ key: TaskSort; desc: boolean }>('taskSort', { key: 'project', desc: false })
+  const [projectFilter, setProjectFilter] = usePageState('projectFilter', '')       // '' = all, 'none' = no project, else project id
+  const [responsibleFilter, setResponsibleFilter] = usePageState('responsibleFilter', '') // '' = all, else user id
   const [healthDist, setHealthDist] = useState<Record<string, number>>({})
   const [delayCauses, setDelayCauses] = useState<{ category: string; count: number }[]>([])
   const [orgIntel, setOrgIntel] = useState<{ bySbu: OrgRow[]; byFunction: OrgRow[]; byDepartment: OrgRow[] } | null>(null)
@@ -566,8 +567,8 @@ export default function Dashboard() {
   const [profileMsg, setProfileMsg] = useState('')
   const [trends, setTrends] = useState<Trends | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
-  const [kpi, setKpi] = useState<KpiKey | null>(null) // KPI card clicked: My Tasks shows only those tasks
-  const [view, setView] = useState<'tasks' | 'projects'>('tasks') // what the list under the cards shows
+  const [kpi, setKpi] = usePageState<KpiKey | null>('kpi', null) // KPI card clicked: My Tasks shows only those tasks
+  const [view, setView] = usePageState<'tasks' | 'projects'>('view', 'tasks') // what the list under the cards shows
   const myTasksRef = useRef<HTMLDivElement>(null)
 
   // "Live": bump `tick` every minute (and when the user comes back to the tab)

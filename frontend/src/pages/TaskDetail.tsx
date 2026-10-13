@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { useIsPrivileged } from '../usePrivileged'
@@ -10,10 +10,10 @@ import TaskForm from '../components/TaskForm'
 import CommentsPanel from '../components/CommentsPanel'
 import TaskSubtasks from '../components/TaskSubtasks'
 import { overseesSbu, sbuIdsOf, sbuNames } from '../org'
+import { useBack } from '../session'
 
 export default function TaskDetail() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const { user } = useAuth()
   const [task, setTask] = useState<Task | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
@@ -37,11 +37,14 @@ export default function TaskDetail() {
   const [loadErr, setLoadErr] = useState('')
   const hasPrivilegedRole = useIsPrivileged(user?.role)
 
-  // Where "back" goes: the Tasks page is for admins only, so everyone else returns to the
-  // task's project (or My Dashboard for a task without one).
+  // "Back" returns to the page this task was opened from (its project, the Kanban board, the
+  // dashboard, ...). Opened directly (a link, a notification in a new tab) there is no such
+  // page: then it is the task's project, or - a task without one - the Tasks page for an
+  // admin (it is theirs only) and My Dashboard for everyone else.
   const isAdmin = user?.role === 'admin'
-  const backTo = isAdmin ? '/tasks' : task?.project_id ? `/projects/${task.project_id}` : '/'
-  const backLabel = isAdmin ? 'Tasks' : task?.project_id ? 'Project' : 'My Dashboard'
+  const back = useBack(
+    task?.project_id ? `/projects/${task.project_id}` : isAdmin ? '/tasks' : '/',
+    task?.project_id ? 'Project' : isAdmin ? 'Tasks' : 'My Dashboard')
 
   const load = () => {
     if (!id) return
@@ -68,7 +71,7 @@ export default function TaskDetail() {
           <h2 style={{ color: 'var(--navy)', marginTop: 0 }}>Task not available</h2>
           <p>{/not found/i.test(loadErr) ? 'This task does not exist or was deleted.' : loadErr}</p>
           <button className="btn" onClick={load} style={{ marginRight: 8 }}>Try again</button>
-          <button className="btn primary" onClick={() => navigate(backTo)}>Back to {backLabel}</button>
+          <button className="btn primary" onClick={back.go}>Back to {back.label}</button>
         </div>
       )
     }
@@ -113,7 +116,7 @@ export default function TaskDetail() {
     try {
       const res = await api.del<{ status?: string } | undefined>(`/tasks/${task.id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`)
       if (res?.status === 'pending_approval') alert('Delete request sent. You can follow it on the Approvals page.')
-      navigate(backTo)
+      back.go()
     } catch (e: any) {
       setActionErr(e.message || 'Could not delete the task. Please try again.')
       setDeleting(false)
@@ -156,7 +159,7 @@ export default function TaskDetail() {
     <div>
       <div className="topbar">
         <div>
-          <button className="btn sm" onClick={() => navigate(backTo)} style={{ marginBottom: 8 }}>← {backLabel}</button>
+          <button className="btn sm" onClick={back.go} style={{ marginBottom: 8 }}>← {back.label}</button>
           <h1>{task.title}</h1>
           <div className="crumb">{task.code} · {proj?.name ?? 'Standalone'} · <span className={`badge ${STATUS_COLORS[task.status]}`}>{label(task.status)}</span> <span className={`health-dot ${HEALTH_COLORS[task.health]}`} /> {label(task.health)}</div>
         </div>
@@ -196,10 +199,19 @@ export default function TaskDetail() {
               <div><label>Category</label><div className="small">{label(task.category)}</div></div>
               <div><label>Priority</label><span className={`badge ${PRIORITY_COLORS[task.priority]}`}>{label(task.priority)}</span></div>
             </div>
-            <div className="form-row three" style={{ marginTop: 12 }}>
-              <div><label>SBU</label><div className="small">{sbuNames(companies, sbuIdsOf(task)) ?? '—'}</div></div>
-              <div><label>Function</label><div className="small">{functions.find((f) => f.id === task.function_id)?.name ?? '—'}</div></div>
-              <div><label>Department</label><div className="small">{departments.find((d) => d.id === task.department_id)?.name ?? '—'}</div></div>
+            {/* the SBU is the project's; function / department is who builds the task */}
+            <div className="field-boxes">
+              <div className="field-box">
+                <div className="field-box-title">Project SBU</div>
+                <div className="small">{sbuNames(companies, sbuIdsOf(task).length ? sbuIdsOf(task) : sbuIdsOf(proj)) ?? '—'}</div>
+              </div>
+              <div className="field-box">
+                <div className="field-box-title">Built by</div>
+                <div className="form-row">
+                  <div><label>Function</label><div className="small">{functions.find((f) => f.id === task.function_id)?.name ?? '—'}</div></div>
+                  <div><label>Department</label><div className="small">{departments.find((d) => d.id === task.department_id)?.name ?? '—'}</div></div>
+                </div>
+              </div>
             </div>
             <div className="form-row" style={{ marginTop: 12 }}>
               <div><label>Created By</label><div className="small">{task.created_by || '—'}</div></div>

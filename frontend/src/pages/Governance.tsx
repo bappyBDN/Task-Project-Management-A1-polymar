@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { Decision, Issue, ManagementAction, Meeting, Project, Risk, User } from '../types'
 import { fmtDate, label } from '../constants'
+import { usePageState } from '../session'
 
 // Meetings come back with extra details (saved by the backend without a schema change).
 interface MeetingFull extends Meeting {
@@ -40,7 +41,7 @@ function meetingState(m: MeetingFull): { text: string; tone: string } {
 
 export default function Governance() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>('meetings')
+  const [tab, setTab] = usePageState<Tab>('tab', 'meetings')
   const [actions, setActions] = useState<ManagementAction[]>([])
   const [decisions, setDecisions] = useState<Decision[]>([])
   const [risks, setRisks] = useState<Risk[]>([])

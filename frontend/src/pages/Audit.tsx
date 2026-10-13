@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { AuditEntry } from '../types'
 import { label } from '../constants'
+import { usePageState } from '../session'
 
 export default function Audit() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
-  const [q, setQ] = useState('')
-  const [entity, setEntity] = useState('')
+  const [q, setQ] = usePageState('q', '')
+  const [entity, setEntity] = usePageState('entity', '')
 
   useEffect(() => {
     api.get<AuditEntry[]>('/audit?limit=500')

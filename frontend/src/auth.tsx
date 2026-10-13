@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { api, setCurrentUserId, storage } from './api'
 import { User } from './types'
+import { clearSession } from './session'
 
 interface AuthState {
   user: User | null
@@ -30,16 +31,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (token) {
       // রিমোট মোড: টোকেন থাকলে ইউজারের তথ্য ফেচ করবে
-      api.get<User>('/organizations/users/me')
-        .then(u => {
-          setCurrentUserId(u.id)
-          setUser(u)
-        })
-        .catch(() => {
-          // টোকেন ইনভ্যালিড হলে ক্লিয়ার করে দিবে
-          logout()
-        })
-        .finally(() => setLoading(false))
+      let cancelled = false
+      let timer = 0
+      const loadMe = (attempt: number) => {
+        api.get<User>('/organizations/users/me')
+          .then(u => {
+            if (cancelled) return
+            setCurrentUserId(u.id)
+            setUser(u)
+          })
+          .catch(() => {
+            // An expired / invalid token (401): api.ts has already removed it and is going
+            // to the login page. Anything else - the network dropped, the server is
+            // restarting - must NOT sign the user out: carry on as the user saved at
+            // login and keep trying for the full profile.
+            if (cancelled || !storage.get('token')) return
+            let saved: User | null = null
+            try { saved = JSON.parse(storage.get('user') || 'null') } catch { /* not JSON */ }
+            if (saved?.id) {
+              setCurrentUserId(saved.id)
+              setUser((u) => u ?? saved)
+            }
+            timer = window.setTimeout(() => loadMe(attempt + 1), Math.min(30000, 2000 * (attempt + 1)))
+          })
+          .finally(() => { if (!cancelled) setLoading(false) })
+      }
+      loadMe(0)
+      return () => { cancelled = true; window.clearTimeout(timer) }
 
     } else if (storedLocalId) {
       // লোকাল মোড: আগের মতো আইডি দিয়ে ফেচ করবে
@@ -77,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = () => {
+    clearSession() // the next person to sign in here starts clean (session.ts)
     setCurrentUserId(null)
     storage.remove('anwar_user_id')
     storage.remove('token')

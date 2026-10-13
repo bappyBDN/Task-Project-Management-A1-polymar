@@ -16,6 +16,7 @@ import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, fmtDate, label } from '.
 import { RichTextView } from '../components/RichText'
 import SearchableSelect from '../components/SearchableSelect'
 import { overseesSbu, sbuIdsOf, sbuNames } from '../org'
+import { useBack, usePageState } from '../session'
 
 export default function ProjectDetail() {
   const { id } = useParams()
@@ -35,7 +36,9 @@ export default function ProjectDetail() {
   const [deleting, setDeleting] = useState(false)
   const [deleteErr, setDeleteErr] = useState('')
   // task list filter: the Responsible employee ('' = everyone)
-  const [employeeId, setEmployeeId] = useState('')
+  const [employeeId, setEmployeeId] = usePageState('employee', '')
+  // back to wherever this project was opened from (the Projects list as it was, a task, the dashboard, ...)
+  const back = useBack('/projects', 'Projects')
   const taskListRef = useRef<HTMLDivElement>(null)
   const { user } = useAuth()
   const isPrivileged = useIsPrivileged(user?.role)
@@ -72,7 +75,7 @@ export default function ProjectDetail() {
         <div className="card empty" style={{ marginTop: 40 }}>
           <h2 style={{ color: 'var(--navy)', marginTop: 0 }}>Project not available</h2>
           <p>{/not found/i.test(loadErr) ? 'This project does not exist or was deleted.' : loadErr}</p>
-          <button className="btn primary" onClick={() => navigate('/projects')}>Back to Projects</button>
+          <button className="btn primary" onClick={back.go}>Back to {back.label}</button>
         </div>
       )
     }
@@ -142,7 +145,7 @@ export default function ProjectDetail() {
     <div>
       <div className="topbar">
         <div>
-          <button className="btn sm" onClick={() => navigate('/projects')} style={{ marginBottom: 8 }}>← Projects</button>
+          <button className="btn sm" onClick={back.go} style={{ marginBottom: 8 }}>← {back.label}</button>
           <h1>{project.name}</h1>
           <div className="crumb">
             {project.code} · {companyName} ·{' '}
@@ -295,7 +298,7 @@ export default function ProjectDetail() {
                 {shownTasks.map((t) => (
                   <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
                     <td className="muted small">{t.code}</td>
-                    <td><Link to={`/tasks/${t.id}`}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
+                    <td><Link to={`/tasks/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
                     <td className="small">{userName(t.responsible_id) ?? '—'}</td>
                     <td><span className={`badge ${PRIORITY_COLORS[t.priority]}`}>{label(t.priority)}</span></td>
                     <td><span className={`badge ${STATUS_COLORS[t.status]}`}>{label(t.status)}</span></td>

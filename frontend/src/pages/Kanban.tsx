@@ -7,6 +7,7 @@ import { Company, Department, Function, Project, Task, User } from '../types'
 import { HEALTH_COLORS, PRIORITY_COLORS, STATUS_COLORS, label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import { inAnySbu, inName, nameFilterItems, overseesSbu, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
+import { usePageState } from '../session'
 
 const COLUMNS = [
   { key: 'backlog', label: 'Backlog' },
@@ -25,7 +26,7 @@ export default function Kanban() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
-  const [filter, setFilter] = useState({ project_id: '', company_id: '', function_id: '', department_id: '', responsible_id: '', priority: '' })
+  const [filter, setFilter] = usePageState('filter', { project_id: '', company_id: '', function_id: '', department_id: '', responsible_id: '', priority: '' })
   const navigate = useNavigate()
 
   const canSeeAll = useIsPrivileged(user?.role)

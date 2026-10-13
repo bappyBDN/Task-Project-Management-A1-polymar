@@ -5,6 +5,7 @@ import { KpiOverview, KpiPerson, UserKpiDetail } from '../types'
 import { STATUS_COLORS, fmtDate, label } from '../constants'
 import { sbuLabel } from '../org'
 import KpiCard, { GaugeCard, KpiPick, RATING, ROLE_NAME, RoleChips, TARGET, initialsOf, known, num, pct, ratingOf } from '../components/KpiCard'
+import { usePageState } from '../session'
 
 // KPI: your own KPI cards (My KPI tab), and the KPI of the people you may see - your team (everyone who
 // reports to you), the department / function / SBU you head, or everyone for admin, the
@@ -308,24 +309,27 @@ function RankList({ title, rows, onOpen, empty }: { title: string; rows: KpiPers
 export default function Kpi() {
   const [data, setData] = useState<KpiOverview | null>(null)
   const [err, setErr] = useState('')
-  const [tab, setTab] = useState<'me' | 'overview' | 'people'>('me')
-  const [q, setQ] = useState('')
-  const [who, setWho] = useState<'all' | 'team'>('all')
-  const [sbu, setSbu] = useState('')
-  const [dept, setDept] = useState('')
-  const [rating, setRating] = useState('')
-  const [sort, setSort] = useState<'high' | 'low' | 'name'>('high')
-  const [view, setView] = useState<'cards' | 'table'>('cards')
+  const [tab, setTab] = usePageState<'me' | 'overview' | 'people'>('tab', 'me')
+  // false until the page has chosen the first tab itself (below); after that the tab is the user's
+  const [tabChosen, setTabChosen] = usePageState('tabChosen', false)
+  const [q, setQ] = usePageState('q', '')
+  const [who, setWho] = usePageState<'all' | 'team'>('who', 'all')
+  const [sbu, setSbu] = usePageState('sbu', '')
+  const [dept, setDept] = usePageState('dept', '')
+  const [rating, setRating] = usePageState('rating', '')
+  const [sort, setSort] = usePageState<'high' | 'low' | 'name'>('sort', 'high')
+  const [view, setView] = usePageState<'cards' | 'table'>('view', 'cards')
   const [limit, setLimit] = useState(PAGE)
   // the KPI card opened, and the role its list starts on (a role card clicked on the page)
-  const [opened, setOpened] = useState<{ id: number; role?: KpiPick } | null>(null)
+  const [opened, setOpened] = usePageState<{ id: number; role?: KpiPick } | null>('opened', null)
   const setOpenId = (id: number, role?: KpiPick) => setOpened({ id, role })
 
   useEffect(() => {
     api.get<KpiOverview>('/kpi/overview').then((d) => {
       setData(d)
       // someone who sees other people lands on them, not on their own (often empty) cards
-      if (d.people.some((p) => !p.relation?.includes('self'))) setTab('overview')
+      if (!tabChosen && d.people.some((p) => !p.relation?.includes('self'))) setTab('overview')
+      setTabChosen(true)
     }).catch((e) => setErr(e.message || 'Could not load the KPI.'))
   }, [])
 

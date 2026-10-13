@@ -4,6 +4,7 @@ import { BacklogItem, Company, Function, Project } from '../types'
 import { label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import { inName, inSbu, nameFilterItems, sbuFilterItems, sbuName } from '../org'
+import { usePageState } from '../session'
 
 interface Props {
   onConverted?: () => void
@@ -14,7 +15,7 @@ export default function Backlog({ onConverted }: Props) {
   const [projects, setProjects] = useState<Project[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [functions, setFunctions] = useState<Function[]>([])
-  const [filter, setFilter] = useState({ project_id: '', company_id: '', function_id: '', status: '', priority: '' })
+  const [filter, setFilter] = usePageState('filter', { project_id: '', company_id: '', function_id: '', status: '', priority: '' })
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<any>({ priority: 'medium', status: 'new', project_id: '' })
   const [err, setErr] = useState('')

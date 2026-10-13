@@ -5,13 +5,14 @@ import { refreshNavBadges } from '../navBadges'
 import { useAuth } from '../auth'
 import { Approval, Task, User } from '../types'
 import { fmtDate, label } from '../constants'
+import { usePageState } from '../session'
 
 export default function Approvals() {
   const { user } = useAuth()
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
-  const [mineOnly, setMineOnly] = useState(true)
+  const [mineOnly, setMineOnly] = usePageState('mineOnly', true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [error, setError] = useState('')
 

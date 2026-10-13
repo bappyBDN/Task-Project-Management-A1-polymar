@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import type { RaciMatrix, Task } from '../types'
+import { usePageState } from '../session'
 
 // The project's RACI, always shown on the project page as a compact chart:
 // one bar per person, split into R / A / C / I (bar length = number of task roles).
@@ -18,7 +19,7 @@ type Letter = typeof RACI[number]['k']
 export default function ProjectRaci({ projectId, tasks }: { projectId: number; tasks: Task[] }) {
   const [matrix, setMatrix] = useState<RaciMatrix | null>(null)
   const [error, setError] = useState('')
-  const [showMatrix, setShowMatrix] = useState(false)
+  const [showMatrix, setShowMatrix] = usePageState('raciMatrix', false)
 
   // reload when the project's tasks change (e.g. a Responsible was reassigned)
   useEffect(() => {

@@ -4,6 +4,7 @@ import { Company, Department, Function, Project, RaciMatrix } from '../types'
 import { label } from '../constants'
 import SearchableSelect from '../components/SearchableSelect'
 import { nameFilterItems, nameIdFor, sbuFilterItems, sbuIdFor } from '../org'
+import { usePageState } from '../session'
 
 const RACI_COLORS: Record<string, string> = {
   R: 'var(--navy)', A: 'var(--gold)', C: 'var(--green)', I: 'var(--muted)',
@@ -14,11 +15,11 @@ export default function Raci() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
-  const [projectId, setProjectId] = useState<string>('')
+  const [projectId, setProjectId] = usePageState<string>('project', '')
   const [matrix, setMatrix] = useState<RaciMatrix | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState({ company_id: '', function_id: '', department_id: '' })
+  const [filter, setFilter] = usePageState('filter', { company_id: '', function_id: '', department_id: '' })
 
   useEffect(() => {
     api.get<Project[]>('/projects').then(setProjects)

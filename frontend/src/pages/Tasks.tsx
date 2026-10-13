@@ -9,6 +9,7 @@ import TaskForm from '../components/TaskForm'
 import CompletionButton from '../components/CompletionButton'
 import SearchableSelect from '../components/SearchableSelect'
 import { inAnySbu, inName, nameFilterItems, sbuFilterItems, sbuIdsOf, sbuNames } from '../org'
+import { usePageState } from '../session'
 
 // Turn whatever the API threw into a readable sentence (FastAPI sends {"detail": "..."}).
 function errText(e: any): string {
@@ -29,7 +30,7 @@ export default function Tasks() {
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [showForm, setShowForm] = useState(false)
-  const [filter, setFilter] = useState({ project_id: '', company_id: '', function_id: '', department_id: '', status: '', priority: '', overdue: '', responsible_id: '' })
+  const [filter, setFilter] = usePageState('filter', { project_id: '', company_id: '', function_id: '', department_id: '', status: '', priority: '', overdue: '', responsible_id: '' })
   const navigate = useNavigate()
 
   const canSeeAll = useIsPrivileged(user?.role)
@@ -165,7 +166,7 @@ export default function Tasks() {
               return (
                 <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
                   <td className="muted small">{t.code}</td>
-                  <td><Link to={`/tasks/${t.id}`}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
+                  <td><Link to={`/tasks/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
                   <td className="small">{companyName(t) ?? '—'}</td>
                   <td className="small">
                     {proj ? (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
 import { useAuth } from './auth'
 import { api, STORAGE_MODE } from './api'
 import { store } from './store'
@@ -26,6 +26,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import { label } from './constants'
 import logo from './assets/anwars-logo.jpg'
+import { trackLocation, useScrollMemory } from './session'
 
 interface NavItem { to: string; label: string; icon: string }
 interface NavSection { section: string; items: NavItem[]; adminOnly?: boolean }
@@ -137,6 +138,9 @@ function NotFound() {
 export default function App() {
   const { user, loading, logout } = useAuth()
   const location = useLocation()
+  // remember the way here (for the pages' Back buttons) and each page's scroll - see session.ts
+  trackLocation(location.key, location.pathname, useNavigationType())
+  useScrollMemory()
   const [navOpen, setNavOpen] = useState(false)
   // close the phone menu after navigating
   useEffect(() => { setNavOpen(false) }, [location.pathname])

@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
+import { useBack } from '../session'
 import { api } from '../api'
 import { refreshNavBadges } from '../navBadges'
 import { Approval, DelayRca, ProgressUpdate, Project, Task, User } from '../types'
@@ -36,7 +37,7 @@ function dayShift(a?: string, b?: string) {
 
 export default function ApprovalDetail() {
   const { id } = useParams()
-  const navigate = useNavigate()
+  const back = useBack('/approvals', 'Approvals')
   const [approval, setApproval] = useState<ApprovalWithRights | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [project, setProject] = useState<Project | null>(null)
@@ -78,7 +79,7 @@ export default function ApprovalDetail() {
   if (loadError) {
     return (
       <div>
-        <button className="btn sm" onClick={() => navigate('/approvals')} style={{ marginBottom: 12 }}>← Approvals</button>
+        <button className="btn sm" onClick={back.go} style={{ marginBottom: 12 }}>← {back.label}</button>
         <div className="card" style={{ background: '#fbe5e5', color: 'var(--red)' }}>{loadError}</div>
       </div>
     )
@@ -135,7 +136,7 @@ export default function ApprovalDetail() {
     <div>
       <div className="topbar">
         <div>
-          <button className="btn sm" onClick={() => navigate('/approvals')} style={{ marginBottom: 8 }}>← Approvals</button>
+          <button className="btn sm" onClick={back.go} style={{ marginBottom: 8 }}>← {back.label}</button>
           <h1>{label(approval.approval_type)} request</h1>
           <div className="crumb">
             Approval #{approval.id} · {task ? `${task.code} — ${task.title}` : project ? `${project.code} — ${project.name}` : `${approval.entity_type} #${approval.entity_id}`}
