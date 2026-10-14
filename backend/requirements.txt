@@ -11,3 +11,5 @@ bcrypt==4.0.1
 python-jose[cryptography]
 apscheduler
 python-multipart
+openpyxl
+pillow

@@ -77,6 +77,32 @@ function projectsOf(tasks: TaskRow[]) {
   return [...map.values()].sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || a.name.localeCompare(b.name))
 }
 
+// KPI Report: the person's KPI, projects and tasks as an Excel sheet with their details, their
+// reporting manager and lines to sign (backend app/kpi_report.py). Whoever sees the KPI may download it.
+function ReportButton({ userId }: { userId: number }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const get = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      await api.download(`/kpi/users/${userId}/report`, 'KPI_Report.xlsx')
+    } catch (e: any) {
+      setErr(e.message || 'Could not download the report. Please try again.')
+    }
+    setBusy(false)
+  }
+  return (
+    <>
+      <button className="btn sm primary" onClick={get} disabled={busy}
+        title="Excel report of this KPI with the projects and tasks behind it, the reporting manager and signature lines">
+        {busy ? 'Preparing…' : '⬇ Download KPI Report'}
+      </button>
+      {err && <span className="small" role="alert" style={{ color: 'var(--red)' }}>{err}</span>}
+    </>
+  )
+}
+
 function Detail({ userId, role = 'all', onClose }: { userId: number; role?: KpiPick; onClose: () => void }) {
   const navigate = useNavigate()
   const [detail, setDetail] = useState<UserKpiDetail | null>(null)
@@ -116,7 +142,12 @@ function Detail({ userId, role = 'all', onClose }: { userId: number; role?: KpiP
         {detail && (
           <>
             <KpiCard kpi={detail} title="KPI Card" showPerson picked={pick} onPick={choose}
-              action={<button className="btn sm" onClick={onClose}>Close</button>} />
+              action={
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <ReportButton userId={detail.user_id} />
+                  <button className="btn sm" onClick={onClose}>Close</button>
+                </div>
+              } />
 
             {pick !== 'project_manager' && (
               <>
@@ -494,7 +525,10 @@ export default function Kpi() {
 
       {me && tab === 'me' && (
         <KpiCard kpi={me} title="My KPI" onPick={(role) => setOpenId(me.user_id, role)} action={
-          <button className="btn sm" onClick={() => setOpenId(me.user_id)}>See the projects and tasks behind it</button>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <ReportButton userId={me.user_id} />
+            <button className="btn sm" onClick={() => setOpenId(me.user_id)}>See the projects and tasks behind it</button>
+          </div>
         } />
       )}
       {data && tab === 'me' && others.length === 0 && <div className="small muted mt">{scopeText}</div>}

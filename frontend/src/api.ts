@@ -266,8 +266,30 @@ async function get<T>(path: string): Promise<T> {
   return data as T
 }
 
+/** A file from the server (e.g. the KPI Report), saved by the browser under the server's name for it. */
+async function download(path: string, fallbackName: string): Promise<void> {
+  if (MODE !== 'remote') throw new Error('Downloads need the server.')
+  const token = storage.get('token')
+  const res = await fetch(`${BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (!res.ok) {
+    let detail: string | undefined
+    try { detail = (await res.json())?.detail } catch { /* not JSON */ }
+    throw new Error(typeof detail === 'string' ? detail : `${res.status} ${res.statusText || 'Download failed'}`)
+  }
+  const name = /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export const api = {
   get,
+  download,
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body?: unknown) =>

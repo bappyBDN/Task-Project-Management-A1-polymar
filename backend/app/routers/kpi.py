@@ -49,10 +49,10 @@ The head roles and what "their" SBU / Function / Department is are those of app/
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
-from app import models, permissions, schemas
+from app import kpi_report, models, permissions, schemas
 from app.auth import get_current_user
 from app.database import get_db
 from app.visibility import HEAD_ROLES, norm, sbu_key
@@ -354,12 +354,28 @@ def overview(db: Session = Depends(get_db), current_user: models.User = Depends(
     return {"scope": access.scope(people), "people": people}
 
 
-@router.get("/users/{user_id}", response_model=schemas.UserKpiDetailOut)
-def user_kpi(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def _readable_kpi(db: Session, user_id: int, current_user: models.User) -> tuple:
+    """The person and their KPI detail, if the viewer may read it."""
     user = db.get(models.User, user_id)
     if not user:
         raise HTTPException(404, "User not found")
     out = _Data(db, user_id).score(user, with_detail=True)
     if user_id != current_user.id and not _Access(db, current_user, _active_users(db)).relation(out):
         raise HTTPException(403, "You can see your own KPI and the KPI of the people who report to you or belong to what you head.")
-    return out
+    return user, out
+
+
+@router.get("/users/{user_id}", response_model=schemas.UserKpiDetailOut)
+def user_kpi(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return _readable_kpi(db, user_id, current_user)[1]
+
+
+@router.get("/users/{user_id}/report")
+def user_kpi_report(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """The KPI Report (app/kpi_report.py) as an Excel file - whoever may see this KPI may download it."""
+    user, out = _readable_kpi(db, user_id, current_user)
+    return Response(
+        kpi_report.build(db, user, out, current_user),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{kpi_report.filename(user)}"'},
+    )
