@@ -30,6 +30,7 @@ _NEW_COLUMNS = [
     ("tasks", "auto_forecast_date", "DATE"),
     ("tasks", "own_forecast_date", "DATE"),
     ("tasks", "actual_start_date", "DATE"),
+    ("tasks", "sort_order", "INTEGER"),
 ]
 
 

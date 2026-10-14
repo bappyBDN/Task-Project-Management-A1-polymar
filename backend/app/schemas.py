@@ -189,6 +189,11 @@ class GanttToggle(BaseModel):
     enabled: bool
 
 
+class TaskOrderIn(BaseModel):
+    """PUT /projects/{id}/task-order: the project's tasks top to bottom, as the person sees them."""
+    task_ids: list[int]
+
+
 class SubtaskIn(BaseModel):
     """A subtask of a task (routers/subtasks.py): all it needs of its own."""
     task_id: int
@@ -366,6 +371,8 @@ class TaskOut(TaskBase):
     created_by: Optional[str] = None  # name of whoever created the task
     # completion already submitted and no progress update since: "Submit Completion" is locked
     completion_submitted: bool = False
+    # place in its project's task list, see PUT /projects/{id}/task-order
+    sort_order: Optional[int] = None
 
 
 class TaskDatesIn(BaseModel):

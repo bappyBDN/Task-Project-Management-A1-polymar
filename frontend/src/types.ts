@@ -198,6 +198,8 @@ export interface Task {
   created_at: string
   /** name of whoever created the task */
   created_by?: string | null
+  /** place in its project's task list, set with the arrows on the project page (empty: not placed yet) */
+  sort_order?: number | null
   /** completion already submitted and no progress update since: it can't be submitted again yet */
   completion_submitted?: boolean
 }

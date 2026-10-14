@@ -35,6 +35,7 @@ export default function ProjectDetail() {
   const [savedMsg, setSavedMsg] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteErr, setDeleteErr] = useState('')
+  const [orderErr, setOrderErr] = useState('')
   // task list filter: the Responsible employee ('' = everyone)
   const [employeeId, setEmployeeId] = usePageState('employee', '')
   // back to wherever this project was opened from (the Projects list as it was, a task, the dashboard, ...)
@@ -134,6 +135,24 @@ export default function ProjectDetail() {
   // a filter left on someone who no longer has a task here shows everything again
   const activeEmployee = employeeItems.some((i) => i.value === employeeId) ? employeeId : ''
   const shownTasks = activeEmployee ? tasks.filter((t) => String(t.responsible_id) === activeEmployee) : tasks
+
+  // ▲ / ▼: swap a task with the one shown above / below it. One order for everyone who opens
+  // the project, also on its Gantt chart (the server keeps it).
+  const moveTask = async (t: Task, step: -1 | 1) => {
+    const other = shownTasks[shownTasks.indexOf(t) + step]
+    if (!other) return
+    const next = [...tasks]
+    const a = next.indexOf(t), b = next.indexOf(other)
+    ;[next[a], next[b]] = [next[b], next[a]]
+    setTasks(next)
+    setOrderErr('')
+    try {
+      await api.put(`/projects/${project.id}/task-order`, { task_ids: next.map((x) => x.id) })
+    } catch (e: any) {
+      setOrderErr(e.message || 'Could not change the order. Please try again.')
+    }
+    reloadTasks()
+  }
 
   // "All Tasks": jump to this project's task list, showing every task (no employee filter)
   const showAllTasks = () => {
@@ -286,17 +305,27 @@ export default function ProjectDetail() {
                 <button className="btn sm primary" onClick={() => setShowTask(true)}>+ New Task</button>
               </div>
             </div>
+            {orderErr && <div className="alert error" role="alert">{orderErr}</div>}
             <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
                 <tr>
+                  {canEdit && <th title="Order of the tasks - the same for everyone, also on the Gantt chart">Order</th>}
                   <th>Code</th><th>Task</th><th>Responsible</th><th>Priority</th>
                   <th>Status</th><th>Health</th><th>Progress</th><th>Due</th><th></th>
                 </tr>
               </thead>
               <tbody>
-                {shownTasks.map((t) => (
+                {shownTasks.map((t, i) => (
                   <tr key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ cursor: 'pointer' }}>
+                    {canEdit && (
+                      <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap', cursor: 'default' }}>
+                        <button className="btn sm" title="Move up" aria-label={`Move ${t.code} up`} disabled={i === 0}
+                          onClick={() => moveTask(t, -1)} style={{ padding: '0 6px' }}>▲</button>{' '}
+                        <button className="btn sm" title="Move down" aria-label={`Move ${t.code} down`} disabled={i === shownTasks.length - 1}
+                          onClick={() => moveTask(t, 1)} style={{ padding: '0 6px' }}>▼</button>
+                      </td>
+                    )}
                     <td className="muted small">{t.code}</td>
                     <td><Link to={`/tasks/${t.id}`} onClick={(e) => e.stopPropagation()}>{t.title}</Link>{t.blocker && <span className="badge red" style={{ marginLeft: 8 }}>Blocked</span>}</td>
                     <td className="small">{userName(t.responsible_id) ?? '—'}</td>
@@ -313,7 +342,7 @@ export default function ProjectDetail() {
                     </td>
                   </tr>
                 ))}
-                {tasks.length === 0 && <tr><td colSpan={9} className="muted small">No tasks under this project</td></tr>}
+                {tasks.length === 0 && <tr><td colSpan={canEdit ? 10 : 9} className="muted small">No tasks under this project</td></tr>}
               </tbody>
             </table>
             </div>

@@ -265,6 +265,28 @@ def set_gantt(project_id: int, payload: schemas.GanttToggle, db: Session = Depen
     return project
 
 
+@router.put("/{project_id}/task-order", status_code=204)
+def set_task_order(project_id: int, payload: schemas.TaskOrderIn, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(get_current_user), scope: Scope = Depends(get_scope)):
+    """The project's tasks in a new order - one order for everyone who opens the project, also
+    on its Gantt chart. The tasks this person sees are reordered among the places they hold;
+    tasks they don't see stay where they are."""
+    project = _project_or_404(db, project_id)
+    if not permissions.can_edit_project(db, current_user, project):
+        raise HTTPException(403, "Only an admin / PMO, the Project Manager or a Responsible / Accountable person on this project's tasks can change the order of its tasks.")
+    current = gantt.project_tasks(db, project.id)
+    by_id = {t.id: t for t in current}
+    shown = {t.id for t in current if scope.sees_task(t)}
+    wanted = [by_id[i] for i in dict.fromkeys(payload.task_ids) if i in shown]
+    # tasks the request left out keep their order, after the ones it named
+    wanted += [t for t in current if t.id in shown and t not in wanted]
+    slots = iter(wanted)
+    for i, t in enumerate([next(slots) if t.id in shown else t for t in current]):
+        t.sort_order = i
+    services.audit(db, current_user.name, "project", project.id, "tasks_reordered", new_value=project.name)
+    db.commit()
+
+
 @router.get("/{project_id}/milestones", response_model=list[schemas.MilestoneOut])
 def list_milestones(project_id: int, db: Session = Depends(get_db), scope: Scope = Depends(get_scope)):
     if not scope.sees_project_id(project_id):

@@ -105,7 +105,9 @@ def list_tasks(
             models.Task.approved_due_date.isnot(None),
             models.Task.approved_due_date < today,
         )
-    tasks = [t for t in q.order_by(models.Task.approved_due_date, _PRIORITY_RANK).all() if scope.sees_task(t)]
+    # one project's tasks: in the order set on the project page first, new (unplaced) ones after
+    order = [models.Task.sort_order.is_(None), models.Task.sort_order] if project_id else []
+    tasks = [t for t in q.order_by(*order, models.Task.approved_due_date, _PRIORITY_RANK).all() if scope.sees_task(t)]
     submitted = services.completion_submitted_ids(db, [t.id for t in tasks])
     for t in tasks:
         t.completion_submitted = t.id in submitted

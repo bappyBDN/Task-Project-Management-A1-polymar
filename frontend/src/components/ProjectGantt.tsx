@@ -191,7 +191,11 @@ export default function ProjectGantt({ project, tasks, users, canToggle, onProje
     )
   }
 
+  // once the tasks were put in order on the project page (▲ / ▼), the chart shows them in that
+  // order (new ones after, by date); before that, by when they start
+  const place = new Map(tasks.filter((t) => t.sort_order != null).map((t) => [t.id, t.sort_order!]))
   const rows = [...(data?.tasks ?? [])].sort((a, b) =>
+    (place.get(a.id) ?? Infinity) - (place.get(b.id) ?? Infinity) ||
     (a.start ?? '9999').localeCompare(b.start ?? '9999') || (a.finish ?? '9999').localeCompare(b.finish ?? '9999') || a.id - b.id)
   const byId = new Map(rows.map((t) => [t.id, t]))
   const subsOf = new Map<number, Subtask[]>()

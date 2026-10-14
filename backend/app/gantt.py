@@ -187,15 +187,17 @@ def _own_forecast(t) -> Optional[date]:
     return t.own_forecast_date if _calculated(t) else t.forecast_due_date
 
 
-def _project_tasks(db: Session, project_id: int) -> list:
+def project_tasks(db: Session, project_id: int) -> list:
+    """In the order set on the project page (unplaced ones after), as its task list."""
     return db.query(models.Task).filter(
-        models.Task.project_id == project_id, models.Task.is_deleted.is_(False)).all()
+        models.Task.project_id == project_id, models.Task.is_deleted.is_(False)).order_by(
+        models.Task.sort_order.is_(None), models.Task.sort_order, models.Task.id).all()
 
 
 def reschedule(db: Session, project: models.Project, today: Optional[date] = None) -> dict[int, dict]:
     """Recalculate the schedule of a Gantt project and store the forecast dates. No commit."""
     db.flush()
-    tasks = _project_tasks(db, project.id)
+    tasks = project_tasks(db, project.id)
     rows = compute(tasks, _predecessors(db, {t.id for t in tasks}), today)
     for t in tasks:
         row = rows[t.id]
@@ -228,7 +230,7 @@ def chart(db: Session, project: models.Project, sees_task=lambda t: True) -> dic
     """Schedule + what is extending it, for the project page. Stores the forecast dates on the way."""
     today = date.today()
     rows = reschedule(db, project, today)
-    tasks = _project_tasks(db, project.id)
+    tasks = project_tasks(db, project.id)
     planned_due = project.approved_due_date or project.baseline_due_date
     finishes = [r["finish"] for r in rows.values() if r["active"] and r["finish"]]
     forecast = max(finishes) if finishes else None

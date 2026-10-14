@@ -249,6 +249,9 @@ class Task(Base, TimestampMixin):
     # the person's own forecast that a calculated one replaced - put back when the delay is gone
     own_forecast_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     progress_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    # place in its project's task list (and Gantt), set with the arrows on the project page;
+    # empty = not placed yet (a new task), listed after the placed ones
+    sort_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(24), default="backlog")  # draft, backlog, ready, in_progress, in_review, completed, closed, blocked, on_hold, cancelled
     health: Mapped[str] = mapped_column(String(16), default="green")
     blocker: Mapped[bool] = mapped_column(Boolean, default=False)
