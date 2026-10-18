@@ -28,7 +28,7 @@ export default function Projects() {
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [filter, setFilter] = usePageState('filter', NO_FILTER)
-  // Project Responsible column: '' = the server's order, 'asc' = A → Z, 'desc' = Z → A (by the first name shown)
+  // Project Responsible column: '' = the server's order, 'asc' = A → Z, 'desc' = Z → A (by the task-Responsible)
   const [respSort, setRespSort] = usePageState<'' | 'asc' | 'desc'>('respSort', '')
   const [showForm, setShowForm] = useState(false)
   const navigate = useNavigate()
@@ -132,9 +132,10 @@ export default function Projects() {
     })
   }, [projects, filter, tasksByProject, companies, functions, departments])
 
-  /** The first name in the project's Project Responsible cell: its PM, else the task-Responsible with
-   *  the most tasks. Projects with nobody go last whichever way the column is sorted. */
-  const responsibleKey = (p: Project) => (p.manager_id ? manager(p.manager_id) ?? `User #${p.manager_id}` : responsibleOf(p)[0]?.name ?? '')
+  /** The name the column sorts by: the person Responsible for the most of the project's tasks.
+   *  Only a project with no task-Responsible at all falls back to its Project Manager, and
+   *  projects with nobody go last whichever way the column is sorted. */
+  const responsibleKey = (p: Project) => responsibleOf(p)[0]?.name ?? (p.manager_id ? manager(p.manager_id) ?? `User #${p.manager_id}` : '')
   const rows = useMemo(() => {
     if (!respSort) return filtered
     const dir = respSort === 'asc' ? 1 : -1
