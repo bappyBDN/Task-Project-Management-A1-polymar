@@ -28,6 +28,8 @@ export default function Projects() {
   const [functions, setFunctions] = useState<Function[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [filter, setFilter] = usePageState('filter', NO_FILTER)
+  // Project Responsible column: '' = the server's order, 'asc' = A → Z, 'desc' = Z → A (by the first name shown)
+  const [respSort, setRespSort] = usePageState<'' | 'asc' | 'desc'>('respSort', '')
   const [showForm, setShowForm] = useState(false)
   const navigate = useNavigate()
 
@@ -130,6 +132,19 @@ export default function Projects() {
     })
   }, [projects, filter, tasksByProject, companies, functions, departments])
 
+  /** The first name in the project's Project Responsible cell: its PM, else the task-Responsible with
+   *  the most tasks. Projects with nobody go last whichever way the column is sorted. */
+  const responsibleKey = (p: Project) => (p.manager_id ? manager(p.manager_id) ?? `User #${p.manager_id}` : responsibleOf(p)[0]?.name ?? '')
+  const rows = useMemo(() => {
+    if (!respSort) return filtered
+    const dir = respSort === 'asc' ? 1 : -1
+    return [...filtered]
+      .map((p) => ({ p, k: responsibleKey(p) }))
+      .sort((a, b) => ((a.k === '') !== (b.k === '') ? (a.k === '' ? 1 : -1) : dir * a.k.localeCompare(b.k, undefined, { sensitivity: 'base' })))
+      .map((r) => r.p)
+  }, [filtered, respSort, users, tasksByProject])
+  const cycleRespSort = () => setRespSort((s) => (s === '' ? 'asc' : s === 'asc' ? 'desc' : ''))
+
   const isFiltered = filter.name.trim() || filter.function_id || filter.department_id || filter.company_id || filter.status || filter.health || filter.type || filter.methodology || filter.manager_id
   const personOrCompany = Boolean(filter.company_id || filter.manager_id)
   const shownTasks = useMemo(
@@ -220,12 +235,15 @@ export default function Projects() {
         <table>
           <thead>
             <tr>
-              <th>Code</th><th>Project</th><th>SBU</th><th>Project Responsible</th><th>Tasks</th><th>Type</th><th>Status</th><th>Health</th>
+              <th>Code</th><th>Project</th><th>SBU</th><th className="srt" onClick={cycleRespSort} aria-sort={respSort ? (respSort === 'asc' ? 'ascending' : 'descending') : undefined}
+                title={respSort === '' ? 'Click to sort A → Z' : respSort === 'asc' ? 'Sorted A → Z — click for Z → A' : 'Sorted Z → A — click to clear'}>
+                Project Responsible{respSort === 'asc' ? ' ▲' : respSort === 'desc' ? ' ▼' : ''}
+              </th><th>Tasks</th><th>Type</th><th>Status</th><th>Health</th>
               <th>Completion</th><th>Baseline</th><th>Forecast</th>{isAdmin && <th></th>}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((p) => (
+            {rows.map((p) => (
               <tr key={p.id} onClick={() => open(p)} style={{ cursor: 'pointer' }}>
                 <td className="muted small">{p.code}</td>
                 <td>

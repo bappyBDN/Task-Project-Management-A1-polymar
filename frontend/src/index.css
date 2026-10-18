@@ -173,6 +173,8 @@ body {
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
 th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); font-weight: 600; }
+th.srt { cursor: pointer; user-select: none; white-space: nowrap; }
+th.srt:hover { color: var(--navy); }
 tr:hover td { background: #fafbfd; }
 
 .btn {
